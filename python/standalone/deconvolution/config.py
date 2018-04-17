@@ -3,7 +3,7 @@ import json
 from os import path as osp
 import numpy as np
 import logging
-logger = logging.getLogger('AkoyaConfig')
+logger = logging.getLogger('CODEXConfig')
 
 
 def _load_experiment_config(args):
@@ -22,7 +22,7 @@ def _load_channel_names(args):
         return [l.strip() for l in fd.readlines() if l.strip()]
 
 
-class AkoyaConfig(object):
+class CODEXConfig(object):
 
     def __init__(self, exp_config, channel_names):
         self.exp_config = exp_config
@@ -48,7 +48,7 @@ class AkoyaConfig(object):
 
 
 def load_config(args):
-    config = AkoyaConfig(
+    config = CODEXConfig(
         _load_experiment_config(args),
         _load_channel_names(args)
     )

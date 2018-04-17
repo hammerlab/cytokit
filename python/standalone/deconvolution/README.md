@@ -1,6 +1,6 @@
-# Akoya Scripts
+# CODEX Standalone Deconvolution CLI
 
-This directory contains a script (for now just one) that is useful for running deconvolution on image stacks after processing and before segmentation in the CODEX pipeline.
+This directory contains a script that is useful for running deconvolution on image stacks after processing and before segmentation in the CODEX pipeline.
 
 ### Setup
 
@@ -42,20 +42,21 @@ print(sess.run(hello))
 If you receive no errors and you see a line in the output like "Adding visible gpu devices: 0" then everything is good to go.
 
 
-6. Clone this project (codex-analysis) and add necessary files to PYTHONPATH or .pth file for Anaconda like below
+6. Clone this project and add necessary files to PYTHONPATH or .pth file for Anaconda environment like below
 
 ```
-git clone https://github.com/hammerlab/codex-analysis
-echo "$REPOS/codex-analysis/deconvolution/flowdec/python" >> ~/anaconda3/envs/codex/lib/python3.6/site-packages/local.pth
+cd $REPOS
+git clone https://github.com/hammerlab/codex
+echo "$REPOS/codex/python/standalone" >> ~/anaconda3/envs/codex/lib/python3.6/site-packages/local.pth
 ```
 
 ### Execution
 
-The Akoya CLI should be run after running CODEX processor with deconvolution disabled and will copy any necessary metadata files as well as write deconvolution results to a new directory.  Assuming the CODEX processor input dir was ```data/codex-acquisition-raw``` and the output dir was ```data/codex-processor-output```, then the following example could be used to perform deconvolution:
+The Deconvolution CLI should be run after running CODEX processor with deconvolution disabled and will copy any necessary metadata files as well as write deconvolution results to a new directory.  Assuming the CODEX processor input dir was ```data/codex-acquisition-raw``` and the output dir was ```data/codex-processor-output```, then the following example could be used to perform deconvolution:
 
 ```
-(codex)> cd $REPOS/codex-analysis/deconvolution/flowdec/python/akoya
-(codex)> python akoya_deconvolution.py \
+(codex)> cd $REPOS/codex/python/standalone/deconvolution
+(codex)> python codex_deconvolution.py \
     --raw-dir=data/codex-acquisition-raw \
     --input-dir=data/codex-processor-output \
     --output-dir=data/codex-deconvolution-output
@@ -66,12 +67,12 @@ See usage below for other settings/parameters but they should rarely be necessar
 ### Usage
 
 
-The [akoya_deconvolution.py](akoya_deconvolution.py) script has the following usage:
+The [codex_deconvolution.py](codex_deconvolution.py) script has the following usage:
 
 ```
-(codex)> python akoya_deconvolution.py --help
+(codex)> python codex_deconvolution.py --help
 
-usage: akoya_deconvolution.py [-h] --raw-dir RAW --input-dir INPUT
+usage: codex_deconvolution.py [-h] --raw-dir RAW --input-dir INPUT
                               --output-dir OUTPUT [--psf-dir PSFDIR]
                               [--psf-pattern PSFPATTERN] [--pad-dims PADDIMS]
                               [--pad-mode PADMODE]

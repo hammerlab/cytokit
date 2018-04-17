@@ -1,4 +1,4 @@
-"""Akoya Deconvolution
+"""CODEX Deconvolution
 
 This CLI script is intended to be used to deconvolve images after CODEXProcessor
 and before CODEXSegm.  This script will use the same "Experiment.json"
@@ -15,7 +15,7 @@ The general outline for the process executed here is:
 
 For general guidelines on parameters, try:
 
-> python akoya_deconvolution.py --help
+> python codex_deconvolution.py --help
 """
 
 import os
@@ -31,11 +31,11 @@ from flowdec import data as fd_data
 from flowdec import psf as fd_psf
 from argparse import ArgumentParser
 from skimage.external.tifffile import imread, imsave
-from akoya import utils
-from akoya import config as akoya_config
+from deconvolution import utils
+from deconvolution import config as akoya_config
 
 logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger('AkoyaDeconCLI')
+logger = logging.getLogger('CODEXDeconCLI')
 
 
 def make_arg_parser():

@@ -2,6 +2,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.idea/
+
+# Dask
+dask-worker-space
 
 # C extensions
 *.so

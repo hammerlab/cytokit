@@ -1,4 +1,4 @@
-# CODEX Standalone Deconvolution CLI
+## CODEX Standalone Deconvolution CLI
 
 This directory contains a script that is useful for running deconvolution on image stacks after processing and before segmentation in the CODEX pipeline.
 

@@ -28,7 +28,7 @@ def _load_channel_names(data_dir):
         return [l.strip() for l in fd.readlines() if l.strip()]
 
 
-class CODEXConfigV1(object):
+class CodexConfigV1(object):
 
     def __init__(self, exp_config, processing_options, channel_names):
         self.exp_config = exp_config
@@ -46,6 +46,25 @@ class CODEXConfigV1(object):
 
     def n_channels_per_cycle(self):
         return len(self.exp_config['channel_names'])
+
+    def tile_width(self):
+        return self.exp_config['tile_width']
+
+    def tile_height(self):
+        return self.exp_config['tile_height']
+
+    def tile_dims(self):
+        """Get tile dims as (cycles, x (width), y (height), z, channels)"""
+        return self.n_cycles(), self.tile_width(), self.tile_height(), self.n_z_planes(), self.n_channels_per_cycle()
+
+    def drift_compensation_reference(self):
+        """Get reference image configured for drift compensation
+        Returns:
+            (cycle, channel) - 0-based indexes for cycle and channel
+        """
+        cycle = self.exp_config['driftCompReferenceCycle'] - 1
+        channel = self.exp_config['drift_comp_channel'] - 1
+        return cycle, channel
 
     def _n_actual_channels(self):
         return len(self.channel_names)
@@ -66,7 +85,7 @@ class CODEXConfigV1(object):
     @staticmethod
     def load(data_dir):
         """Load all CODEX related configuration files given a primary data directory"""
-        return CODEXConfigV1(
+        return CodexConfigV1(
             _load_experiment_config(data_dir),
             _load_processing_options(data_dir),
             _load_channel_names(data_dir)
@@ -76,7 +95,7 @@ class CODEXConfigV1(object):
 def load(data_dir):
     version = codex.get_version()
     if version == '1':
-        return CODEXConfigV1.load(data_dir)
+        return CodexConfigV1.load(data_dir)
     else:
         raise ValueError(
             'CODEX Version "{}" not supported (determined by env variable {})'

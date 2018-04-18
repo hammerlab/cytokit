@@ -19,8 +19,11 @@ def run_pipeline(args):
     from codex.ops import op
     tile_index, gpu = args
     
-    logger.info('Setting gpu device {}'.format(gpu))
-    op.set_gpu_device(gpu)
+    if op.get_gpu_device() is None:
+        logger.info('Setting gpu device {}'.format(gpu))
+        op.set_gpu_device(gpu)
+    else:
+        logger.info('GPU device already set to {}'.format(op.get_gpu_device()))
     
     data_dir = 'F:\\7-7-17-multicycle'
     

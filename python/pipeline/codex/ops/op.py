@@ -14,6 +14,10 @@ GPU_DEVICE = None
 def set_gpu_device(device):
     global GPU_DEVICE
     GPU_DEVICE = device
+    
+def get_gpu_device():
+    global GPU_DEVICE
+    return GPU_DEVICE
 
 class TensorFlowOp(object):
 

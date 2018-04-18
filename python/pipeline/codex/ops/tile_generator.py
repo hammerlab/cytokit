@@ -2,7 +2,11 @@
 from codex.ops.op import CodexOp
 from skimage import io
 from os import path as osp
+import warnings
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class CodexTileGenerator(CodexOp):
@@ -24,12 +28,20 @@ class CodexTileGenerator(CodexOp):
             for ich in range(nch):
                 img_z = []
                 for iz in range(nz):
-                    img_fmt = osp.join('Cyc{}_reg{}', '1_{0:05d}_Z{0:03d}_CH{}.tif')
-                    img_name = img_fmt.format(
-                        icyc + 1, self.region_index + 1, self.tile_index + 1,
-                        iz + 1, ich + 1
+                    img_name = osp.join(
+                        'Cyc{}_reg{}'
+                            .format(icyc+1, self.region_index+1), 
+                        '1_{:05d}_Z{:03d}_CH{}.tif'
+                            .format(self.tile_index + 1, iz + 1, ich + 1)
                     )
-                    img = io.imread(osp.join(self.data_dir, img_name))
+                    img_file = osp.join(self.data_dir, img_name)
+                    logger.debug('Opening image file "{}"'.format(img_file))
+                    
+                    img = None
+                    # Ignore tiff metadata warnings from skimage
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        img = io.imread(img_file)
                     img_z.append(img)
                 img_ch.append(np.stack(img_z, 0))
             img_cyc.append(np.stack(img_ch, 1))

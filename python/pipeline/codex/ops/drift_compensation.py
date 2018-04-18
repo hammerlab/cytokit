@@ -57,7 +57,8 @@ class TranslationCalculator(TensorFlowOp):
 class TranslationApplier(TensorFlowOp):
 
     def __init__(self, n_dims):
-        super(TranslationApplier, self).__init__()
+        # TODO: Figure out if there's a way to avoid ILLEGAL_CUDA_INSTRUCTION error on windows w/ this
+        super(TranslationApplier, self).__init__(cpu_only=True)
         self.n_dims = n_dims
         if self.n_dims not in [2, 3]:
             raise ValueError('Number of dimensions must be 2 or 3 (given {})'.format(self.n_dims))
@@ -130,11 +131,12 @@ class CodexDriftCompensator(CodexOp):
 
         def translation_calculations():
             for icyc in target_cycles:
-                logger.info('Calculating drift translation for reference cycle {}, comparison cycle {}'
+                logger.debug('Calculating drift translation for reference cycle {}, comparison cycle {}'
                             .format(drift_cycle, icyc))
                 offset_image = tile[icyc, :, drift_channel, :, :]
                 yield self.calculator.args(reference_image, offset_image)
 
+        logger.info('Calculating drift translations')
         translations = iter(list(self.calculator.flow(translation_calculations())))
 
         noop_translation = np.zeros(3)
@@ -142,11 +144,12 @@ class CodexDriftCompensator(CodexOp):
         def translation_applications():
             for icyc in range(ncyc):
                 translation = noop_translation if icyc == drift_cycle else next(translations)['translation']
-                logger.info('Applying translation {} to cycle {}'.format(translation, icyc))
+                logger.debug('Applying translation {} to cycle {}'.format(translation, icyc))
                 for ich in range(nch):
                     img = tile[icyc, :, ich, :, :]
                     yield self.applier.args(img, translation)
 
+        logger.info('Applying drift translations')
         applications = self.applier.flow(translation_applications())
 
         img_cyc = []

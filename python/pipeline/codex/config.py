@@ -54,8 +54,14 @@ class CodexConfigV1(object):
         return self.exp_config['tile_height']
 
     def tile_dims(self):
-        """Get tile dims as (cycles, x (width), y (height), z, channels)"""
+        """Get tile dims as (cycles, width, height, z, channels)"""
         return self.n_cycles(), self.tile_width(), self.tile_height(), self.n_z_planes(), self.n_channels_per_cycle()
+
+    def overlap_x(self):
+        return self.exp_config['tile_overlap_X']
+
+    def overlap_y(self):
+        return self.exp_config['tile_overlap_Y']
 
     def drift_compensation_reference(self):
         """Get reference image configured for drift compensation
@@ -64,6 +70,15 @@ class CodexConfigV1(object):
         """
         cycle = self.exp_config['driftCompReferenceCycle'] - 1
         channel = self.exp_config['drift_comp_channel'] - 1
+        return cycle, channel
+
+    def best_focus_reference(self):
+        """Get reference image configured for best focus plan selection
+        Returns:
+            (cycle, channel) - 0-based indexes for cycle and channel
+        """
+        cycle = self.exp_config['bestFocusReferenceCycle'] - 1
+        channel = self.exp_config['best_focus_channel'] - 1
         return cycle, channel
 
     def _n_actual_channels(self):

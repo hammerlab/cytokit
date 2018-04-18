@@ -12,11 +12,12 @@ logging.basicConfig(
     format="%(asctime)s:%(levelname)s:%(name)s:%(process)d/%(threadName)s: %(message)s"
 )
 
-logger = logging.getLogger('PipelineTest')
+logger = logging.getLogger('Pipeline')
 
 
 def run_pipeline(args):
     from codex.ops import op
+    from skimage.external.tifffile import imsave
     tile_index, gpu = args
     
     if op.get_gpu_device() is None:
@@ -26,18 +27,38 @@ def run_pipeline(args):
         logger.info('GPU device already set to {}'.format(op.get_gpu_device()))
     
     data_dir = 'F:\\7-7-17-multicycle'
-    
+    output_dir = 'F:\\7-7-17-multicycle-out-pipeline'
+    region_index = 0
     conf = codex_config.load(data_dir)
     
-    op = tile_generator.CodexTileGenerator(conf, data_dir, 0, tile_index)
-    tile = op.run()
+    with tile_generator.CodexTileGenerator(conf, data_dir, region_index, tile_index) as op:
+        tile = op.run()
+        logger.info('Loaded tile {} [shape = {}]'.format(tile_index, tile.shape))
     
-    logger.info('Loaded tile {} with shape {}'.format(tile_index, tile.shape))
+    with drift_compensation.CodexDriftCompensator(config) as op:
+        tile_aligned = op.run(tile)
+        logger.info('Finished drift compensation for tile {} [shape = {}]'.format(tile_index, tile_aligned.shape))
+        
+    with tile_crop.CodexTileCrop(config) as op:
+        crop_tile = op.run(tile_aligned)
+        logger.info('Finished crop for tile {} [shape = {}]'.format(tile_index, crop_tile.shape))
+        
+    # with best_focus.CodexFocalPlaneSelector(config) as op:
+    #     focus_tile, best_z, classifications, probabilities = op.run(tile)
     
-    op = drift_compensation.CodexDriftCompensator(conf).initialize()
-    res = op.run(tile)
+    with deconvolution.CodexDeconvolution(config, n_iter=25) as op:
+        decon_tile = op.run(crop_tile)
+        logger.info('Finished deconvolution for tile {} [shape = {}]'.format(tile_index, decon_tile.shape))
+        
+    res_tile = decon_tile
     
-    logger.info('Pipeline result shape {}'.format(res.shape))
+    tx = tile_index // 5
+    ty = tile_index % 5
+    tile_file = os.path.join(output_dir, 'reg{:03d}_X{:02d}_Y{:02d}.tif'.format(region_index + 1, tx + 1, ty + 1))
+    logger.info('Saving result to path "{}" [shape = {}]'.format(tile_file, res_tile.shape))
+    imsave(tile_file, res_tile, imagej=True)
+    
+    logger.info('Processing for tile {} complete'.format(tile_index))
     
     return 0
 

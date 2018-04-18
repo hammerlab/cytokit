@@ -121,7 +121,7 @@ class CodexDriftCompensator(CodexOp):
 
     def run(self, tile):
         # Tile should have shape (cycles, z, channel, height, width)
-        ncyc, nx, ny, nz, nch = self.config.tile_dims()
+        ncyc, nch = self.config.n_cycles(), self.config.n_channels_per_cycle()
 
         drift_cycle, drift_channel = self.config.drift_compensation_reference()
 
@@ -132,7 +132,7 @@ class CodexDriftCompensator(CodexOp):
         def translation_calculations():
             for icyc in target_cycles:
                 logger.debug('Calculating drift translation for reference cycle {}, comparison cycle {}'
-                            .format(drift_cycle, icyc))
+                             .format(drift_cycle, icyc))
                 offset_image = tile[icyc, :, drift_channel, :, :]
                 yield self.calculator.args(reference_image, offset_image)
 

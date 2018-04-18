@@ -1,6 +1,6 @@
 
 from codex.ops.op import CodexOp
-from skimage import io
+from skimage.external.tifffile import imread
 from os import path as osp
 import warnings
 import numpy as np
@@ -19,7 +19,7 @@ class CodexTileGenerator(CodexOp):
 
     def run(self):
 
-        ncyc, nx, ny, nz, nch = self.config.tile_dims()
+        ncyc, _, _, nz, nch = self.config.tile_dims()
 
         # Tile should have shape (cycles, z, channel, height, width)
         img_cyc = []
@@ -36,13 +36,12 @@ class CodexTileGenerator(CodexOp):
                     )
                     img_file = osp.join(self.data_dir, img_name)
                     logger.debug('Opening image file "{}"'.format(img_file))
-                    
-                    img = None
+
                     # Ignore tiff metadata warnings from skimage
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
-                        img = io.imread(img_file)
-                    img_z.append(img)
+                        img = imread(img_file)
+                        img_z.append(img)
                 img_ch.append(np.stack(img_z, 0))
             img_cyc.append(np.stack(img_ch, 1))
         tile = np.stack(img_cyc, 0)

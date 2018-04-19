@@ -1,8 +1,9 @@
 
 
-from codex.ops.op import CodexOp
+from codex.ops.op import CodexOp, get_tf_config
 from codex.miq import prediction
 from codex import data as codex_data
+import tensorflow as tf
 import numpy as np
 import logging
 
@@ -26,12 +27,17 @@ class CodexFocalPlaneSelector(CodexOp):
     def __init__(self, config, patch_size=84, n_classes=11):
         super(CodexFocalPlaneSelector, self).__init__(config)
         self.mqiest = None
+        self.graph = None
         self.patch_size = patch_size
         self.n_classes = n_classes
 
     def initialize(self):
         model_path = codex_data.initialize_best_focus_model()
-        self.mqiest = prediction.ImageQualityClassifier(model_path, self.patch_size, self.n_classes)
+        self.graph = tf.Graph()
+        self.mqiest = prediction.ImageQualityClassifier(
+            model_path, self.patch_size, self.n_classes,
+            graph=self.graph, session_config=get_tf_config(cpu_only=True)
+        )
         return self
 
     def shutdown(self):

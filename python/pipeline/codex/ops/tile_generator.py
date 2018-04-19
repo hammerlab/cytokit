@@ -35,7 +35,7 @@ class CodexTileGenerator(CodexOp):
                             .format(self.tile_index + 1, iz + 1, ich + 1)
                     )
                     img_file = osp.join(self.data_dir, img_name)
-                    logger.debug('Opening image file "{}"'.format(img_file))
+                    # logger.debug('Opening image file "{}"'.format(img_file))
 
                     # Ignore tiff metadata warnings from skimage
                     with warnings.catch_warnings():

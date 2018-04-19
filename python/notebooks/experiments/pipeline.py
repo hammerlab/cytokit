@@ -1,6 +1,9 @@
 
 from codex.ops import tile_generator
+from codex.ops import tile_crop
 from codex.ops import drift_compensation
+from codex.ops import best_focus
+from codex.ops import deconvolution
 from codex import config as codex_config
 from timeit import default_timer as timer
 from dask.distributed import Client, LocalCluster
@@ -29,9 +32,9 @@ def run_pipeline(args):
     data_dir = 'F:\\7-7-17-multicycle'
     output_dir = 'F:\\7-7-17-multicycle-out-pipeline'
     region_index = 0
-    conf = codex_config.load(data_dir)
+    config = codex_config.load(data_dir)
     
-    with tile_generator.CodexTileGenerator(conf, data_dir, region_index, tile_index) as op:
+    with tile_generator.CodexTileGenerator(config, data_dir, region_index, tile_index) as op:
         tile = op.run()
         logger.info('Loaded tile {} [shape = {}]'.format(tile_index, tile.shape))
     
@@ -70,7 +73,7 @@ def main():
     #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
     start = timer()
     
-    cluster = LocalCluster(n_workers=5, threads_per_worker=1, processes=True, memory_limit=32e9)
+    cluster = LocalCluster(n_workers=4, threads_per_worker=1, processes=True, memory_limit=32e9)
     client = Client(cluster)
     logger.info('Created cluster')
 

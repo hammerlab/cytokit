@@ -1,5 +1,6 @@
 from flowdec import restoration as fd_restoration
 from flowdec import data as fd_data
+import time
 import numpy as np
 import logging
 logging.basicConfig()
@@ -16,9 +17,13 @@ def run_deconvolution(device):
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
     config.gpu_options.visible_device_list = device
-    acq = fd_data.load_celegans_channel('CY3')
-    algo = fd_restoration.RichardsonLucyDeconvolver(3).initialize()
-    res = algo.run(acq, niter=100, session_config=config).data
+    #acq = fd_data.load_celegans_channel('CY3')
+    
+    for i in range(10):
+        acq = fd_data.bars_25pct()
+        algo = fd_restoration.RichardsonLucyDeconvolver(3).initialize()
+        res = algo.run(acq, niter=50, session_config=config).data
+        time.sleep(5)
     return res
 
 def set_device(device):
@@ -47,5 +52,7 @@ if __name__ == '__main__':
     finally:
         client.close()
         cluster.close()
+        
+    print('Done')
         
   

@@ -11,7 +11,7 @@ import tensorflow
 import codex.miq.constants
 import codex.miq.evaluation
 
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+# logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 _SPLIT_NAME = 'test'
 
@@ -29,7 +29,8 @@ class ImageQualityClassifier(object):
                  model_ckpt,
                  model_patch_side_length,
                  num_classes,
-                 graph=None):
+                 graph=None, 
+                 session_config=None):
         """Initialize the model from a checkpoint.
 
         Args:
@@ -38,6 +39,7 @@ class ImageQualityClassifier(object):
             image passed to the model.
           num_classes: Integer, the number of classes the model predicts.
           graph: TensorFlow graph. If None, one will be created.
+          session_config: TensorFlow session configuration.  If None, one will be created
         """
         self._model_patch_side_length = model_patch_side_length
         self._num_classes = num_classes
@@ -53,7 +55,7 @@ class ImageQualityClassifier(object):
             self._probabilities = self._probabilities_from_image(
                 self._image_placeholder, model_patch_side_length, num_classes)
 
-            self._sess = tensorflow.Session()
+            self._sess = tensorflow.Session(config=session_config)
             saver = tensorflow.train.Saver()
 
             saver.restore(self._sess, model_ckpt)

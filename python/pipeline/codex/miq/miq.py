@@ -14,6 +14,7 @@ import codex.miq.constants as constants
 DEFAULT_MODEL_DIRECTORY = pkg_resources.resource_filename(__name__, "data")
 DEFAULT_MODEL_PATH = DEFAULT_MODEL_DIRECTORY + "/" + os.path.basename(constants.REMOTE_MODEL_CHECKPOINT_PATH)
 
+logger = logging.getLogger(__name__)
 
 # def download_model(source_path=constants.REMOTE_MODEL_CHECKPOINT_PATH, output_path=DEFAULT_MODEL_DIRECTORY):
 #     print
@@ -75,7 +76,7 @@ def miq_model(images, num_classes=2, is_training=False, model_id=0):
   Raises:
     ValueError: If an invalid model ID is specified.
   """
-    logging.info('Using model_id = %d.', model_id)
+    # logger.debug('Using model_id = %d.', model_id)
     if model_id == 0:
         return model_v0(images, num_classes, is_training)
     elif model_id == 1:

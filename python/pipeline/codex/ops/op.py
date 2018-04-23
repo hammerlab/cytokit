@@ -1,15 +1,6 @@
-import tensorflow as tf
 import os
-
-
-class OpGraph(object):
-
-    def __init__(self, tf_graph, inputs, outputs):
-        self.tf_graph = tf_graph
-        self.inputs = inputs
-        self.outputs = outputs
-
-
+import codex
+import tensorflow as tf
 GPU_DEVICE = None
 
 
@@ -23,8 +14,17 @@ def get_gpu_device():
     return GPU_DEVICE
 
 
-def get_tf_config(cpu_only=False):
+def is_cpu_only(op_class):
+    cpu_only_ops = os.getenv(codex.ENV_CPU_ONLY_OPS, None)
+    if cpu_only_ops is None:
+        return False
+    return op_class.lower() in [op.lower().strip() for op in cpu_only_ops.split(',')]
+
+
+def get_tf_config(op, cpu_only=None):
     global GPU_DEVICE
+    if cpu_only is None:
+        cpu_only = is_cpu_only(op.__class__.__name__)
     if cpu_only:
         config = tf.ConfigProto(device_count={'GPU': 0}, log_device_placement=False)
         config.gpu_options.visible_device_list = ''
@@ -36,12 +36,19 @@ def get_tf_config(cpu_only=False):
     return config
 
 
+class OpGraph(object):
+
+    def __init__(self, tf_graph, inputs, outputs):
+        self.tf_graph = tf_graph
+        self.inputs = inputs
+        self.outputs = outputs
+
+
 class TensorFlowOp(object):
 
-    def __init__(self, cpu_only=False):
+    def __init__(self):
         self.graph = None
         self.primary_dtype = tf.float32
-        self.cpu_only = cpu_only
 
     def initialize(self):
         graph = tf.Graph()
@@ -63,11 +70,13 @@ class TensorFlowOp(object):
         if self.graph is None:
             raise ValueError('Must initialize operation before running (via `.initialize` method)')
 
-        with tf.Session(config=get_tf_config(self.cpu_only), graph=self.graph.tf_graph) as sess:
+        with tf.Session(config=get_tf_config(self), graph=self.graph.tf_graph) as sess:
+            results = []
             for args in args_generator:
                 args_dict = {self.graph.inputs[k]: v for k, v in args.items() if v is not None}
                 res = sess.run(self.graph.outputs, feed_dict=args_dict)
-                yield res
+                results.append(res)
+            return results
 
 
 class CodexOp(object):

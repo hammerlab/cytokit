@@ -21,26 +21,27 @@ def get_immersion_ri(immersion):
 
 
 def generate_psfs(config):
+    mag, na, res_axial_nm, res_lateral_nm, objective_type, em_wavelength_nm = config.microscope_params
     args = dict(
         # Set psf dimensions to match volumes
-        size_x=config.exp_config['tile_width'],
-        size_y=config.exp_config['tile_height'],
-        size_z=config.exp_config['num_z_planes'],
+        size_x=config.tile_width,
+        size_y=config.tile_height,
+        size_z=config.n_z_planes,
 
         # Magnification factor
-        m=config.exp_config['magnification'],
+        m=mag,
 
         # Numerical aperture
-        na=config.exp_config['numerical_aperture'],
+        na=na,
 
         # Axial resolution in microns (nm in akoya config)
-        res_axial=config.exp_config['z_pitch'] / 1000.,
+        res_axial=res_axial_nm / 1000.,
 
         # Lateral resolution in microns (nm in akoya config)
-        res_lateral=config.exp_config['per_pixel_XY_resolution'] / 1000.,
+        res_lateral=res_lateral_nm / 1000.,
 
         # Immersion refractive index
-        ni0=get_immersion_ri(config.exp_config['objectiveType']),
+        ni0=get_immersion_ri(objective_type),
 
         # Set "particle position" in Gibson-Lannie to 0 which gives a
         # Born & Wolf kernel as a degenerate case
@@ -51,7 +52,7 @@ def generate_psfs(config):
     # Specify a psf for each emission wavelength in microns (nm in codex config)
     return [
         fd_psf.GibsonLanni(**{**args, **{'wavelength': w/1000.}}).generate()
-        for w in config.exp_config['emission_wavelengths']
+        for w in em_wavelength_nm
     ]
 
 
@@ -68,7 +69,7 @@ class CodexDeconvolution(CodexOp):
 
     def run(self, tile):
         # Tile should have shape (cycles, z, channel, height, width)
-        ncyc, nw, nh, nz, nch = self.config.tile_dims()
+        ncyc, nw, nh, nz, nch = self.config.tile_dims
 
         psfs = generate_psfs(self.config)
         img_cyc = []
@@ -77,7 +78,7 @@ class CodexDeconvolution(CodexOp):
             for ich in range(nch):
                 logger.debug('Running deconvolution for cycle {}, channel {}'.format(icyc, ich))
                 acq = fd_data.Acquisition(tile[icyc, :, ich, :, :], kernel=psfs[ich])
-                res = self.algo.run(acq, self.n_iter, session_config=get_tf_config()).data
+                res = self.algo.run(acq, self.n_iter, session_config=get_tf_config(self)).data
                 img_ch.append(res)
             img_cyc.append(np.stack(img_ch, 1))
         return np.stack(img_cyc, 0)

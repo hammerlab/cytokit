@@ -40,7 +40,12 @@ def save_tile(file, tile):
 
 
 def get_raw_img_path(ireg, itile, icyc, ich, iz):
-    return _formats().raw_image.format(cycle=icyc + 1, region=ireg + 1, tile=itile + 1, z=iz + 1, channel=ich + 1)
+    index_symlinks = codex.get_raw_index_symlinks()
+    args = dict(cycle=icyc + 1, region=ireg + 1, tile=itile + 1, z=iz + 1, channel=ich + 1)
+
+    # Remap indexes of input elements if any explicit overrides have been defined
+    args = {k: index_symlinks.get(k, {}).get(v, v) for k, v in args.items()}
+    return _formats().raw_image.format(**args)
 
 
 def get_processor_img_path(ireg, tx, ty):

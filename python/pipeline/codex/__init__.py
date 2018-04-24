@@ -4,6 +4,7 @@ import os.path as osp
 ENV_FILE_VERSION = 'CODEX_FILE_FORMAT_VERSION'
 ENV_CONFIG_VERSION = 'CODEX_CONFIG_VERSION'
 ENV_CPU_ONLY_OPS = 'CODEX_CPU_ONLY_OPS'
+ENV_RAW_INDEX_SYMLINKS = 'CODEX_RAW_INDEX_SYMLINKS'
 
 # ############################# #
 # Configuration Schema Versions #
@@ -17,6 +18,10 @@ def get_config_version():
     return os.getenv(ENV_CONFIG_VERSION, CONFIG_V01)
 
 
+def set_config_version(version):
+    os.environ[ENV_CONFIG_VERSION] = version
+
+
 # #################### #
 # File Format Versions #
 # #################### #
@@ -28,6 +33,23 @@ FF_VERSIONS = [FF_V01, FF_V02]
 
 def get_file_format_version():
     return os.getenv(ENV_FILE_VERSION, FF_V01)
+
+
+def set_file_format_version(version):
+    os.environ[ENV_FILE_VERSION] = version
+
+
+# ################### #
+# Data File Remapping #
+# ################### #
+
+
+def get_raw_index_symlinks():
+    return eval(os.getenv(ENV_RAW_INDEX_SYMLINKS, '{}'))
+
+
+def set_raw_index_symlinks(links=None):
+    os.environ[ENV_RAW_INDEX_SYMLINKS] = links if isinstance(links, str) else str(links or '{}')
 
 
 # ####################### #

@@ -94,7 +94,8 @@ class CodexConfigV1(object):
 
     @property
     def region_indexes(self):
-        return self._conf['regIdx']
+        """Get 0-based region index list"""
+        return [i - 1 for i in self._conf['regIdx']]
 
     def get_tile_coordinates(self, tile_index):
         """Get 0-based X and Y coordinates of a tile using the configured 'tiling_mode'

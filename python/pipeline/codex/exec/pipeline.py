@@ -72,7 +72,8 @@ class PipelineConfig(object):
 
         # Default region and tile index list to that in experiment configuration if not provided explicitly
         if self.region_idx is None:
-            self.region_idx = self.exp_config.region_indexes
+            # Convert back to 1-based index to conform to 1-based-into-configs convention
+            self.region_idx = [i + 1 for i in self.exp_config.region_indexes]
         if self.tile_idx is None:
             self.tile_idx = list(range(1, self.exp_config.n_tiles_per_region + 1))
 
@@ -101,10 +102,12 @@ class PipelineConfig(object):
 
     @property
     def region_indexes(self):
+        """Get 0-based region index array"""
         return np.array(self.region_idx) - 1
 
     @property
     def tile_indexes(self):
+        """Get 0-based tile index array"""
         return np.array(self.tile_idx) - 1
 
     @property
@@ -250,7 +253,10 @@ def run(pl_conf, logging_init_fn=None):
         if len(res) != len(tasks):
             raise ValueError('Parallel execution returned {} results but {} were expected'.format(len(res), len(tasks)))
         stop = timer()
-        logger.debug('Per-tile execution times:\n%s', '\n'.join([str(v) for v in res]))
+        if logger.isEnabledFor(logging.DEBUG):
+            from scipy.stats import describe
+            times = np.concatenate([np.array(t)[2] for t in res], 0)
+            logger.debug('Per-tile execution time summary (all in seconds): %s', describe(times))
         logger.info('Pipeline execution completed in %s seconds', stop - start)
     finally:
         client.close()

@@ -28,7 +28,8 @@ def set_config_version(version):
 
 FF_V01 = 'v0.1'
 FF_V02 = 'v0.2'
-FF_VERSIONS = [FF_V01, FF_V02]
+FF_V03 = 'v0.3'
+FF_VERSIONS = [FF_V01, FF_V02, FF_V03]
 
 
 def get_file_format_version():

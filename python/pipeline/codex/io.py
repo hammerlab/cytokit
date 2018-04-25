@@ -18,6 +18,12 @@ FILE_FORMATS = {
         best_focus=osp.join('bestFocus', 'R{region:03d}_X{x:03d}_Y{y:03d}_Z{z:03d}.tif'),
         proc_image='R{region:03d}_X{x:03d}_Y{y:03d}.tif'
     ),
+    # Format for single region, single cycle Keyence experiments
+    codex.FF_V03: FileFormats(
+        raw_image=osp.join('Image_{tile:05d}_CH{channel:d}.tif'),
+        best_focus=osp.join('bestFocus', 'reg001_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
+        proc_image='reg001_X{x:02d}_Y{y:02d}.tif'
+    ),
 }
 
 
@@ -42,7 +48,6 @@ def save_tile(file, tile):
 def get_raw_img_path(ireg, itile, icyc, ich, iz):
     index_symlinks = codex.get_raw_index_symlinks()
     args = dict(cycle=icyc + 1, region=ireg + 1, tile=itile + 1, z=iz + 1, channel=ich + 1)
-
     # Remap indexes of input elements if any explicit overrides have been defined
     args = {k: index_symlinks.get(k, {}).get(v, v) for k, v in args.items()}
     return _formats().raw_image.format(**args)

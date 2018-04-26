@@ -26,7 +26,7 @@ class CodexTileGenerator(CodexOp):
                 img_z = []
                 for iz in range(nz):
                     img_path = codex_io.get_raw_img_path(self.region_index, self.tile_index, icyc, ich, iz)
-                    img_z.append(codex_io.read_tile(osp.join(self.data_dir, img_path)))
+                    img_z.append(codex_io.read_image(osp.join(self.data_dir, img_path)))
                 img_ch.append(np.stack(img_z, 0))
             img_cyc.append(np.stack(img_ch, 1))
         tile = np.stack(img_cyc, 0)

@@ -69,7 +69,7 @@ class CodexDeconvolution(CodexOp):
 
     def run(self, tile):
         # Tile should have shape (cycles, z, channel, height, width)
-        ncyc, nw, nh, nz, nch = self.config.tile_dims
+        ncyc, nz, nch, nh, nw = self.config.tile_dims
 
         psfs = generate_psfs(self.config)
         img_cyc = []

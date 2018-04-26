@@ -2,6 +2,7 @@ import json
 import os
 import codex
 from os import path as osp
+from collections import namedtuple
 
 
 TILING_MODE_SNAKE = 'snake'
@@ -32,6 +33,9 @@ def _load_channel_names(data_dir):
         raise ValueError('Required channel names configuration file "{}" does not exist'.format(f))
     with open(f, 'r') as fd:
         return [l.strip() for l in fd.readlines() if l.strip()]
+
+
+TileDims = namedtuple('TileDims', ['cycles', 'z', 'channels', 'height', 'width'])
 
 
 class CodexConfigV1(object):
@@ -65,8 +69,8 @@ class CodexConfigV1(object):
 
     @property
     def tile_dims(self):
-        """Get tile dims as (cycles, width, height, z, channels)"""
-        return self.n_cycles, self.tile_width, self.tile_height, self.n_z_planes, self.n_channels_per_cycle
+        """Get tile dimensions as (cycles, z, channels, height, width)"""
+        return TileDims(self.n_cycles, self.n_z_planes, self.n_channels_per_cycle, self.tile_height, self.tile_width) 
 
     @property
     def overlap_x(self):

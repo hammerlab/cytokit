@@ -31,18 +31,35 @@ def _formats():
     return FILE_FORMATS[codex.get_file_format_version()]
 
 
-def read_tile(file):
+def save_image(file, image, **kwargs):
+    """Save image array in ImageJ-compatible format"""
+    if not osp.exists(osp.dirname(file)):
+        os.makedirs(osp.dirname(file), exist_ok=True)
+    imsave(file, image, imagej=True, **kwargs)
+
+
+def read_image(file):
     # Ignore tiff metadata warnings from skimage
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return imread(file)
 
+def read_tile(file, config):
+    """Read a codex-specific 5D image tile"""
+    # When saving tiles in ImageJ compatible format, any unit length
+    # dimensions are lost so when reading them back out, it is simplest
+    # to conform to 5D convention by reshaping if necessary
+    slices = [None if dim == 1 else slice(None) for dim in config.tile_dims]
+    return imread(file)[slices]
+
 
 def save_tile(file, tile):
-    if not osp.exists(osp.dirname(file)):
-        os.makedirs(osp.dirname(file), exist_ok=True)
-    # Save using Imagej format (this is crucial for 5D stacks)
-    imsave(file, tile, imagej=True)
+    """Save a codex-specific 5D image"""
+    if tile.ndim != 5:
+        raise ValueError('Expecting tile with 5 dimensions but got tile with shape {}'.format(tile))
+    # Save using Imagej format, otherwise channels, cycles, and z planes are 
+    # all interpreted as individual slices instead of separate dimensions
+    save_image(file, tile, metadata={'axes': 'TZCYX'})
 
 
 def get_raw_img_path(ireg, itile, icyc, ich, iz):

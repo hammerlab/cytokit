@@ -183,7 +183,7 @@ def run_pipeline_task(task_config):
 
             if task_config.run_best_focus:
                 best_z, classifications, probabilities = focus_op.run(tile)
-                focus_tile = decon_tile[:, best_z, :, :, :]
+                focus_tile = decon_tile[:, [best_z], :, :, :]
 
                 log('Best focus classifications: {}'.format(classifications), focus_tile)
                 img_path = codex_io.get_best_focus_img_path(region_index, tx, ty, best_z)

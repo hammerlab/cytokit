@@ -38,4 +38,3 @@ def initialize_best_focus_model():
 
     # Return path to checkpoint, to be fed directory to tensorflow restore operations
     return osp.join(model_path, osp.basename(REMOTE_MODEL_CHECKPOINT_PATH))
-

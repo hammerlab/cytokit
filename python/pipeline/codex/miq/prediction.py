@@ -17,6 +17,8 @@ _SPLIT_NAME = 'test'
 
 _TFRECORD_FILE_PATTERN = 'data_%s-%05d-of-%05d.tfrecord'
 
+logger = logging.getLogger(__name__)
+
 
 class ImageQualityClassifier(object):
     """Object for running image quality model inference.
@@ -59,7 +61,7 @@ class ImageQualityClassifier(object):
             saver = tensorflow.train.Saver()
 
             saver.restore(self._sess, model_ckpt)
-        logging.info('Model restored from %s.', model_ckpt)
+        logger.debug('Restored image focus prediction model from %s.', model_ckpt)
 
     def __del__(self):
         self._sess.close()

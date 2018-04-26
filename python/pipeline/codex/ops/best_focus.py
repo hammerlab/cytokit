@@ -10,6 +10,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def get_best_z_index(classifications, nz):
+    """Get optimal z index based on quality classifications
+
+    Ties are broken using the index nearest to the center of the sequence
+    of all possible z indexes
+    """
+    best_score = np.min(classifications)
+    top_z = np.argwhere(np.array(classifications) == best_score).ravel()
+    return top_z[np.argmin(np.abs(top_z - ((nz+1) // 2)))]
+
+
 class CodexFocalPlaneSelector(CodexOp):
     """Best focal plan selection operation
 
@@ -36,7 +47,7 @@ class CodexFocalPlaneSelector(CodexOp):
         self.graph = tf.Graph()
         self.mqiest = prediction.ImageQualityClassifier(
             model_path, self.patch_size, self.n_classes,
-            graph=self.graph, session_config=get_tf_config(cpu_only=True)
+            graph=self.graph, session_config=get_tf_config(self)
         )
         return self
 
@@ -45,26 +56,24 @@ class CodexFocalPlaneSelector(CodexOp):
         return self
 
     def run(self, tile):
-        # ncyc, nx, ny, nz, nch = self.config.tile_dims()
-
-        # Tile should have shape (cycles, z, channel, height, width)
-        focus_cycle, focus_channel = self.config.best_focus_reference()
+        focus_cycle, focus_channel = self.config.best_focus_reference
 
         # Subset to 3D stack based on reference cycle and channel
+        # * tile should have shape (cycles, z, channel, height, width)
         img = tile[focus_cycle, :, focus_channel, :, :]
+        nz = img.shape[0]
 
         classifications = []
         probabilities = []
-        for iz in range(img.shape[0]):
+        for iz in range(nz):
             pred = self.mqiest.predict(img[iz])
-            # print('\tshape = ', img[iz].shape, 'res = ', pred.probabilities)
             classifications.append(pred.predictions)
             probabilities.append(pred.probabilities)
-        best_z = np.argmin(classifications)
-        logger.info('Best focal plane: z = {} (scores: {})'.format(best_z, classifications))
+        best_z = get_best_z_index(classifications, nz)
+        logger.debug('Best focal plane: z = {} (scores: {})'.format(best_z, classifications))
 
-        # Return tile subset to best z plane as well as other context
-        return tile[:, best_z, :, :, :], best_z, classifications, probabilities
+        # Return best z plane and other context
+        return best_z, classifications, probabilities
 
 
 

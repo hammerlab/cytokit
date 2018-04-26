@@ -4,22 +4,12 @@ https://github.com/google/microscopeimagequality/blob/main/microscopeimagequalit
 """
 
 import collections
-import csv
-import logging
-import os
-
-# import PIL.Image
-# import PIL.ImageDraw
-# import matplotlib.pyplot
 import numpy
 import scipy.misc
 import scipy.stats
-# import skimage.io
 import tensorflow
 import tensorflow.contrib.slim
 import tensorflow.python.ops
-
-# import microscopeimagequality.miq
 import codex.miq.miq
 
 _IMAGE_ANNOTATION_MAGNIFICATION_PERCENT = 800

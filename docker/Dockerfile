@@ -1,6 +1,6 @@
 FROM tensorflow/tensorflow:1.7.0-py3
 ARG FLOWDEC_REPO="https://github.com/hammerlab/flowdec.git"
-ARG CODEX_REPO="-b r0.1 https://github.com/eric-czech/codex.git"
+ARG CODEX_REPO="https://github.com/hammerlab/codex.git"
 ENV TF_GPU false
 
 RUN apt-get update && apt-get install -y --no-install-recommends git vim wget

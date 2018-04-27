@@ -31,5 +31,4 @@ if __name__ == '__main__':
             'codex': ['configs/*/examples/*/*', 'configs/*/schema/*']
         },
         include_package_data=True
-        #data_files=[('configstuff', ['../../config/v0.1/schema/Experiment.json'])]
     )

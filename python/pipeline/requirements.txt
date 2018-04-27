@@ -1,5 +1,6 @@
 scikit-image
 matplotlib
+pandas
 requests
 fire
 dask[distributed]

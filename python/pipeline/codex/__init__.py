@@ -58,4 +58,4 @@ def set_raw_index_symlinks(links=None):
 # ####################### #
 
 pkg_dir = osp.abspath(osp.dirname(__file__))
-conf_dir = osp.normpath(osp.join(pkg_dir, '../../../config'))
+conf_dir = osp.normpath(osp.join(pkg_dir, 'configs'))

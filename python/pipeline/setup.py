@@ -27,5 +27,8 @@ if __name__ == '__main__':
         ],
         install_requires=requires,
         packages=['codex', 'codex.cli', 'codex.exec', 'codex.miq', 'codex.nb', 'codex.ops', 'codex.utils'],
-        package_data={}
+        package_data={
+            'codex': ['configs/*/examples/*/*', 'configs/*/schema/*']
+        },
+        include_package_data=True
     )

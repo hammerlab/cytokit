@@ -7,6 +7,7 @@ import logging
 
 LOG_FORMAT = '%(asctime)s:%(levelname)s:%(process)d:%(name)s: %(message)s'
 
+
 class CodexProcessor(object):
 
     def localhost(

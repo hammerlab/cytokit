@@ -1,0 +1,6 @@
+[TYPECHECK]
+# Ignore TensorFlow to avoid:
+# E: 20, 0: No name 'python' in module 'tensorflow' (no-name-in-module)
+# E: 10, 0: No name 'slim' in module 'LazyLoader' (no-name-in-module)
+ignored-modules = tensorflow,LazyLoader
+ignored-classes = nose.tools

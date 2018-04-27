@@ -64,7 +64,7 @@ class TensorFlowOp(object):
         raise NotImplementedError()
 
     def run(self, *args, **kwargs):
-        return next(self.flow([self.args(*args, **kwargs)]))
+        return self.flow([self.args(*args, **kwargs)])[0]
 
     def flow(self, args_generator):
         if self.graph is None:

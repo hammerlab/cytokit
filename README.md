@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.org/hammerlab/codex.svg?branch=master)](https://travis-ci.org/hammerlab/codex)
+[![Coverage Status](https://coveralls.io/repos/github/hammerlab/codex/badge.svg?branch=master)](https://coveralls.io/github/hammerlab/codex?branch=master)
+
 ## CODEX
 
 Processing worfklows for CODEX cytometric imaging data

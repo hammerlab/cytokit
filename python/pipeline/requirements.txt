@@ -4,3 +4,4 @@ pandas
 requests
 fire
 dask[distributed]
+mizani

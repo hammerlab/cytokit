@@ -10,15 +10,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_best_z_index(classifications, nz):
+def get_best_z_index(classifications):
     """Get optimal z index based on quality classifications
 
     Ties are broken using the index nearest to the center of the sequence
     of all possible z indexes
     """
+    nz = len(classifications)
     best_score = np.min(classifications)
     top_z = np.argwhere(np.array(classifications) == best_score).ravel()
-    return top_z[np.argmin(np.abs(top_z - ((nz+1) // 2)))]
+    return top_z[np.argmin(np.abs(top_z - (nz // 2)))]
 
 
 class CodexFocalPlaneSelector(CodexOp):
@@ -69,7 +70,7 @@ class CodexFocalPlaneSelector(CodexOp):
             pred = self.mqiest.predict(img[iz])
             classifications.append(pred.predictions)
             probabilities.append(pred.probabilities)
-        best_z = get_best_z_index(classifications, nz)
+        best_z = get_best_z_index(classifications)
         logger.debug('Best focal plane: z = {} (scores: {})'.format(best_z, classifications))
 
         # Return best z plane and other context

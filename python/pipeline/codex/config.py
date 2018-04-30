@@ -1,6 +1,7 @@
 import json
 import os
 import codex
+from codex import tiling
 from os import path as osp
 from collections import namedtuple
 
@@ -115,16 +116,8 @@ class CodexConfigV1(object):
                 'iles are expected (region width = {}, height = {})'
                 .format(tile_index, self.n_tiles_per_region, self.region_width, self.region_height)
             )
-        if self.tiling_mode != TILING_MODE_SNAKE:
-            raise NotImplementedError('Tiling mode "{}" not yet supported'.format(self.tiling_mode))
-
-        # "Snake" tiling means that y coordinate advances as usual but x coordinate
-        # moves in opposite direction for ever odd numbered row
-        y = tile_index // self.region_width
-        x = tile_index % self.region_width
-        if y % 2 == 1:
-            x = self.region_width - x - 1
-        return x, y
+        tiler = tiling.get_tiling_by_name(self.tiling_mode)
+        return tiler.coordinates_from_index(tile_index, w=self.region_width, h=self.region_height)
 
     @property
     def drift_compensation_reference(self):

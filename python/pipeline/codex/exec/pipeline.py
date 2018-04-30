@@ -178,8 +178,12 @@ def run_pipeline_task(task_config):
             crop_tile = crop_op.run(align_tile)
             log('Tile overlap crop complete', crop_tile)
 
-            decon_tile = decon_op.run(crop_tile)
-            log('Deconvolution complete', decon_tile)
+            if task_config.n_iter_decon:
+                decon_tile = decon_op.run(crop_tile)
+                log('Deconvolution complete', decon_tile)
+            else:
+                decon_tile = crop_tile
+                log('Skipping deconvolution')
 
             if task_config.run_best_focus:
                 best_z, classifications, probabilities = focus_op.run(tile)

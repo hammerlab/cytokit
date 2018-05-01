@@ -37,7 +37,7 @@ install:
   - pip install --progress-bar off .
   - pip install coveralls pylint
 script:
-  - nosetests -sv codex_app/ --with-coverage --cover-inclusive --cover-package=codex_app
+  - nosetests -sv codex/ --with-coverage --cover-inclusive --cover-package=codex
   - bash ./.lint.sh
 after_success:
   - coveralls

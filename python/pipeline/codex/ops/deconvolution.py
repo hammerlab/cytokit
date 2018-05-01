@@ -67,7 +67,7 @@ def rescale_stack(tile, stack, scale_factor):
     no scaling) there is less saturation.
     """
     mean_ratio = tile.mean() / np_utils.arr_to_uint(stack, tile.dtype).mean()
-    logger.debug('Mean ratio of deconvolved stack to original = {}'.format(mean_ratio))
+    logger.debug('Mean ratio of original stack to deconvolved stack = {}'.format(mean_ratio))
     return stack * (mean_ratio * scale_factor)
 
 
@@ -84,6 +84,14 @@ class CodexDeconvolution(CodexOp):
         return self
 
     def run(self, tile):
+        if not np.issubdtype(tile.dtype, np.unsignedinteger):
+            raise ValueError(
+                'Only unsigned integer images supported; '
+                'type given = {}'.format(tile.dtype)
+            )
+        if tile.min() < 0:
+            raise ValueError('Image to deconvolve cannot have negative values')
+
         # Tile should have shape (cycles, z, channel, height, width)
         ncyc, nz, nch, nh, nw = self.config.tile_dims
 
@@ -92,12 +100,16 @@ class CodexDeconvolution(CodexOp):
         for icyc in range(ncyc):
             img_ch = []
             for ich in range(nch):
-                logger.debug('Running deconvolution for cycle {}, channel {}'.format(icyc, ich))
                 acq = fd_data.Acquisition(tile[icyc, :, ich, :, :], kernel=psfs[ich])
+                logger.debug('Running deconvolution for cycle {}, channel {} [dtype = {}]'.format(icyc, ich, acq.data.dtype))
                 res = self.algo.run(acq, self.n_iter, session_config=get_tf_config(self)).data
 
+                # Restore mean intensity if a scale factor was given
                 if self.scale_factor is not None:
                     res = rescale_stack(acq.data, res, self.scale_factor)
+
+                # Clip float32 and convert to type of original image (i.e. w/ no scaling)
+                res = np_utils.arr_to_uint(res, acq.data.dtype)
 
                 img_ch.append(res)
             img_cyc.append(np.stack(img_ch, 1))

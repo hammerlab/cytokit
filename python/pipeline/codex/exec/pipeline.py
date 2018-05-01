@@ -169,7 +169,7 @@ def run_pipeline_task(task_config):
                     'reg/x/y = {}/{}/{}'.format(region_index + 1, tx + 1, ty + 1)
                 ]
                 if res is not None:
-                    details.append('shape {}'.format(res.shape))
+                    details.append('shape {} / dtype {}'.format(res.shape, res.dtype))
                 logger.info(msg + ' [' + ' | '.join(details) + ']')
 
             align_tile = align_op.run(tile)

@@ -1,4 +1,5 @@
 from codex.ops.op import TensorFlowOp, CodexOp
+from codex.utils import np_utils
 import tensorflow as tf
 import numpy as np
 from flowdec import fft_utils_tf
@@ -158,8 +159,8 @@ class CodexDriftCompensator(CodexOp):
             # Re-stack along channel axis
             img_cyc.append(np.stack(img_ch, 1))
 
-        # Re-stack along cycle axis
-        return np.stack(img_cyc, 0)
+        # Re-stack along cycle axis and convert back to original type from float32
+        return np_utils.arr_to_uint(np.stack(img_cyc, 0), tile.dtype)
 
 
 

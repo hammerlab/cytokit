@@ -190,5 +190,5 @@ def load(data_dir):
 
 
 def load_example_config(example_name):
-    """Load example configuration stored at codex/config/$SCHEMA_VERSION/examples"""
+    """Load example configuration stored at codex_app/config/$SCHEMA_VERSION/examples"""
     return load(osp.join(codex.conf_dir, codex.get_config_version(), 'examples', example_name))

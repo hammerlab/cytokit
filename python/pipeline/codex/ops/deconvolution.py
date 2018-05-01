@@ -1,4 +1,5 @@
 from codex.ops.op import CodexOp, get_tf_config
+from codex.utils import np_utils
 from flowdec import restoration as fd_restoration
 from flowdec import psf as fd_psf
 from flowdec import data as fd_data
@@ -49,18 +50,33 @@ def generate_psfs(config):
     )
 
     logger.debug('Generating PSFs from experiment configuration file')
-    # Specify a psf for each emission wavelength in microns (nm in codex config)
+    # Specify a psf for each emission wavelength in microns (nm in codex_app config)
     return [
         fd_psf.GibsonLanni(**{**args, **{'wavelength': w/1000.}}).generate()
         for w in em_wavelength_nm
     ]
 
 
+def rescale_stack(tile, stack, scale_factor):
+    """Restore mean intensity of z-stack
+
+    This is transformation used in the Nolanlab code to rescale means
+    of deconvolution results back to the original (they're not usually
+    off by much though).  scale_factor is then a tunable way to lower or
+    raise the intensity values so that when clipping to uint type (with
+    no scaling) there is less saturation.
+    """
+    mean_ratio = tile.mean() / np_utils.arr_to_uint(stack, tile.dtype).mean()
+    logger.debug('Mean ratio of deconvolved stack to original = {}'.format(mean_ratio))
+    return stack * (mean_ratio * scale_factor)
+
+
 class CodexDeconvolution(CodexOp):
 
-    def __init__(self, config, n_iter=25):
+    def __init__(self, config, n_iter=25, scale_factor=.5):
         super(CodexDeconvolution, self).__init__(config)
         self.n_iter = n_iter
+        self.scale_factor = scale_factor
         self.algo = None
 
     def initialize(self):
@@ -79,6 +95,10 @@ class CodexDeconvolution(CodexOp):
                 logger.debug('Running deconvolution for cycle {}, channel {}'.format(icyc, ich))
                 acq = fd_data.Acquisition(tile[icyc, :, ich, :, :], kernel=psfs[ich])
                 res = self.algo.run(acq, self.n_iter, session_config=get_tf_config(self)).data
+
+                if self.scale_factor is not None:
+                    res = rescale_stack(acq.data, res, self.scale_factor)
+
                 img_ch.append(res)
             img_cyc.append(np.stack(img_ch, 1))
         return np.stack(img_cyc, 0)

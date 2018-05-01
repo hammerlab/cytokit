@@ -11,7 +11,7 @@ with open('requirements.txt', 'r') as fd:
 
 if __name__ == '__main__':
     setup(
-        name='codex',
+        name='codex_app',
         version='0.0.1',
         description="CODEX Data Processing Pipeline",
         author="Eric Czech",
@@ -26,9 +26,9 @@ if __name__ == '__main__':
             'Topic :: Scientific/Engineering :: Bio-Informatics',
         ],
         install_requires=requires,
-        packages=['codex', 'codex.cli', 'codex.exec', 'codex.miq', 'codex.nb', 'codex.ops', 'codex.utils'],
+        packages=['codex_app', 'codex_app.cli', 'codex_app.exec', 'codex_app.miq', 'codex_app.nb', 'codex_app.ops', 'codex_app.utils'],
         package_data={
-            'codex': ['configs/*/examples/*/*', 'configs/*/schema/*']
+            'codex_app': ['configs/*/examples/*/*', 'configs/*/schema/*']
         },
         include_package_data=True
     )

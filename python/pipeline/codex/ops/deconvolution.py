@@ -50,7 +50,7 @@ def generate_psfs(config):
     )
 
     logger.debug('Generating PSFs from experiment configuration file')
-    # Specify a psf for each emission wavelength in microns (nm in codex_app config)
+    # Specify a psf for each emission wavelength in microns (nm in codex config)
     return [
         fd_psf.GibsonLanni(**{**args, **{'wavelength': w/1000.}}).generate()
         for w in em_wavelength_nm

@@ -4,7 +4,7 @@ from os import path as osp
 import logging
 logger = logging.getLogger(__name__)
 
-DEFAULT_CACHE_DIR = '~/.codex_app/cache'
+DEFAULT_CACHE_DIR = '~/.codex/cache'
 ENV_CACHE_DIR = 'CODEX_CACHE_DIR'
 
 BEST_FOCUS_MODEL = "https://storage.googleapis.com/microscope-image-quality/static/model/model.ckpt-1000042"

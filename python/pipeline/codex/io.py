@@ -48,7 +48,7 @@ def read_image(file):
         return imread(file)
 
 def read_tile(file, config):
-    """Read a codex_app-specific 5D image tile"""
+    """Read a codex-specific 5D image tile"""
     # When saving tiles in ImageJ compatible format, any unit length
     # dimensions are lost so when reading them back out, it is simplest
     # to conform to 5D convention by reshaping if necessary
@@ -57,7 +57,7 @@ def read_tile(file, config):
 
 
 def save_tile(file, tile):
-    """Save a codex_app-specific 5D image"""
+    """Save a codex-specific 5D image"""
     if tile.ndim != 5:
         raise ValueError('Expecting tile with 5 dimensions but got tile with shape {}'.format(tile))
     # Save using Imagej format, otherwise channels, cycles, and z planes are 

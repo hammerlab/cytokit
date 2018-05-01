@@ -35,7 +35,7 @@ img = resize(img, [int(s * SCALE_FACTOR) for s in img.shape])
 logger.info('Loading expression file')
 import pandas as pd
 #df_exp = pd.read_csv('/Users/eczech/tmp/codex/decompose/cache/expression.csv', sep='\t').sample(10000)
-df_exp = pd.read_csv('/Users/eczech/tmp/codex/decompose/cache/expression_20180426_D18_R1.csv', sep='\t').sample(50000, random_state=1)
+df_exp = pd.read_csv('/Users/eczech/tmp/codex/decompose/cache/expression_20180426_D18_R1.csv', sep='\t').sample(100000, random_state=1)
 print(df_exp.head())
 
 

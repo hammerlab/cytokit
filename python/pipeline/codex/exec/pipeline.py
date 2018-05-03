@@ -25,7 +25,8 @@ TIMEOUT = 1 * 60 * 60
 
 class TaskConfig(object):
 
-    def __init__(self, pipeline_config, region_indexes, tile_indexes, gpu, tile_prefetch_capacity=2, run_best_focus=True, n_iter_decon=25):
+    def __init__(self, pipeline_config, region_indexes, tile_indexes, gpu, tile_prefetch_capacity=2, 
+        run_best_focus=True, run_drift_comp=True, n_iter_decon=25):
         self.region_indexes = region_indexes
         self.tile_indexes = tile_indexes
         self.config_dir = pipeline_config.config_dir
@@ -33,6 +34,7 @@ class TaskConfig(object):
         self.output_dir = pipeline_config.output_dir
         self.gpu = gpu
         self.tile_prefetch_capacity = tile_prefetch_capacity
+        self.run_drift_comp = run_drift_comp
         self.run_best_focus = run_best_focus
         self.n_iter_decon = n_iter_decon
         self.exp_config = pipeline_config.exp_config
@@ -172,8 +174,12 @@ def run_pipeline_task(task_config):
                     details.append('shape {} / dtype {}'.format(res.shape, res.dtype))
                 logger.info(msg + ' [' + ' | '.join(details) + ']')
 
-            align_tile = align_op.run(tile)
-            log('Drift compensation complete', align_tile)
+            if task_config.run_drift_comp:
+                align_tile = align_op.run(tile)
+                log('Drift compensation complete', align_tile)
+            else:
+                align_tile = tile
+                log('Skipping drift compensation')
 
             crop_tile = crop_op.run(align_tile)
             log('Tile overlap crop complete', crop_tile)

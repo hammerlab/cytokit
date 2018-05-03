@@ -4,7 +4,7 @@ from codex.ops import tile_crop
 import numpy as np
 import os.path as osp
 
-def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0, bw=0, bv_fn=None):
+def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0, bw=0, bv_fn=None, allow_missing=False):
     """Generate a montage image for a specific cycle, z-plane, channel, and region
 
     This function supports both raw, flattened 2D images as well as consolidated, 5D 
@@ -24,6 +24,8 @@ def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0,
             tile location within the montage; If <= 0, this parameter will do nothing
         bv_fn: Border value function with signature `fn(tile_x, tile_y) --> float`; if not given all
             border values are assigned a value of 0
+        allow_missing: Flag indicating whether or not to allow missing tiles into the montage; defaults
+            to false and is generally only useful when debugging missing data
     Returns:
         A (usually very large) 2D array containing all tiles stitched together
     """
@@ -37,13 +39,21 @@ def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0,
         # If operating on a hyperstack, extract the appropriate slice to add to the montage
         if hyperstack:
             path = codex_io.get_processor_img_path(ireg, tx, ty)
-            tile = codex_io.read_tile(osp.join(image_dir, path), config)
+            path = osp.join(image_dir, path)
+            if not osp.exists(path) and allow_missing:
+                tile = np.zeros((th, tw))
+            else:
+                tile = codex_io.read_tile(path, config)
             tile = tile[icyc, iz, ich, :, :]
         # Otherwise, assume raw acquisition files are to be loaded and then cropped before being added
         else:
             path = codex_io.get_raw_img_path(ireg, itile, icyc, ich, iz)
-            tile = codex_io.read_image(osp.join(image_dir, path))
-            tile = tile_crop.apply_slice(tile, tile_crop.get_slice(config))
+            path = osp.join(image_dir, path)
+            if not osp.exists(path) and allow_missing:
+                tile = np.zeros((th, tw))
+            else:
+                tile = codex_io.read_image(path)
+                tile = tile_crop.apply_slice(tile, tile_crop.get_slice(config))
         
         # Highlight borders, if configured to do so
         if bw > 0:

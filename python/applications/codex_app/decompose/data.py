@@ -1,8 +1,8 @@
 from skimage.external.tifffile import imread
 from codex import io as codex_io
 from codex import config as codex_config
+from codex.segm import expression as codex_expr
 import os.path as osp
-import pandas as pd
 
 DATA_DIR = None
 
@@ -22,11 +22,5 @@ def get_experiment_config():
 
 
 def read_expression_file(config, path):
-    # Load configuration and expression data resulting from CODEX segmentation
-    df = pd.read_csv(path, sep='\t')
-    df = df.rename(columns={'Filename:Filename': 'tile'})
-    cyc_names = list(df.filter(regex='Cyc_').columns.values)
-    assert len(cyc_names) == len(config.channel_names)
-    df = df.rename(columns=dict(zip(cyc_names, config.channel_names)))
-    return df
+    return codex_expr.read_expression_file(config, path)
 

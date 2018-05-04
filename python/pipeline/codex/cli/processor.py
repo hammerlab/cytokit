@@ -14,7 +14,7 @@ class CodexProcessor(object):
             self, data_dir, output_dir, 
             region_indexes=None, tile_indexes=None, config_dir=None,
             n_workers=None, gpus=None, memory_limit=32e9,
-            tile_prefetch_capacity=2, run_best_focus=True, n_iter_decon=25,
+            tile_prefetch_capacity=2, run_best_focus=True, run_drift_comp=True, n_iter_decon=25,
             codex_py_log_level=logging.INFO, 
             tf_py_log_level=logging.ERROR,
             tf_cpp_log_level=logging.ERROR):
@@ -51,6 +51,7 @@ class CodexProcessor(object):
                 which is nearly always good as this means one tile will undergo processing while a second
                 is buffered into memory asynchronously
             run_best_focus: Flag indicating that best focal plan selection operations should be executed
+            run_drift_comp: Flag indicating that drift compensation should be executed
             n_iter_decon: Number of deconvolution iterations
             codex_py_log_level: Logging level for CODEX and dependent modules (except TensorFlow); can be
                 specified as string or integer compatible with python logging levels (e.g. 'info', 'debug',
@@ -82,6 +83,7 @@ class CodexProcessor(object):
             n_workers, gpus, memory_limit,
             tile_prefetch_capacity=tile_prefetch_capacity,
             run_best_focus=run_best_focus,
+            run_drift_comp=run_drift_comp,
             n_iter_decon=n_iter_decon
         )
         pipeline.run(conf, logging_init_fn=logging_init_fn)

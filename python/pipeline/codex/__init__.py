@@ -6,6 +6,10 @@ ENV_CONFIG_VERSION = 'CODEX_CONFIG_VERSION'
 ENV_CPU_ONLY_OPS = 'CODEX_CPU_ONLY_OPS'
 ENV_RAW_INDEX_SYMLINKS = 'CODEX_RAW_INDEX_SYMLINKS'
 
+def get_env_vars():
+    """Get map of all CODEX environment variables"""
+    return {k: v for k, v in os.environ.items() if k.startswith('CODEX_')}
+
 # ############################# #
 # Configuration Schema Versions #
 # ############################# #

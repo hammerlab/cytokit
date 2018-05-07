@@ -3,7 +3,11 @@
 import fire
 from codex.exec import pipeline
 from codex.utils import tf_utils
+from codex import cli
 import logging
+import sys
+import os
+import os.path as osp
 
 LOG_FORMAT = '%(asctime)s:%(levelname)s:%(process)d:%(name)s: %(message)s'
 
@@ -17,7 +21,8 @@ class CodexProcessor(object):
             tile_prefetch_capacity=2, run_best_focus=True, run_drift_comp=True, n_iter_decon=25,
             codex_py_log_level=logging.INFO, 
             tf_py_log_level=logging.ERROR,
-            tf_cpp_log_level=logging.ERROR):
+            tf_cpp_log_level=logging.ERROR,
+            record_execution=True):
         """Run CODEX pre-processing pipeline
 
         This application will conduct the following operations on raw tif stacks:
@@ -58,17 +63,23 @@ class CodexProcessor(object):
                 'warn', 'error', 'fatal' or corresponding integers)
             tf_py_log_level: TensorFlow python logging level; same semantics as `codex_py_log_level`
             tf_cpp_log_level: TensorFlow C++ logging level; same semantics as `codex_py_log_level`
+            record_execution: Flag indicating whether or not to store arguments and environment in
+                a file within the output directory; defaults to True
         """
-        # Resolve arguments with multiple supported forms
-        region_indexes = resolve_int_list_arg(region_indexes)
-        tile_indexes = resolve_int_list_arg(tile_indexes)
-        gpus = resolve_int_list_arg(gpus)
-
         # Initialize logging (use a callable function for passing to spawned processes in pipeline)
         def logging_init_fn():
             logging.basicConfig(level=tf_utils.log_level_code(codex_py_log_level), format=LOG_FORMAT)
             tf_utils.init_tf_logging(tf_cpp_log_level, tf_py_log_level)
         logging_init_fn()
+
+        if record_execution:
+            path = cli.record_execution(output_dir, 'processor_execution.json')
+            logging.info('Recorded execution arguments and envrionment in "%s"', path)
+
+        # Resolve arguments with multiple supported forms
+        region_indexes = resolve_int_list_arg(region_indexes)
+        tile_indexes = resolve_int_list_arg(tile_indexes)
+        gpus = resolve_int_list_arg(gpus)
 
         # Set dynamic defaults
         if config_dir is None:

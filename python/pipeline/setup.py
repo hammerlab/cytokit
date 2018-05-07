@@ -26,7 +26,7 @@ if __name__ == '__main__':
             'Topic :: Scientific/Engineering :: Bio-Informatics',
         ],
         install_requires=requires,
-        packages=['codex', 'codex.cli', 'codex.exec', 'codex.miq', 'codex.ops', 'codex.utils'],
+        packages=['codex', 'codex.cli', 'codex.exec', 'codex.miq', 'codex.ops', 'codex.utils', 'codex.analyze'],
         package_data={
             'codex': ['configs/*/examples/*/*', 'configs/*/schema/*']
         },

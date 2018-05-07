@@ -12,20 +12,20 @@ FILE_FORMATS = {
         raw_image=osp.join('Cyc{cycle:d}_reg{region:d}', '1_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
         best_focus=osp.join('bestFocus', 'reg{region:03d}_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
         proc_image='reg{region:03d}_X{x:02d}_Y{y:02d}.tif',
-        expr_file='reg{region:03d}_Expression_Compensated.txt'
+        expr_file='reg{region:03d}_Expression_{type}.txt'
     ),
     codex.FF_V02: FileFormats(
         raw_image=osp.join('Cyc{cycle:d}_reg{region:d}', 'C{channel:03d}_Z{z:03d}_T{cycle:03d}.tif'),
         best_focus=osp.join('bestFocus', 'R{region:03d}_X{x:03d}_Y{y:03d}_Z{z:03d}.tif'),
         proc_image='R{region:03d}_X{x:03d}_Y{y:03d}.tif',
-        expr_file='reg{region:03d}_Expression_Compensated.txt'
+        expr_file='reg{region:03d}_Expression_{type}.txt'
     ),
     # Format for single region, single cycle Keyence experiments
     codex.FF_V03: FileFormats(
         raw_image=osp.join('Image_{tile:05d}_CH{channel:d}.tif'),
         best_focus=osp.join('bestFocus', 'reg001_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
         proc_image='reg001_X{x:02d}_Y{y:02d}.tif',
-        expr_file='reg{region:03d}_Expression_Compensated.txt'
+        expr_file='reg{region:03d}_Expression_{type}.txt'
     ),
 }
 
@@ -81,8 +81,10 @@ def get_best_focus_img_path(ireg, tx, ty, best_z):
     return _formats().best_focus.format(region=ireg + 1, x=tx + 1, y=ty + 1, z=best_z + 1)
 
 
-def get_region_expression_path(ireg):
-    return _formats().expr_file.format(region=ireg + 1)
+def get_region_expression_path(ireg, typ='Compensated'):
+    if typ not in ['Compensated', 'Uncompensated']:
+        raise ValueError('Expression file type should be one of "Compensated" or "Uncompensated" (given = "{}")'.format(typ))
+    return _formats().expr_file.format(region=ireg + 1, type=typ)
 
 
 

@@ -1,7 +1,7 @@
 from skimage.external.tifffile import imread
 from codex import io as codex_io
 from codex import config as codex_config
-from codex.segm import expression as codex_expr
+from codex.analyze import expression as codex_expr
 import os.path as osp
 
 DATA_DIR = None

@@ -31,5 +31,7 @@ class CodexTileCrop(CodexOp):
     def __init__(self, config):
         super(CodexTileCrop, self).__init__(config)
 
-    def run(self, tile):
-        return apply_slice(tile, get_slice(self.config))
+    def _run(self, tile, **kwargs):
+        slice_arr = get_slice(self.config)
+        self.record({'slice': [str(v) for v in slice_arr]})
+        return apply_slice(tile, slice_arr)

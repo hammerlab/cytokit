@@ -16,6 +16,7 @@ from codex.ops import tile_crop
 from codex.ops import drift_compensation
 from codex.ops import best_focus
 from codex.ops import deconvolution
+from codex.ops import tile_summary
 from dask.distributed import Client, LocalCluster
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ TIMEOUT = 1 * 60 * 60
 class TaskConfig(object):
 
     def __init__(self, pipeline_config, region_indexes, tile_indexes, gpu, tile_prefetch_capacity=2, 
-        run_best_focus=True, run_drift_comp=True, n_iter_decon=25):
+        run_best_focus=True, run_drift_comp=True, run_summary=True, n_iter_decon=25):
         self.region_indexes = region_indexes
         self.tile_indexes = tile_indexes
         self.config_dir = pipeline_config.config_dir
@@ -36,6 +37,7 @@ class TaskConfig(object):
         self.tile_prefetch_capacity = tile_prefetch_capacity
         self.run_drift_comp = run_drift_comp
         self.run_best_focus = run_best_focus
+        self.run_summary = run_summary
         self.n_iter_decon = n_iter_decon
         self.exp_config = pipeline_config.exp_config
 
@@ -44,6 +46,10 @@ class TaskConfig(object):
                 'Region and tile index lists must have same length (region indexes = {}, tile indexes = {})'
                 .format(self.region_indexes, self.tile_indexes)
             )
+
+    @property
+    def run_deconvolution(self):
+        return self.n_iter_decon > 0
 
     @property
     def n_tiles(self):
@@ -122,7 +128,7 @@ class PipelineConfig(object):
 def load_tiles(q, task_config):
     for region_index, tile_index in zip(task_config.region_indexes, task_config.tile_indexes):
         with tile_generator.CodexTileGenerator(task_config.exp_config, task_config.data_dir, region_index, tile_index) as op:
-            tile = op.run()
+            tile = op.run(None)
             logger.info('Loaded tile %s for region %s [shape = %s]', tile_index + 1, region_index + 1, tile.shape)
             q.put((tile, region_index, tile_index), block=True, timeout=TIMEOUT)
 
@@ -133,7 +139,8 @@ def init_dirs(output_dir):
             os.makedirs(path, exist_ok=True)
 
 
-def _initialize(task_config):
+def initialize_task(task_config):
+    # Initialize global GPU settings
     if task_config.gpu is not None:
         if op.get_gpu_device() is None:
             logger.debug('Setting gpu device {}'.format(task_config.gpu))
@@ -141,79 +148,120 @@ def _initialize(task_config):
         else:
             logger.debug('GPU device already set to {}'.format(op.get_gpu_device()))
 
+    # Initialize output directory
+    init_dirs(task_config.output_dir)
+
+
+def process_tile(tile, ops, log_fn):
+
+    # Drift Compensation
+    if ops.align_op:
+        align_tile = ops.align_op.run(tile)
+        log_fn('Drift compensation complete', align_tile)
+    else:
+        align_tile = tile
+        log_fn('Skipping drift compensation')
+
+    # Tile Overlap Cropping (required)
+    crop_tile = ops.crop_op.run(align_tile)
+    log_fn('Tile overlap crop complete', crop_tile)
+
+    # Deconvolution
+    if ops.decon_op:
+        decon_tile = ops.decon_op.run(crop_tile)
+        log_fn('Deconvolution complete', decon_tile)
+    else:
+        decon_tile = crop_tile
+        log_fn('Skipping deconvolution')
+
+    # Best Focal Plane Selection
+    focus_tile, focus_z_plane = None, None
+    if ops.focus_op:
+        focus_z_plane, classifications, probabilities = ops.focus_op.run(tile)
+        focus_tile = decon_tile[:, [focus_z_plane], :, :, :]
+        log_fn('Focal plane selection complete', focus_tile)
+    else:
+        log_fn('Skipping focal plane selection')
+
+    # Tile summary statistic operations
+    if ops.summary_op:
+        ops.summary_op.run(decon_tile)
+        log_fn('Tile statistic summary complete')
+    else:
+        log_fn('Skipping tile statistic summary')
+
+    return decon_tile, (focus_tile, focus_z_plane)
+
+def get_log_fn(i, n_tiles, region_index, tx, ty):
+    def log_fn(msg, res=None):
+        details = [
+            'tile {} of {} ({:.2f}%)'.format(i + 1, n_tiles, 100*(i+1)/n_tiles),
+            'reg/x/y = {}/{}/{}'.format(region_index + 1, tx + 1, ty + 1)
+        ]
+        if res is not None:
+            details.append('shape {} / dtype {}'.format(res.shape, res.dtype))
+        logger.info(msg + ' [' + ' | '.join(details) + ']')
+    return log_fn
+
+def get_op_set(task_config):
+    exp_config = task_config.exp_config
+    return op.CodexOpSet(
+        align_op = drift_compensation.CodexDriftCompensator(exp_config) if task_config.run_drift_comp else None,
+        focus_op = best_focus.CodexFocalPlaneSelector(exp_config) if task_config.run_best_focus else None,
+        decon_op = deconvolution.CodexDeconvolution(exp_config, n_iter=task_config.n_iter_decon) if task_config.run_deconvolution else None,
+        summary_op = tile_summary.CodexTileSummary(exp_config) if task_config.run_summary else None,
+        crop_op = tile_crop.CodexTileCrop(exp_config)
+    )
+
+
+def concat(datasets):
+    """Merge dictionaries containing lists for each key"""
+    res = {}
+    for dataset in datasets:
+        for k, v in dataset.items():
+            res[k] = res.get(k, []) + v
+    return res
 
 def run_pipeline_task(task_config):
-    _initialize(task_config)
-
-    exp_config = task_config.exp_config
-    init_dirs(task_config.output_dir)
+    initialize_task(task_config)
 
     tile_queue = queue.Queue(maxsize=task_config.tile_prefetch_capacity)
     load_thread = Thread(target=load_tiles, args=(tile_queue, task_config))
     load_thread.start()
 
-    if task_config.run_best_focus:
-        focus_op = best_focus.CodexFocalPlaneSelector(exp_config).initialize()
+    ops = get_op_set(task_config)
 
-    times = []
-    with drift_compensation.CodexDriftCompensator(exp_config) as align_op, \
-            tile_crop.CodexTileCrop(exp_config) as crop_op, \
-            deconvolution.CodexDeconvolution(exp_config, n_iter=task_config.n_iter_decon) as decon_op:
+    monitor_data = {}
+    with ops:
         n_tiles = task_config.n_tiles
         for i in range(n_tiles):
-            start = timer()
             tile, region_index, tile_index = tile_queue.get(block=True, timeout=TIMEOUT)
-            tx, ty = exp_config.get_tile_coordinates(tile_index)
+            tx, ty = task_config.exp_config.get_tile_coordinates(tile_index)
 
-            def log(msg, res=None):
-                details = [
-                    'tile {} of {} ({:.2f}%)'.format(i + 1, n_tiles, 100*(i+1)/n_tiles),
-                    'reg/x/y = {}/{}/{}'.format(region_index + 1, tx + 1, ty + 1)
-                ]
-                if res is not None:
-                    details.append('shape {} / dtype {}'.format(res.shape, res.dtype))
-                logger.info(msg + ' [' + ' | '.join(details) + ']')
+            context = dict(tile=tile_index, region=region_index, tile_x=tx, tile_y=ty)
+            log_fn = get_log_fn(i, n_tiles, region_index, tx, ty)
 
-            if task_config.run_drift_comp:
-                align_tile = align_op.run(tile)
-                log('Drift compensation complete', align_tile)
-            else:
-                align_tile = tile
-                log('Skipping drift compensation')
+            with op.new_monitor(context) as monitor:
+                res_tile, focus_data = process_tile(tile, ops, log_fn)
 
-            crop_tile = crop_op.run(align_tile)
-            log('Tile overlap crop complete', crop_tile)
+                # Save z-plane for stack if best focal plane selection is enabled
+                if ops.focus_op:
+                    focus_tile, focus_z_plane = focus_data
+                    img_path = codex_io.get_best_focus_img_path(region_index, tx, ty, focus_z_plane)
+                    codex_io.save_tile(osp.join(task_config.output_dir, img_path), focus_tile)
+                    log_fn('Saved best focus tile to path "{}"'.format(img_path), focus_tile)
 
-            if task_config.n_iter_decon:
-                decon_tile = decon_op.run(crop_tile)
-                log('Deconvolution complete', decon_tile)
-            else:
-                decon_tile = crop_tile
-                log('Skipping deconvolution')
+                # Save the tile resulting from pipeline execution
+                res_path = codex_io.get_processor_img_path(region_index, tx, ty)
+                log_fn('Saving result to path "{}"'.format(res_path), res_tile)
+                codex_io.save_tile(osp.join(task_config.output_dir, res_path), res_tile)
 
-            if task_config.run_best_focus:
-                best_z, classifications, probabilities = focus_op.run(tile)
-                focus_tile = decon_tile[:, [best_z], :, :, :]
+                # Accumulate monitor data across tiles
+                monitor_data = concat([monitor_data, monitor.data])
 
-                log('Best focus classifications: {}'.format(classifications), focus_tile)
-                img_path = codex_io.get_best_focus_img_path(region_index, tx, ty, best_z)
-
-                log('Saving best focus tile to path "{}"'.format(img_path), focus_tile)
-                codex_io.save_tile(osp.join(task_config.output_dir, img_path), focus_tile)
-
-            res_tile = decon_tile
-            res_path = codex_io.get_processor_img_path(region_index, tx, ty)
-            log('Saving result to path "{}"'.format(res_path), res_tile)
-            codex_io.save_tile(osp.join(task_config.output_dir, res_path), res_tile)
-
-            log('Processing complete')
-            stop = timer()
-            times.append((region_index, tile_index, stop - start))
-
-    if task_config.run_best_focus:
-        focus_op.shutdown()
-
-    return np.array(times)
+                log_fn('Processing complete')
+                
+    return monitor_data
 
 
 def run(pl_conf, logging_init_fn=None):
@@ -263,14 +311,13 @@ def run(pl_conf, logging_init_fn=None):
         if len(res) != len(tasks):
             raise ValueError('Parallel execution returned {} results but {} were expected'.format(len(res), len(tasks)))
         stop = timer()
-        if logger.isEnabledFor(logging.DEBUG):
-            from scipy.stats import describe
-            times = np.concatenate([np.array(t)[2] for t in res], 0)
-            logger.debug('Per-tile execution time summary (all in seconds): %s', describe(times))
         logger.info('Pipeline execution completed in %s seconds', stop - start)
     finally:
         client.close()
         cluster.close()
+
+    # Merge monitoring data across pipeline tasks and return result
+    return concat(res)
 
 
 

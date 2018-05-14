@@ -50,7 +50,7 @@ def generate_psfs(config):
     )
 
     logger.debug('Generating PSFs from experiment configuration file')
-    # Specify a psf for each emission wavelength in microns (nm in codex config)
+    # Specify a psf for each emission wavelength in microns (nm in codex_app config)
     return [
         fd_psf.GibsonLanni(**{**args, **{'wavelength': w/1000.}}).generate()
         for w in em_wavelength_nm
@@ -68,7 +68,7 @@ def rescale_stack(tile, stack, scale_factor):
     """
     mean_ratio = tile.mean() / np_utils.arr_to_uint(stack, tile.dtype).mean()
     logger.debug('Mean ratio of original stack to deconvolved stack = {}'.format(mean_ratio))
-    return stack * (mean_ratio * scale_factor)
+    return stack * (mean_ratio * scale_factor), mean_ratio
 
 
 class CodexDeconvolution(CodexOp):
@@ -83,14 +83,12 @@ class CodexDeconvolution(CodexOp):
         self.algo = fd_restoration.RichardsonLucyDeconvolver(n_dims=3).initialize()
         return self
 
-    def run(self, tile):
+    def _run(self, tile, **kwargs):
         if not np.issubdtype(tile.dtype, np.unsignedinteger):
             raise ValueError(
                 'Only unsigned integer images supported; '
                 'type given = {}'.format(tile.dtype)
             )
-        if tile.min() < 0:
-            raise ValueError('Image to deconvolve cannot have negative values')
 
         # Tile should have shape (cycles, z, channel, height, width)
         ncyc, nz, nch, nh, nw = self.config.tile_dims
@@ -106,7 +104,8 @@ class CodexDeconvolution(CodexOp):
 
                 # Restore mean intensity if a scale factor was given
                 if self.scale_factor is not None:
-                    res = rescale_stack(acq.data, res, self.scale_factor)
+                    res, mean_ratio = rescale_stack(acq.data, res, self.scale_factor)
+                    self.record({'mean_ratio': mean_ratio})
 
                 # Clip float32 and convert to type of original image (i.e. w/ no scaling)
                 res = np_utils.arr_to_uint(res, acq.data.dtype)

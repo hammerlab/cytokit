@@ -118,16 +118,18 @@ class CodexDriftCompensator(CodexOp):
         self.applier = TranslationApplier(n_dims=3).initialize()
         return self
 
-    def run(self, tile):
+    def _run(self, tile, **kwargs):
         # Tile should have shape (cycles, z, channel, height, width)
         ncyc, nch = self.config.n_cycles, self.config.n_channels_per_cycle
 
+        # Determine cycle + channel to be used as reference for compensation
         drift_cycle, drift_channel = self.config.drift_compensation_reference
-
         reference_image = tile[drift_cycle, :, drift_channel, :, :]
 
+        # Determine set of cycles to be aligned (everything except reference)
         target_cycles = list(set(range(ncyc)) - set([drift_cycle]))
 
+        # Compute translations that need to be applied
         def translation_calculations():
             for icyc in target_cycles:
                 logger.debug('Calculating drift translation for reference cycle {}, comparison cycle {}'
@@ -136,10 +138,12 @@ class CodexDriftCompensator(CodexOp):
                 yield self.calculator.args(reference_image, offset_image)
 
         logger.info('Calculating drift translations')
-        translations = iter(self.calculator.flow(translation_calculations()))
+        translations = self.calculator.flow(translation_calculations())
+        self.record({'translations': list(translations)})
+        translations = iter(translations)
 
+        # Apply all computed translations and reassemble result
         noop_translation = np.zeros(3)
-
         def translation_applications():
             for icyc in range(ncyc):
                 translation = noop_translation if icyc == drift_cycle else next(translations)['translation']

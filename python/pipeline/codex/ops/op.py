@@ -1,4 +1,5 @@
 import os
+import re
 import codex
 import tensorflow as tf
 from timeit import default_timer as timer
@@ -63,6 +64,7 @@ class OpMonitor(object):
 
 CURRENT_MONITOR = OpMonitor({})
 
+
 def new_monitor(context):
     """Create a new operation monitor with the given global context
 
@@ -75,19 +77,19 @@ def new_monitor(context):
     CURRENT_MONITOR = OpMonitor(context)
     return CURRENT_MONITOR
 
+
 def add_monitor_data(op, data):
         global CURRENT_MONITOR
-        if op not in self.data:
-            self.data[op] = []
         CURRENT_MONITOR.record(op, data)
+
 
 class MonitorMixin(object):
 
-    def _op_name(self):
+    def get_op_name(self):
         return self.__class__.__name__
 
     def add_monitor_data(self, data):
-        op = self._op_name().lower().strip()
+        op = self.get_op_name().lower().strip()
         add_monitor_data(op, data)
 
 
@@ -134,7 +136,12 @@ class TensorFlowOp(object):
             return results
 
 
-class CodexOp(object, MonitorMixin):
+def _to_snake_case(name):
+    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
+
+class CodexOp(MonitorMixin):
 
     def __init__(self, config):
         self.config = config
@@ -150,6 +157,13 @@ class CodexOp(object, MonitorMixin):
         else:
             self.shutdown()
             return True
+
+    @staticmethod
+    def get_op_for_class(c):
+        return _to_snake_case(c.__name__.replace('Codex', ''))
+
+    def get_op_name(self):
+        return CodexOp.get_op_for_class(self.__class__)
 
     def record(self, data):
         self._records.append(data)

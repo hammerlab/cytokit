@@ -109,7 +109,6 @@ class CodexProcessor(object):
             path = cli.record_processor_data(data, output_dir)
             logging.info('Operation summary data saved to "%s"', path)
 
-
     def gke(self):
         # Ultimately, a GKE impementation should use the same "localhost" code above on cluster containers
         pass

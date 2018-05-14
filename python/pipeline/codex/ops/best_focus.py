@@ -71,7 +71,7 @@ class CodexFocalPlaneSelector(CodexOp):
             classifications.append(pred.predictions)
             probabilities.append(pred.probabilities)
         best_z = get_best_z_index(classifications)
-        self.record({'classifications': classifications, 'probabilities': probabilities, 'best_z': best_z})
+        self.record({'classifications': classifications, 'best_z': best_z})
         logger.debug('Best focal plane: z = {} (classifications: {})'.format(best_z, classifications))
 
         # Return best z plane and other context

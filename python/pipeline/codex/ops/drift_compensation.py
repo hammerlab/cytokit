@@ -139,11 +139,16 @@ class CodexDriftCompensator(CodexOp):
 
         logger.info('Calculating drift translations')
         translations = self.calculator.flow(translation_calculations())
-        self.record({'translations': list(translations)})
+
+        # Add monitor records containing the translation to be applied to each non-reference cycle
+        # Note: translations are specified as [dz, dy, dx]
+        for i, icyc in enumerate(target_cycles):
+            self.record({'target_cycle': icyc, 'translation': translations[i]['translation']})
         translations = iter(translations)
 
         # Apply all computed translations and reassemble result
         noop_translation = np.zeros(3)
+
         def translation_applications():
             for icyc in range(ncyc):
                 translation = noop_translation if icyc == drift_cycle else next(translations)['translation']

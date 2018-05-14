@@ -192,6 +192,7 @@ def process_tile(tile, ops, log_fn):
 
     return decon_tile, (focus_tile, focus_z_plane)
 
+
 def get_log_fn(i, n_tiles, region_index, tx, ty):
     def log_fn(msg, res=None):
         details = [
@@ -203,14 +204,16 @@ def get_log_fn(i, n_tiles, region_index, tx, ty):
         logger.info(msg + ' [' + ' | '.join(details) + ']')
     return log_fn
 
+
 def get_op_set(task_config):
     exp_config = task_config.exp_config
     return op.CodexOpSet(
-        align_op = drift_compensation.CodexDriftCompensator(exp_config) if task_config.run_drift_comp else None,
-        focus_op = best_focus.CodexFocalPlaneSelector(exp_config) if task_config.run_best_focus else None,
-        decon_op = deconvolution.CodexDeconvolution(exp_config, n_iter=task_config.n_iter_decon) if task_config.run_deconvolution else None,
-        summary_op = tile_summary.CodexTileSummary(exp_config) if task_config.run_summary else None,
-        crop_op = tile_crop.CodexTileCrop(exp_config)
+        align_op=drift_compensation.CodexDriftCompensator(exp_config) if task_config.run_drift_comp else None,
+        focus_op=best_focus.CodexFocalPlaneSelector(exp_config) if task_config.run_best_focus else None,
+        decon_op=deconvolution.CodexDeconvolution(exp_config, n_iter=task_config.n_iter_decon) if
+        task_config.run_deconvolution else None,
+        summary_op=tile_summary.CodexTileSummary(exp_config) if task_config.run_summary else None,
+        crop_op=tile_crop.CodexTileCrop(exp_config)
     )
 
 
@@ -221,6 +224,7 @@ def concat(datasets):
         for k, v in dataset.items():
             res[k] = res.get(k, []) + v
     return res
+
 
 def run_pipeline_task(task_config):
     initialize_task(task_config)
@@ -311,7 +315,7 @@ def run(pl_conf, logging_init_fn=None):
         if len(res) != len(tasks):
             raise ValueError('Parallel execution returned {} results but {} were expected'.format(len(res), len(tasks)))
         stop = timer()
-        logger.info('Pipeline execution completed in %s seconds', stop - start)
+        logger.info('Pipeline execution completed in %.0f seconds', stop - start)
     finally:
         client.close()
         cluster.close()

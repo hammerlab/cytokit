@@ -14,9 +14,10 @@ def record_execution(output_dir, filename='processor_execution.json'):
 
 
 def record_processor_data(data, output_dir, filename='processor_data.json'):
+    import pandas as pd
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
     path = os.path.join(output_dir, filename)
-    with open(path, 'w') as fd:
-        json.dump(data, fd)
+    # Use pandas for serialization as it has built-in numpy type converters
+    pd.Series(data).to_json(path, orient='index')
     return path

@@ -9,16 +9,14 @@ import sys
 import os
 import os.path as osp
 
-LOG_FORMAT = '%(asctime)s:%(levelname)s:%(process)d:%(name)s: %(message)s'
-
 
 class CodexProcessor(object):
 
     def localhost(
             self, data_dir, output_dir, 
             region_indexes=None, tile_indexes=None, config_dir=None,
-            n_workers=None, gpus=None, memory_limit=32e9,
-            tile_prefetch_capacity=2, run_best_focus=True, run_drift_comp=True, run_summary=True,
+            n_workers=None, gpus=None, memory_limit=48e9,
+            tile_prefetch_capacity=1, run_best_focus=True, run_drift_comp=True, run_summary=True,
             n_iter_decon=25,
             codex_py_log_level=logging.INFO, 
             tf_py_log_level=logging.ERROR,
@@ -53,8 +51,8 @@ class CodexProcessor(object):
                 default is 1)
             gpus: 0-based list of gpu indexes to use for processing; has same semantics as other integer
                 list arguments like `region_indexes` and `tile_indexes` (i.e. can be a scalar, list, or 2-tuple)
-            memory_limit: Maximum amount of memory to allow per-worker; defaults to 32G
-            tile_prefetch_capacity: Number of input tiles to buffer into memory for processing; default is 2
+            memory_limit: Maximum amount of memory to allow per-worker; defaults to 48G
+            tile_prefetch_capacity: Number of input tiles to buffer into memory for processing; default is 1
                 which is nearly always good as this means one tile will undergo processing while a second
                 is buffered into memory asynchronously
             run_best_focus: Flag indicating that best focal plan selection operations should be executed
@@ -73,13 +71,13 @@ class CodexProcessor(object):
         """
         # Initialize logging (use a callable function for passing to spawned processes in pipeline)
         def logging_init_fn():
-            logging.basicConfig(level=tf_utils.log_level_code(codex_py_log_level), format=LOG_FORMAT)
+            logging.basicConfig(level=tf_utils.log_level_code(codex_py_log_level), format=cli.LOG_FORMAT)
             tf_utils.init_tf_logging(tf_cpp_log_level, tf_py_log_level)
         logging_init_fn()
 
         if record_execution:
             path = cli.record_execution(output_dir)
-            logging.info('Execution arguments and envrionment saved to "%s"', path)
+            logging.info('Execution arguments and environment saved to "%s"', path)
 
         # Resolve arguments with multiple supported forms
         region_indexes = resolve_int_list_arg(region_indexes)

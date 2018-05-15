@@ -105,7 +105,7 @@ class CodexDeconvolution(CodexOp):
                 # Restore mean intensity if a scale factor was given
                 if self.scale_factor is not None:
                     res, mean_ratio = rescale_stack(acq.data, res, self.scale_factor)
-                    self.record({'mean_ratio': mean_ratio})
+                    self.record({'mean_ratio': mean_ratio, 'cycle': icyc, 'channel': ich})
 
                 # Clip float32 and convert to type of original image (i.e. w/ no scaling)
                 res = np_utils.arr_to_uint(res, acq.data.dtype)

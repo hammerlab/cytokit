@@ -33,7 +33,8 @@ def set_config_version(version):
 FF_V01 = 'v0.1'
 FF_V02 = 'v0.2'
 FF_V03 = 'v0.3'
-FF_VERSIONS = [FF_V01, FF_V02, FF_V03]
+FF_V04 = 'v0.4'
+FF_VERSIONS = [FF_V01, FF_V02, FF_V03, FF_V04]
 
 
 def get_file_format_version():
@@ -63,3 +64,4 @@ def set_raw_index_symlinks(links=None):
 
 pkg_dir = osp.abspath(osp.dirname(__file__))
 conf_dir = osp.normpath(osp.join(pkg_dir, 'configs'))
+nb_dir = osp.normpath(osp.join(pkg_dir, '..', '..', 'notebooks'))

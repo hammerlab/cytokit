@@ -79,8 +79,8 @@ def new_monitor(context):
 
 
 def add_monitor_data(op, data):
-        global CURRENT_MONITOR
-        CURRENT_MONITOR.record(op, data)
+    global CURRENT_MONITOR
+    CURRENT_MONITOR.record(op, data)
 
 
 class MonitorMixin(object):

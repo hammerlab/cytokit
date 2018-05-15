@@ -47,7 +47,7 @@ class TranslationCalculator(TensorFlowOp):
         translation = tf.where(idx > center, idx - shape, idx)
 
         inputs = dict(reference_image=reference_image, offset_image=offset_image)
-        outputs = dict(translation=translation, center=center, offset=idx, xcor=img_cc)
+        outputs = dict(translation=translation, center=center, offset=idx)
         return inputs, outputs
 
     def args(self, reference_image, offset_image):
@@ -59,50 +59,40 @@ class TranslationApplier(TensorFlowOp):
     def __init__(self, n_dims):
         super(TranslationApplier, self).__init__()
         self.n_dims = n_dims
-        if self.n_dims not in [2, 3]:
-            raise ValueError('Number of dimensions must be 2 or 3 (given {})'.format(self.n_dims))
+        if self.n_dims not in [2, 3, 4]:
+            raise ValueError('Number of dimensions must be 2, 3 or 4 (given {})'.format(self.n_dims))
 
     def _build_graph(self):
         image = tf.placeholder(self.primary_dtype, shape=[None]*self.n_dims, name='image')
-        translation = tf.placeholder(tf.int32, shape=[self.n_dims], name='translation')
+        translation = tf.placeholder(tf.int32, shape=[2], name='translation')
 
         # tf.contrib.image.translate is given as dx, dy, which is opposite order of usual interpretation in scipy
-        # and awkward in 3D so assume all translations are given the usual way and reverse them here
+        # and awkward in 3D so assume all translations are given the usual way (dy, dx) and reverse them here
         shift = tf.reverse(translation, axis=[0])
 
         # tf.contrib.image.translate also expects floating point shifts so force the cast here since
         # this operation only works on integer shifts
         shift = tf.cast(shift, tf.float32)
 
-        # Docs on inputs to tf.contrib.image.translate:
-        # images: A tensor of shape (num_images, num_rows, num_columns, num_channels) (NHWC),
-        # (num_rows, num_columns, num_channels) (HWC), or (num_rows, num_columns) (HW)
-        if self.n_dims == 2:
-            result = tf.contrib.image.translate(image, shift)
-        elif self.n_dims == 3:
-            shp = tf.shape(image)
-            n_z = shp[0]
-
-            # tf.contrib.image.translate only does x/y translation so add in z-translation by filling
-            # empty planes with zeros and determining how many need to be added on top or bottom
-            n_lo, n_hi = tf.maximum(translation[0], 0), tf.abs(tf.minimum(translation[0], 0))
-            i_lo, i_hi = n_hi, (n_z - n_lo)
-            stack = [
-                tf.zeros([n_lo, shp[1], shp[2]], dtype=image.dtype),
-                # Expand dims to use (num_images, num_rows, num_columns, num_channels)
-                # argument (see translate function docs)
-                tf.contrib.image.translate(tf.expand_dims(image, -1), shift)[i_lo:i_hi, :, :, 0],
-                tf.zeros([n_hi, shp[1], shp[2]], dtype=image.dtype)
-            ]
-            result = tf.concat(stack, axis=0)
-        else:
-            raise ValueError('Number of dimensions {} not supported'.format(self.n_dims))
+        # Apply translation and verify that shape does not change
+        result = tf.contrib.image.translate(image, shift)
+        with tf.control_dependencies([tf.assert_equal(tf.shape(image), tf.shape(result))]):
+                result = tf.identity(result)
 
         inputs = dict(image=image, translation=translation)
         outputs = dict(result=result)
         return inputs, outputs
 
     def args(self, image, translation):
+        """Get arguments for translation application
+
+        Args:
+            image: An array matching any one of the following shapes (see tf.contrib.image.translate docs):
+                - (num_images, num_rows, num_columns, num_channels) (NHWC)
+                - (num_rows, num_columns, num_channels) (HWC)
+                - (num_rows, num_columns) (HW)
+            translation: A 2 item array as [dy, dx]
+        """
         return dict(image=image, translation=translation)
 
 
@@ -115,61 +105,84 @@ class CodexDriftCompensator(CodexOp):
 
     def initialize(self):
         self.calculator = TranslationCalculator(n_dims=3).initialize()
-        self.applier = TranslationApplier(n_dims=3).initialize()
+        self.applier = TranslationApplier(n_dims=4).initialize()
         return self
 
-    def _run(self, tile, **kwargs):
-        # Tile should have shape (cycles, z, channel, height, width)
+    def _get_translations(self, tile):
         ncyc, nch = self.config.n_cycles, self.config.n_channels_per_cycle
 
         # Determine cycle + channel to be used as reference for compensation
         drift_cycle, drift_channel = self.config.drift_compensation_reference
+
+        # Extract reference from tile that should have shape (cycles, z, channel, height, width)
         reference_image = tile[drift_cycle, :, drift_channel, :, :]
 
         # Determine set of cycles to be aligned (everything except reference)
         target_cycles = list(set(range(ncyc)) - set([drift_cycle]))
 
         # Compute translations that need to be applied
-        def translation_calculations():
-            for icyc in target_cycles:
-                logger.debug('Calculating drift translation for reference cycle {}, comparison cycle {}'
-                             .format(drift_cycle, icyc))
-                offset_image = tile[icyc, :, drift_channel, :, :]
-                yield self.calculator.args(reference_image, offset_image)
-
-        logger.info('Calculating drift translations')
-        translations = self.calculator.flow(translation_calculations())
+        translations = []
+        for icyc in target_cycles:
+            logger.debug('Calculating drift translation for reference cycle {}, comparison cycle {}'
+                            .format(drift_cycle, icyc))
+            offset_image = tile[icyc, :, drift_channel, :, :]
+            res = self.calculator.run(reference_image, offset_image)
+            # Extract dy, dx translation from translation as dz, dy, dx
+            translations.append(res['translation'][1:])
 
         # Add monitor records containing the translation to be applied to each non-reference cycle
-        # Note: translations are specified as [dz, dy, dx]
+        # Note: translations are specified as [dy, dx]
         for i, icyc in enumerate(target_cycles):
-            self.record({'target_cycle': icyc, 'translation': translations[i]['translation']})
-        translations = iter(translations)
+            self.record({'target_cycle': icyc, 'translation': translations[i]})
 
-        # Apply all computed translations and reassemble result
-        noop_translation = np.zeros(3)
+        return translations
 
-        def translation_applications():
-            for icyc in range(ncyc):
-                translation = noop_translation if icyc == drift_cycle else next(translations)['translation']
-                logger.debug('Applying translation {} to cycle {}'.format(translation, icyc))
-                for ich in range(nch):
-                    img = tile[icyc, :, ich, :, :]
-                    yield self.applier.args(img, translation)
+    def _apply_translations(self, tile, translations):
+        ncyc, nch = self.config.n_cycles, self.config.n_channels_per_cycle
+        drift_cycle, _ = self.config.drift_compensation_reference
 
-        logger.info('Applying drift translations')
-        applications = iter(self.applier.flow(translation_applications()))
-
+        translation_iter = iter(translations)
         img_cyc = []
         for icyc in range(ncyc):
-            img_ch = []
-            for ich in range(nch):
-                img_ch.append(next(applications)['result'])
-            # Re-stack along channel axis
-            img_cyc.append(np.stack(img_ch, 1))
+            # Assign translation if processing non-reference cycle (otherwise use noop translation)
+            translation = np.zeros(2) if icyc == drift_cycle else next(translation_iter)
+            logger.debug('Applying translation {} to cycle {}'.format(translation, icyc))
 
-        # Re-stack along cycle axis and convert back to original type from float32
-        return np_utils.arr_to_uint(np.stack(img_cyc, 0), tile.dtype)
+            # Extract image from tile (ncyc, nz, nch, ny, nx) as (nz, ny, nx, nch) to comply
+            # with TensorFlow image translation function
+            tile_subset = tile[icyc]
+            img = np.moveaxis(tile_subset, 1, -1)
+            img = self.applier.run(img, translation)['result']
+
+            # Convert image back to typical axis order
+            img = np.moveaxis(img, -1, 1)
+            if tile_subset.shape != img.shape:
+                raise ValueError(
+                    'Image after drift compensation application has shape {} instead of expected shape {}'
+                    .format(img.shape, tile_subset.shape)
+                )
+            img_cyc.append(img)
+
+        # Re-stack along cycle axis
+        return np.stack(img_cyc, 0)
+
+    def _run(self, tile, **kwargs):
+        # Compute drift between reference cycle and all others
+        logger.info('Calculating drift translations')
+        translations = self._get_translations(tile)
+
+        # Apply translations and convert back to original type from float32
+        logger.info('Applying drift translations')
+        res = self._apply_translations(tile, translations)
+        res = np_utils.arr_to_uint(res, tile.dtype)
+
+        # Validate shape of result
+        if res.shape != tile.shape:
+            raise ValueError(
+                'Tile shape after drift compensation ({}) does not match input shape ({})'
+                .format(res.shape, tile.shape)
+            )
+        return res
 
 
 

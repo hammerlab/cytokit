@@ -3,6 +3,7 @@ from codex.ops.op import CodexOp
 class CodexTileSummary(CodexOp):
 
     def __init__(self, config):
+        """Operation to record summary statistics for each tile"""
         super(CodexTileSummary, self).__init__(config)
 
     def _run(self, tile, **kwargs):

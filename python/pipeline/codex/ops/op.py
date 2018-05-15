@@ -1,6 +1,8 @@
 import os
+import re
 import codex
 import tensorflow as tf
+from timeit import default_timer as timer
 GPU_DEVICE = None
 
 
@@ -34,6 +36,61 @@ def get_tf_config(op, cpu_only=None):
         if GPU_DEVICE is not None:
             config.gpu_options.visible_device_list = str(GPU_DEVICE)
     return config
+
+
+class OpMonitor(object):
+
+    def __init__(self, context):
+        self.context = context
+        self.data = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        if type:
+            raise value
+        else:
+            return True
+
+    def record(self, op, data):
+        if op not in self.data:
+            self.data[op] = []
+        # Merge global context into operation data and add to 
+        # list of all records for this operations
+        self.data[op].append({**self.context, **data})
+        return self
+
+
+CURRENT_MONITOR = OpMonitor({})
+
+
+def new_monitor(context):
+    """Create a new operation monitor with the given global context
+
+    Args:
+        context: Dictionary containing any globally relevent information for this monitored session
+    Returns:
+        New OpMonitor instance
+    """
+    global CURRENT_MONITOR
+    CURRENT_MONITOR = OpMonitor(context)
+    return CURRENT_MONITOR
+
+
+def add_monitor_data(op, data):
+    global CURRENT_MONITOR
+    CURRENT_MONITOR.record(op, data)
+
+
+class MonitorMixin(object):
+
+    def get_op_name(self):
+        return self.__class__.__name__
+
+    def add_monitor_data(self, data):
+        op = self.get_op_name().lower().strip()
+        add_monitor_data(op, data)
 
 
 class OpGraph(object):
@@ -79,10 +136,16 @@ class TensorFlowOp(object):
             return results
 
 
-class CodexOp(object):
+def _to_snake_case(name):
+    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
+
+class CodexOp(MonitorMixin):
 
     def __init__(self, config):
         self.config = config
+        self._records = None
 
     def __enter__(self):
         self.initialize()
@@ -95,8 +158,55 @@ class CodexOp(object):
             self.shutdown()
             return True
 
+    @staticmethod
+    def get_op_for_class(c):
+        return _to_snake_case(c.__name__.replace('Codex', ''))
+
+    def get_op_name(self):
+        return CodexOp.get_op_for_class(self.__class__)
+
+    def record(self, data):
+        self._records.append(data)
+
+    def _run(self, tile, **kwargs):
+        raise NotImplementedError()
+
+    def run(self, tile, **kwargs):
+        # Reset monitor record list
+        self._records = []
+
+        # Time all operations executed by underlying implementations
+        start = timer()
+        res = self._run(tile, **kwargs)
+        stop = timer()
+
+        # Merge execution time with other contextual data before recording
+        exec_time = {'time': stop - start}
+        for monitor_record in (self._records or [{}]):
+            self.add_monitor_data({**monitor_record, **exec_time})
+
+        return res
+
     def initialize(self):
         pass
 
     def shutdown(self):
         pass
+
+
+class CodexOpSet(object):
+
+    def __init__(self, **ops):
+        self.ops = ops
+        for k, v in ops.items():
+            setattr(self, k, v) 
+
+    def __enter__(self):
+        for v in self.ops.values():
+            if v is not None:
+                v.__enter__()
+
+    def __exit__(self, type, value, traceback):
+        for v in self.ops.values():
+            if v is not None:
+                v.__exit__(type, value, traceback)

@@ -9,11 +9,12 @@ from skimage.external.tifffile import imread, imsave
 FileFormats = namedtuple('FileFormats', ['raw_image', 'best_focus', 'proc_image', 'expr_file'])
 FILE_FORMATS = {
     codex.FF_V01: FileFormats(
-        raw_image=osp.join('Cyc{cycle:d}_reg{region:d}', '1_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
+        raw_image=osp.join('Cyc{cycle:d}_reg{region:d}', '{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
         best_focus=osp.join('bestFocus', 'reg{region:03d}_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
         proc_image='reg{region:03d}_X{x:02d}_Y{y:02d}.tif',
         expr_file='reg{region:03d}_Expression_{type}.txt'
     ),
+    # Proposed format (haven't seen this in the wild yet but it may be coming in the future)
     codex.FF_V02: FileFormats(
         raw_image=osp.join('Cyc{cycle:d}_reg{region:d}', 'C{channel:03d}_Z{z:03d}_T{cycle:03d}.tif'),
         best_focus=osp.join('bestFocus', 'R{region:03d}_X{x:03d}_Y{y:03d}_Z{z:03d}.tif'),
@@ -25,6 +26,13 @@ FILE_FORMATS = {
         raw_image=osp.join('Image_{tile:05d}_CH{channel:d}.tif'),
         best_focus=osp.join('bestFocus', 'reg001_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
         proc_image='reg001_X{x:02d}_Y{y:02d}.tif',
+        expr_file='reg{region:03d}_Expression_{type}.txt'
+    ),
+    # Format identical to v01 except for case sensitivity on raw image region name
+    codex.FF_V04: FileFormats(
+        raw_image=osp.join('Cyc{cycle:d}_Reg{region:d}', '{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
+        best_focus=osp.join('bestFocus', 'reg{region:03d}_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
+        proc_image='reg{region:03d}_X{x:02d}_Y{y:02d}.tif',
         expr_file='reg{region:03d}_Expression_{type}.txt'
     ),
 }

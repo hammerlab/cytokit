@@ -56,7 +56,7 @@ class CodexFocalPlaneSelector(CodexOp):
         self.mqiest._sess.close()
         return self
 
-    def run(self, tile):
+    def _run(self, tile, **kwargs):
         focus_cycle, focus_channel = self.config.best_focus_reference
 
         # Subset to 3D stack based on reference cycle and channel
@@ -71,7 +71,8 @@ class CodexFocalPlaneSelector(CodexOp):
             classifications.append(pred.predictions)
             probabilities.append(pred.probabilities)
         best_z = get_best_z_index(classifications)
-        logger.debug('Best focal plane: z = {} (scores: {})'.format(best_z, classifications))
+        self.record({'classifications': classifications, 'best_z': best_z})
+        logger.debug('Best focal plane: z = {} (classifications: {})'.format(best_z, classifications))
 
         # Return best z plane and other context
         return best_z, classifications, probabilities

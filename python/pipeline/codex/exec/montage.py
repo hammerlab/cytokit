@@ -31,8 +31,7 @@ def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0,
     """
     tile_indexes = list(range(config.n_tiles_per_region))
     tw, th = config.tile_width, config.tile_height
-    rw, rh = config.region_width, config.region_height
-    img = np.zeros((rh * th, rw * tw))
+    tiles = []
     for itile in tile_indexes:
         tx, ty = config.get_tile_coordinates(itile)
 
@@ -64,6 +63,39 @@ def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0,
             tile[:, -bw:] = bv
         
         # Add to montage
-        img[(ty * th):((ty + 1) * th), (tx * tw):((tx + 1) * tw)] = tile
-    return img
+        tiles.append(tile)
+    return montage(tiles, config)
 
+
+def montage(tiles, config):
+    """Montage a list of tile images
+
+    Args:
+        tiles: A list of images having at least 2 dimensions (rows, cols) though any number of leading dimensions
+            is also supported (for cycles, channels, z-planes, etc); must have length equal to region width * region height
+        config: Experiment configuration
+    Returns:
+        An array of same data type as tiles with all n-2 dimensions the same as individual tiles, but with the last
+        two dimensions expanded as a "montage" of all 2D images contained within the tiles
+    """
+    rw, rh = config.region_width, config.region_height
+    
+    # Determine shape/type of individual tiles by checking the first one 
+    # (and assume all others will be equal)
+    dtype_proto, shape_proto = tiles[0].dtype, tiles[0].shape
+    if len(shape_proto) < 2:
+        raise ValueError('Tiles must all be at least 2D (shape given = {})'.format(shape_proto))
+    shape_rc, shape_ex = shape_proto[-2:], shape_proto[:-2]
+    th, tw = shape_rc
+
+    # Preserve leading dimensions and assume 2D image for each will be the 
+    # same size multiplied by the number of tiles in row or column axis directions
+    img_montage = np.zeros(np.concatenate((shape_ex, shape_rc * np.array([rh, rw]))), dtype=dtype_proto)
+
+    for itile, tile in enumerate(tiles):
+        if tile.shape != shape_proto:
+            raise ValueError('All tiles must have the same shape (found {}, expected {})'.format(tile.shape, shape_proto))
+        tx, ty = config.get_tile_coordinates(itile)
+        idx = [slice(None) for _ in shape_ex] + [slice(ty * th, (ty + 1) * th), slice(tx * tw, (tx + 1) * tw)]
+        img_montage[tuple(idx)] = tile
+    return img_montage

@@ -15,7 +15,7 @@ class CodexTileGenerator(CodexOp):
         self.region_index = region_index
         self.tile_index = tile_index
 
-    def run(self):
+    def _run(self, tile, **kwargs):
         ncyc, nz, nch = self.config.n_cycles, self.config.n_z_planes, self.config.n_channels_per_cycle
 
         # Tile should have shape (cycles, z, channel, height, width)

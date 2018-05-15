@@ -158,6 +158,7 @@ class CodexConfigV1(object):
         return mag, na, res_axial_nm, res_lateral_nm, objective_type, em_wavelength_nm
 
     def _validate(self):
+        # Ensure that number of channel names equals expected number
         if self._n_actual_channels != self._n_expected_channels:
             raise ValueError(
                 'Full list of channel names does not have length equal '
@@ -165,6 +166,20 @@ class CodexConfigV1(object):
                 'n expected channel names = {}, n actual channel names = {}'
                 .format(self._n_expected_channels, self._n_actual_channels)
             )
+
+        # Ensure that all one-based indexes do not have a value <= 0
+        def validate_one_based_index(k, v=None):
+            if v is None:
+                v = self._conf[k]
+            if v <= 0 or not isinstance(v, int):
+                raise ValueError('Expected 1-based index for "{}" to be int > 0 but found value {}'.format(k, v))
+        for k in [
+            'driftCompReferenceCycle', 'drift_comp_channel',
+            'bestFocusReferenceCycle', 'best_focus_channel',
+        ]:
+            validate_one_based_index(k)
+        for ireg in self._conf['regIdx']:
+            validate_one_based_index('regIdx', v=ireg)
         return self
 
     @staticmethod

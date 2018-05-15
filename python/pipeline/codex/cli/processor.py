@@ -9,20 +9,20 @@ import sys
 import os
 import os.path as osp
 
-LOG_FORMAT = '%(asctime)s:%(levelname)s:%(process)d:%(name)s: %(message)s'
-
 
 class CodexProcessor(object):
 
     def localhost(
             self, data_dir, output_dir, 
             region_indexes=None, tile_indexes=None, config_dir=None,
-            n_workers=None, gpus=None, memory_limit=32e9,
-            tile_prefetch_capacity=2, run_best_focus=True, run_drift_comp=True, n_iter_decon=25,
+            n_workers=None, gpus=None, memory_limit=48e9,
+            tile_prefetch_capacity=1, run_best_focus=True, run_drift_comp=True, run_summary=True,
+            n_iter_decon=25,
             codex_py_log_level=logging.INFO, 
             tf_py_log_level=logging.ERROR,
             tf_cpp_log_level=logging.ERROR,
-            record_execution=True):
+            record_execution=True,
+            record_data=True):
         """Run CODEX pre-processing pipeline
 
         This application will conduct the following operations on raw tif stacks:
@@ -51,13 +51,14 @@ class CodexProcessor(object):
                 default is 1)
             gpus: 0-based list of gpu indexes to use for processing; has same semantics as other integer
                 list arguments like `region_indexes` and `tile_indexes` (i.e. can be a scalar, list, or 2-tuple)
-            memory_limit: Maximum amount of memory to allow per-worker; defaults to 32G
-            tile_prefetch_capacity: Number of input tiles to buffer into memory for processing; default is 2
+            memory_limit: Maximum amount of memory to allow per-worker; defaults to 48G
+            tile_prefetch_capacity: Number of input tiles to buffer into memory for processing; default is 1
                 which is nearly always good as this means one tile will undergo processing while a second
                 is buffered into memory asynchronously
             run_best_focus: Flag indicating that best focal plan selection operations should be executed
             run_drift_comp: Flag indicating that drift compensation should be executed
-            n_iter_decon: Number of deconvolution iterations
+            run_summary: Flag indicating that tile summary statistics should be computed
+            n_iter_decon: Number of deconvolution iterations (setting this to <= 0 will disable deconvolution)
             codex_py_log_level: Logging level for CODEX and dependent modules (except TensorFlow); can be
                 specified as string or integer compatible with python logging levels (e.g. 'info', 'debug',
                 'warn', 'error', 'fatal' or corresponding integers)
@@ -65,16 +66,18 @@ class CodexProcessor(object):
             tf_cpp_log_level: TensorFlow C++ logging level; same semantics as `codex_py_log_level`
             record_execution: Flag indicating whether or not to store arguments and environment in
                 a file within the output directory; defaults to True
+            record_data: Flag indicating whether or not summary information from each operation
+                performed should be included within a file in the output directory; defaults to True
         """
         # Initialize logging (use a callable function for passing to spawned processes in pipeline)
         def logging_init_fn():
-            logging.basicConfig(level=tf_utils.log_level_code(codex_py_log_level), format=LOG_FORMAT)
+            logging.basicConfig(level=tf_utils.log_level_code(codex_py_log_level), format=cli.LOG_FORMAT)
             tf_utils.init_tf_logging(tf_cpp_log_level, tf_py_log_level)
         logging_init_fn()
 
         if record_execution:
-            path = cli.record_execution(output_dir, 'processor_execution.json')
-            logging.info('Recorded execution arguments and envrionment in "%s"', path)
+            path = cli.record_execution(output_dir)
+            logging.info('Execution arguments and environment saved to "%s"', path)
 
         # Resolve arguments with multiple supported forms
         region_indexes = resolve_int_list_arg(region_indexes)
@@ -95,9 +98,14 @@ class CodexProcessor(object):
             tile_prefetch_capacity=tile_prefetch_capacity,
             run_best_focus=run_best_focus,
             run_drift_comp=run_drift_comp,
+            run_summary=run_summary,
             n_iter_decon=n_iter_decon
         )
-        pipeline.run(conf, logging_init_fn=logging_init_fn)
+        data = pipeline.run(conf, logging_init_fn=logging_init_fn)
+
+        if record_data:
+            path = cli.record_processor_data(data, output_dir)
+            logging.info('Operation summary data saved to "%s"', path)
 
     def gke(self):
         # Ultimately, a GKE impementation should use the same "localhost" code above on cluster containers

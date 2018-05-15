@@ -16,6 +16,7 @@ CPP_LEVEL_MAP = {
     logging.FATAL: CPP_LEVEL_FATAL
 }
 
+
 def log_level_code(ll):
     """Resolve string names for log levels to integer codes
     
@@ -36,3 +37,14 @@ def init_tf_logging(cpp_log_level=logging.WARN, py_log_level=logging.WARN):
     var = 'TF_CPP_MIN_LOG_LEVEL'
     os.environ[var] = os.getenv(var, cpp_log_level)  # Override only if not set already
     tf.logging.set_verbosity(py_log_level)
+
+
+def tf_print(t, transform=None):
+    """Inject graph operation to print a tensors underlying value (or transformation of it)"""
+    def log_value(x):
+        print('{} - {}'.format(t.name, x if transform is None else transform(x)))
+        return x
+    log_op = tf.py_func(log_value, [t], [t.dtype], name=t.name.split(':')[0])[0]
+    with tf.control_dependencies([log_op]):
+        r = tf.identity(t)
+    return r

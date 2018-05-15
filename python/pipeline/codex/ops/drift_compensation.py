@@ -1,5 +1,5 @@
 from codex.ops.op import TensorFlowOp, CodexOp
-from codex.utils import np_utils
+from codex.utils import np_utils, tf_utils
 import tensorflow as tf
 import numpy as np
 from flowdec import fft_utils_tf

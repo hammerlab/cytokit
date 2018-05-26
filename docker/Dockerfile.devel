@@ -1,0 +1,46 @@
+FROM tensorflow/tensorflow:1.8.0-gpu-py3
+ARG FLOWDEC_REPO_URL="https://github.com/hammerlab/flowdec.git"
+ARG SIM_DIR=/lab/sim
+ARG REPO_DIR=/lab/repos
+ARG DATA_DIR=/lab/data
+
+RUN apt-get update && apt-get install -y --no-install-recommends git vim wget
+
+RUN pip --no-cache-dir install \
+    jupyterlab \
+    scikit-image \
+    matplotlib \
+    pandas \
+    requests \
+    fire \
+    dask[distributed] \
+    papermill
+
+# Install Flowdec
+ENV TF_GPU true
+RUN mkdir -p $REPO_DIR && \
+    cd $REPO_DIR && \
+    git clone $FLOWDEC_REPO_URL && \
+    cd flowdec/python && \
+    pip install .
+
+# Download simulation data for testing
+RUN mkdir -p $SIM_DIR && \
+    cd $SIM_DIR && \
+    wget https://storage.googleapis.com/musc-codex/datasets/simulations/sim-exp-01.zip && \
+    unzip sim-exp-01.zip
+
+WORKDIR "/lab"
+
+ENV CODEX_SIM_DIR $SIM_DIR
+ENV CODEX_REPO_DIR $REPO_DIR/codex
+ENV CODEX_DATA_DIR $DATA_DIR
+ENV SHELL /bin/bash
+
+# Add any source directories for development to python search path
+RUN mkdir -p $(python -m site --user-site) && \
+    echo "$CODEX_REPO_DIR/python/pipeline" > $(python -m site --user-site)/local.pth
+
+CMD chmod a+x $CODEX_REPO_DIR/python/pipeline/codex/cli/processor.py && \
+    ln -s $CODEX_REPO_DIR/python/pipeline/codex/cli/processor.py /usr/local/bin/codex-processor && \
+    jupyter lab --allow-root

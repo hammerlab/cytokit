@@ -27,7 +27,7 @@ TIMEOUT = 1 * 60 * 60
 class TaskConfig(object):
 
     def __init__(self, pipeline_config, region_indexes, tile_indexes, gpu, tile_prefetch_capacity=2, 
-        run_best_focus=True, run_drift_comp=True, run_summary=True, n_iter_decon=25):
+        run_best_focus=True, run_drift_comp=True, run_summary=True, n_iter_decon=25, scale_factor_decon=.5):
         self.region_indexes = region_indexes
         self.tile_indexes = tile_indexes
         self.config_dir = pipeline_config.config_dir
@@ -39,6 +39,7 @@ class TaskConfig(object):
         self.run_best_focus = run_best_focus
         self.run_summary = run_summary
         self.n_iter_decon = n_iter_decon
+        self.scale_factor_decon = scale_factor_decon
         self.exp_config = pipeline_config.exp_config
 
         if len(self.region_indexes) != len(self.tile_indexes):
@@ -210,8 +211,9 @@ def get_op_set(task_config):
     return op.CodexOpSet(
         align_op=drift_compensation.CodexDriftCompensator(exp_config) if task_config.run_drift_comp else None,
         focus_op=best_focus.CodexFocalPlaneSelector(exp_config) if task_config.run_best_focus else None,
-        decon_op=deconvolution.CodexDeconvolution(exp_config, n_iter=task_config.n_iter_decon) if
-        task_config.run_deconvolution else None,
+        decon_op=deconvolution.CodexDeconvolution(
+            exp_config, n_iter=task_config.n_iter_decon, scale_factor=task_config.scale_factor_decon
+        ) if task_config.run_deconvolution else None,
         summary_op=tile_summary.CodexTileSummary(exp_config) if task_config.run_summary else None,
         crop_op=tile_crop.CodexTileCrop(exp_config)
     )

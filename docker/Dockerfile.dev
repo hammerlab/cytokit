@@ -3,6 +3,10 @@ ARG FLOWDEC_REPO_URL="https://github.com/hammerlab/flowdec.git"
 ARG SIM_DIR=/lab/sim
 ARG REPO_DIR=/lab/repos
 ARG DATA_DIR=/lab/data
+ARG CODEX_REPO_DIR=$REPO_DIR/codex
+ARG CVUTILS_REPO_DIR=$REPO_DIR/cvutils
+
+RUN mkdir -p $LAB_DIR $REPO_DIR $DATA_DIR $SIM_DIR
 
 RUN apt-get update && apt-get install -y --no-install-recommends git vim wget
 
@@ -14,33 +18,42 @@ RUN pip --no-cache-dir install \
     requests \
     fire \
     dask[distributed] \
-    papermill
+    papermill \
+    plotnine \
+    seaborn \
+    keras
+
+# OpenCV / Imgaug installation
+RUN apt-get install -y libsm6 libxext6 libfontconfig1 libxrender1
+RUN pip install opencv-python imgaug
 
 # Install Flowdec
 ENV TF_GPU true
-RUN mkdir -p $REPO_DIR && \
-    cd $REPO_DIR && \
+RUN cd $REPO_DIR && \
     git clone $FLOWDEC_REPO_URL && \
     cd flowdec/python && \
     pip install .
 
 # Download simulation data for testing
-RUN mkdir -p $SIM_DIR && \
-    cd $SIM_DIR && \
+RUN cd $SIM_DIR && \
     wget https://storage.googleapis.com/musc-codex/datasets/simulations/sim-exp-01.zip && \
-    unzip sim-exp-01.zip
+    unzip -q sim-exp-01.zip
+
+# Add any source directories for development to python search path
+RUN mkdir -p $(python -m site --user-site) && \
+    echo "$CODEX_REPO_DIR/python/pipeline" > $(python -m site --user-site)/local.pth && \
+    echo "$CVUTILS_REPO_DIR/python" >> $(python -m site --user-site)/local.pth
 
 WORKDIR "/lab"
 
 ENV CODEX_SIM_DIR $SIM_DIR
-ENV CODEX_REPO_DIR $REPO_DIR/codex
 ENV CODEX_DATA_DIR $DATA_DIR
+ENV CODEX_REPO_DIR $CODEX_REPO_DIR
+ENV CVUTILS_REPO_DIR $CVUTILS_REPO_DIR
 ENV SHELL /bin/bash
 
-# Add any source directories for development to python search path
-RUN mkdir -p $(python -m site --user-site) && \
-    echo "$CODEX_REPO_DIR/python/pipeline" > $(python -m site --user-site)/local.pth
-
+# Create cli links at runtime instead of container buildtime due to source scripts being
+# in repos mounted at runtime
 CMD chmod a+x $CODEX_REPO_DIR/python/pipeline/codex/cli/processor.py && \
     ln -s $CODEX_REPO_DIR/python/pipeline/codex/cli/processor.py /usr/local/bin/codex-processor && \
     jupyter lab --allow-root

@@ -4,7 +4,8 @@ from codex.ops import tile_crop
 import numpy as np
 import os.path as osp
 
-def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0, bw=0, bv_fn=None, allow_missing=False):
+def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0, bw=0, bv_fn=None, allow_missing=False,
+                     imread_fn=None):
     """Generate a montage image for a specific cycle, z-plane, channel, and region
 
     This function supports both raw, flattened 2D images as well as consolidated, 5D 
@@ -26,6 +27,10 @@ def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0,
             border values are assigned a value of 0
         allow_missing: Flag indicating whether or not to allow missing tiles into the montage; defaults
             to false and is generally only useful when debugging missing data
+        imread_fn: When not using 5D hyperstacks (i.e. reading raw image files) this can be useful for cases when,
+            for example, raw, single-channel files are actually 3 channel files with the first two channels blank
+            (this happens w/ Keyence somehow).  This function will take an image path and must return a single 2D
+            image with shape (rows, cols)
     Returns:
         A (usually very large) 2D array containing all tiles stitched together
     """
@@ -51,7 +56,14 @@ def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0,
             if not osp.exists(path) and allow_missing:
                 tile = np.zeros((th, tw))
             else:
-                tile = codex_io.read_image(path)
+                tile = codex_io.read_image(path) if imread_fn is None else imread_fn(path)
+                if tile.ndim != 2:
+                    raise ValueError(
+                        'Expecting 2D image at path "{}" but shape found is {}.  Consider using the '
+                        '`imread_fn` argument to specify a custom function to open files or if already using it, '
+                        'make sure that results are 2D'
+                        .format(path, tile.shape)
+                    )
                 tile = tile_crop.apply_slice(tile, tile_crop.get_slice(config))
         
         # Highlight borders, if configured to do so
@@ -64,6 +76,7 @@ def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0,
         
         # Add to montage
         tiles.append(tile)
+
     return montage(tiles, config)
 
 
@@ -90,7 +103,7 @@ def montage(tiles, config):
 
     # Preserve leading dimensions and assume 2D image for each will be the 
     # same size multiplied by the number of tiles in row or column axis directions
-    img_montage = np.zeros(np.concatenate((shape_ex, shape_rc * np.array([rh, rw]))), dtype=dtype_proto)
+    img_montage = np.zeros(np.concatenate((shape_ex, shape_rc * np.array([rh, rw]))).astype(np.int), dtype=dtype_proto)
 
     for itile, tile in enumerate(tiles):
         if tile.shape != shape_proto:

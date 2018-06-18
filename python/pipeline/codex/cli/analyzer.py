@@ -32,7 +32,6 @@ class CodexAnalyzer(object):
         pm.execute_notebook(nb_input_path, nb_output_path, parameters={'processor_data_path': processor_data_path})
         logging.info('Processor data analysis complete; view with `jupyter notebook {}`'.format(nb_output_path))
 
-
     def best_focus_montage(self, config_dir, output_dir, region_indexes=None, filename=cli.DEFAULT_PROCESSOR_DATA_FILENAME):
         from codex.ops import op, best_focus
         from codex import config as codex_config

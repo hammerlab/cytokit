@@ -46,7 +46,11 @@ def generate_psfs(config):
 
         # Set "particle position" in Gibson-Lannie to 0 which gives a
         # Born & Wolf kernel as a degenerate case
-        pz=0.
+        pz=0.,
+
+        # Lower this parameter as it was shown to produce results more
+        # closely resembling PSFGenerator, especially for higher energy light
+        min_wavelength=0.35
     )
 
     logger.debug('Generating PSFs from experiment configuration file')

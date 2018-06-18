@@ -18,6 +18,7 @@ class CodexProcessor(object):
             n_workers=None, gpus=None, memory_limit=48e9,
             tile_prefetch_capacity=1, run_best_focus=True, run_drift_comp=True, run_summary=True,
             n_iter_decon=25,
+            scale_factor_decon=.5,
             codex_py_log_level=logging.INFO, 
             tf_py_log_level=logging.ERROR,
             tf_cpp_log_level=logging.ERROR,
@@ -59,6 +60,8 @@ class CodexProcessor(object):
             run_drift_comp: Flag indicating that drift compensation should be executed
             run_summary: Flag indicating that tile summary statistics should be computed
             n_iter_decon: Number of deconvolution iterations (setting this to <= 0 will disable deconvolution)
+            scale_factor_decon: Scale factor to apply to deconvolution results (defaults to .5); This can
+                help post-deconvolution saturation but setting this parameter to 1. would be reasonable as well
             codex_py_log_level: Logging level for CODEX and dependent modules (except TensorFlow); can be
                 specified as string or integer compatible with python logging levels (e.g. 'info', 'debug',
                 'warn', 'error', 'fatal' or corresponding integers)
@@ -99,7 +102,8 @@ class CodexProcessor(object):
             run_best_focus=run_best_focus,
             run_drift_comp=run_drift_comp,
             run_summary=run_summary,
-            n_iter_decon=n_iter_decon
+            n_iter_decon=n_iter_decon,
+            scale_factor_decon=scale_factor_decon
         )
         data = pipeline.run(conf, logging_init_fn=logging_init_fn)
 

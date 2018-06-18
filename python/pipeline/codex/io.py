@@ -2,6 +2,7 @@ import os
 import codex
 import warnings
 import os.path as osp
+import numpy as np
 from collections import namedtuple
 from skimage.external.tifffile import imread, imsave
 
@@ -35,6 +36,13 @@ FILE_FORMATS = {
         proc_image='reg{region:03d}_X{x:02d}_Y{y:02d}.tif',
         expr_file='reg{region:03d}_Expression_{type}.txt'
     ),
+    # Another format for single region, single cycle Keyence experiments
+    codex.FF_V05: FileFormats(
+        raw_image=osp.join('1_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
+        best_focus=osp.join('bestFocus', 'reg001_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
+        proc_image='reg001_X{x:02d}_Y{y:02d}.tif',
+        expr_file='reg001_Expression_{type}.txt'
+    )
 }
 
 
@@ -54,6 +62,7 @@ def read_image(file):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return imread(file)
+
 
 def read_tile(file, config):
     """Read a codex-specific 5D image tile"""
@@ -95,6 +104,25 @@ def get_region_expression_path(ireg, typ='Compensated'):
     return _formats().expr_file.format(region=ireg + 1, type=typ)
 
 
+def read_raw_microscope_image(path):
+    file_type = codex.get_raw_file_type()
+    if file_type == codex.FT_STANDARD:
+        return read_image(path)
+    elif file_type == codex.FT_KEYENCE_RGB:
+        img = read_image(path)
+        if img.ndim != 3:
+            raise ValueError(
+                'With {} file types enabled, raw image at path "{}" should have 3 dims (shape = {})'
+                .format(file_type, img.shape)
+            )
+        # Compute image sum for each channel giving 3 item vector
+        ch_sum = np.squeeze(np.apply_over_axes(np.sum, img, [0, 1]))
+        if np.sum(ch_sum > 0) > 1:
+            raise ValueError('Found more than one channel with information in image file "{}"'.format(path))
 
+        # Select and return the single channel with a non-zero sum
+        return img[..., np.argmax(ch_sum)]
+    else:
+        raise ValueError('Raw file type "{}" is not valid; should be one of {}'.format(file_type, codex.RAW_FILE_TYPES))
 
 

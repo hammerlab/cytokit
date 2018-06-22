@@ -272,7 +272,7 @@ def get_objectives(masks, adjacent_margin=2):
 #    mask[rr, cc] = True
 #    return mask
 
-def get_center_marker(mask, prop, radius=2, shrink=4):
+def get_center_marker(mask, prop, radius=2, shrink=8):
     # Shrink the mask and if there's anything left of it, return result
     mask_shrink = morphology.erosion(mask, morphology.disk(shrink))
     if mask_shrink.sum() > 0:

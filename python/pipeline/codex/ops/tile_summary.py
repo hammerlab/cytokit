@@ -1,5 +1,6 @@
 from codex.ops.op import CodexOp
 
+
 class CodexTileSummary(CodexOp):
 
     def __init__(self, config):

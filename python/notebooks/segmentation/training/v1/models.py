@@ -105,31 +105,6 @@ def weighted_pixelwise_crossentropy(weights):
     return loss
 
 
-def plot_model_history(history, keys=None, ncol=2, width=8, height=2, window=None):
-    import plotnine as pn
-    import pandas as pd
-    import numpy as np
-    
-    if keys is None:
-        keys = sorted(list(history.keys()))
-    n = len(keys)
-    nrow = int(np.ceil(n / ncol))
-    figsize = (ncol * width, nrow * height)
-        
-    if window is None:
-        window = slice(None)
-    df = pd.concat([
-        pd.DataFrame(dict(epoch=np.array(range(len(h)))[window], value=h[window])).assign(key=k)
-        for k, h in history.items()
-    ])
-    return (
-        pn.ggplot(df, pn.aes(x='epoch', y='value')) +
-        pn.geom_line() + 
-        pn.facet_wrap('~key', ncol=ncol, scales='free') +
-        pn.theme(figure_size=figsize)
-    )
-
-
 def binary_channel_precision(channel, name, min_p=.5):
     from keras import backend as K
     t_channel = channel

@@ -76,7 +76,7 @@ def read_tile(file, config):
 def save_tile(file, tile):
     """Save a codex-specific 5D image"""
     if tile.ndim != 5:
-        raise ValueError('Expecting tile with 5 dimensions but got tile with shape {}'.format(tile))
+        raise ValueError('Expecting tile with 5 dimensions but got tile with shape {}'.format(tile.shape))
     # Save using Imagej format, otherwise channels, cycles, and z planes are 
     # all interpreted as individual slices instead of separate dimensions
     save_image(file, tile, metadata={'axes': 'TZCYX'})
@@ -102,6 +102,11 @@ def get_region_expression_path(ireg, typ='Compensated'):
     if typ not in ['Compensated', 'Uncompensated']:
         raise ValueError('Expression file type should be one of "Compensated" or "Uncompensated" (given = "{}")'.format(typ))
     return _formats().expr_file.format(region=ireg + 1, type=typ)
+
+
+def get_cytometry_file_path(suffix, ireg, tx, ty):
+    filename = 'reg{region:03d}_X{x:02d}_Y{y:02d}{suffix}'.format(region=ireg + 1, x=tx + 1, y=ty + 1, suffix=suffix)
+    return osp.join('cytometry', filename)
 
 
 def read_raw_microscope_image(path):

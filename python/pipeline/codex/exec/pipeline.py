@@ -12,6 +12,7 @@ from codex import io as codex_io
 from codex import config as codex_config
 from codex.ops import op
 from codex.ops import tile_generator
+from codex.ops import cytometry
 from codex.ops import tile_crop
 from codex.ops import drift_compensation
 from codex.ops import best_focus
@@ -27,7 +28,9 @@ TIMEOUT = 1 * 60 * 60
 class TaskConfig(object):
 
     def __init__(self, pipeline_config, region_indexes, tile_indexes, gpu, tile_prefetch_capacity=2, 
-        run_best_focus=True, run_drift_comp=True, run_summary=True, n_iter_decon=25, scale_factor_decon=.5):
+            run_best_focus=True, run_drift_comp=True, run_summary=True,
+            run_tile_generator=True, run_crop=True, run_cytometry=True,
+            n_iter_decon=25, scale_factor_decon=.5):
         self.region_indexes = region_indexes
         self.tile_indexes = tile_indexes
         self.config_dir = pipeline_config.config_dir
@@ -35,9 +38,12 @@ class TaskConfig(object):
         self.output_dir = pipeline_config.output_dir
         self.gpu = gpu
         self.tile_prefetch_capacity = tile_prefetch_capacity
+        self.run_tile_generator = run_tile_generator
+        self.run_crop = run_crop
         self.run_drift_comp = run_drift_comp
         self.run_best_focus = run_best_focus
         self.run_summary = run_summary
+        self.run_cytometry = run_cytometry
         self.n_iter_decon = n_iter_decon
         self.scale_factor_decon = scale_factor_decon
         self.exp_config = pipeline_config.exp_config
@@ -127,8 +133,16 @@ class PipelineConfig(object):
 
 
 def load_tiles(q, task_config):
+    if task_config.run_tile_generator:
+        tile_gen_mode = tile_generator.TILE_GEN_MODE_RAW
+    else:
+        tile_gen_mode = tile_generator.TILE_GEN_MODE_STACK
+
     for region_index, tile_index in zip(task_config.region_indexes, task_config.tile_indexes):
-        with tile_generator.CodexTileGenerator(task_config.exp_config, task_config.data_dir, region_index, tile_index) as op:
+        with tile_generator.CodexTileGenerator(
+                task_config.exp_config, task_config.data_dir,
+                region_index, tile_index,
+                mode=tile_gen_mode) as op:
             tile = op.run(None)
             logger.info('Loaded tile %s for region %s [shape = %s]', tile_index + 1, region_index + 1, tile.shape)
             q.put((tile, region_index, tile_index), block=True, timeout=TIMEOUT)
@@ -163,9 +177,12 @@ def process_tile(tile, ops, log_fn):
         align_tile = tile
         log_fn('Skipping drift compensation')
 
-    # Tile Overlap Cropping (required)
-    crop_tile = ops.crop_op.run(align_tile)
-    log_fn('Tile overlap crop complete', crop_tile)
+    if ops.crop_op:
+        crop_tile = ops.crop_op.run(align_tile)
+        log_fn('Tile overlap crop complete', crop_tile)
+    else:
+        crop_tile = tile
+        log_fn('Skipping tile crop')
 
     # Deconvolution
     if ops.decon_op:
@@ -178,7 +195,7 @@ def process_tile(tile, ops, log_fn):
     # Best Focal Plane Selection
     focus_tile, focus_z_plane = None, None
     if ops.focus_op:
-        focus_z_plane, classifications, probabilities = ops.focus_op.run(tile)
+        focus_z_plane, _, _ = ops.focus_op.run(tile)
         focus_tile = decon_tile[:, [focus_z_plane], :, :, :]
         log_fn('Focal plane selection complete', focus_tile)
     else:
@@ -191,7 +208,16 @@ def process_tile(tile, ops, log_fn):
     else:
         log_fn('Skipping tile statistic summary')
 
-    return decon_tile, (focus_tile, focus_z_plane)
+    res_tile = decon_tile
+
+    cyto_tile, cyto_stats = None, None
+    if ops.cytometry_op:
+        cyto_tile, cyto_stats = ops.cytometry_op.run(decon_tile)
+        log_fn('Tile cytometry complete')
+    else:
+        log_fn('Skipping tile cytometry')
+
+    return res_tile, (focus_tile, focus_z_plane), (cyto_tile, cyto_stats)
 
 
 def get_log_fn(i, n_tiles, region_index, tx, ty):
@@ -215,7 +241,8 @@ def get_op_set(task_config):
             exp_config, n_iter=task_config.n_iter_decon, scale_factor=task_config.scale_factor_decon
         ) if task_config.run_deconvolution else None,
         summary_op=tile_summary.CodexTileSummary(exp_config) if task_config.run_summary else None,
-        crop_op=tile_crop.CodexTileCrop(exp_config)
+        crop_op=tile_crop.CodexTileCrop(exp_config) if task_config.run_crop else None,
+        cytometry_op=cytometry.Cytometry(exp_config) if task_config.run_cytometry else None
     )
 
 
@@ -248,7 +275,7 @@ def run_pipeline_task(task_config):
             log_fn = get_log_fn(i, n_tiles, region_index, tx, ty)
 
             with op.new_monitor(context) as monitor:
-                res_tile, focus_data = process_tile(tile, ops, log_fn)
+                res_tile, focus_data, cyto_data = process_tile(tile, ops, log_fn)
 
                 # Save z-plane for stack if best focal plane selection is enabled
                 if ops.focus_op:
@@ -257,10 +284,29 @@ def run_pipeline_task(task_config):
                     codex_io.save_tile(osp.join(task_config.output_dir, img_path), focus_tile)
                     log_fn('Saved best focus tile to path "{}"'.format(img_path), focus_tile)
 
-                # Save the tile resulting from pipeline execution
-                res_path = codex_io.get_processor_img_path(region_index, tx, ty)
-                log_fn('Saving result to path "{}"'.format(res_path), res_tile)
-                codex_io.save_tile(osp.join(task_config.output_dir, res_path), res_tile)
+                # Save cytometry data if enabled
+                if ops.cytometry_op:
+                    cyto_tile, cyto_stats = cyto_data
+
+                    cyto_tile_path = codex_io.get_cytometry_file_path('.tif', region_index, tx, ty)
+                    codex_io.save_tile(osp.join(task_config.output_dir, cyto_tile_path), cyto_tile)
+
+                    # Append useful metadata to cytometry stats
+                    cyto_stats.insert(0, 'tile_y', ty + 1)
+                    cyto_stats.insert(0, 'tile_x', tx + 1)
+                    cyto_stats.insert(0, 'tile_i', tile_index + 1)
+                    cyto_stats.insert(0, 'region', region_index + 1)
+                    cyto_stats_path = codex_io.get_cytometry_file_path('.csv', region_index, tx, ty)
+                    cyto_stats.to_csv(osp.join(task_config.output_dir, cyto_stats_path), index=False)
+
+                    log_fn('Saved cytometry data to path "{}"'.format(cyto_stats_path), cyto_tile)
+
+                # Save the output tile if tile generation/assembly was enabled
+                if task_config.run_tile_generator:
+                    # Save the tile resulting from pipeline execution
+                    res_path = codex_io.get_processor_img_path(region_index, tx, ty)
+                    codex_io.save_tile(osp.join(task_config.output_dir, res_path), res_tile)
+                    log_fn('Saved processed tile to path "{}"'.format(res_path), res_tile)
 
                 # Accumulate monitor data across tiles
                 monitor_data = concat([monitor_data, monitor.data])

@@ -1,5 +1,5 @@
 #!/usr/bin/python
-"""CODEX preprocessing pipeline CLI application"""
+"""Processing pipeline CLI application"""
 import fire
 from codex.exec import pipeline
 from codex.utils import tf_utils
@@ -10,13 +10,17 @@ import os
 import os.path as osp
 
 
-class CodexProcessor(object):
+class Processor(object):
 
     def localhost(
             self, data_dir, output_dir, 
-            region_indexes=None, tile_indexes=None, config_dir=None,
+            region_indexes=None,
+            tile_indexes=None,
+            config_dir=None,
             n_workers=None, gpus=None, memory_limit=48e9,
-            tile_prefetch_capacity=1, run_best_focus=True, run_drift_comp=True, run_summary=True,
+            tile_prefetch_capacity=1,
+            run_tile_generator=True, run_crop=True, run_best_focus=True, run_drift_comp=True,
+            run_summary=True, run_cytometry=True,
             n_iter_decon=25,
             scale_factor_decon=.5,
             codex_py_log_level=logging.INFO, 
@@ -24,13 +28,14 @@ class CodexProcessor(object):
             tf_cpp_log_level=logging.ERROR,
             record_execution=True,
             record_data=True):
-        """Run CODEX pre-processing pipeline
+        """Run pre-processing and cytometry pipeline
 
-        This application will conduct the following operations on raw tif stacks:
+        This application can execute the following operations on either raw or already processed data:
             - Drift compensation
             - Deconvolution
             - Selection of best focal planes within z-stacks
             - Cropping of tile overlap
+            - Cell segmentation and quantification
 
         Nothing beyond an input data directory and an output directory are required (see arguments
         below), but GPU information should be provided via the `gpus` argument to ensure that
@@ -99,9 +104,12 @@ class CodexProcessor(object):
             region_indexes, tile_indexes, config_dir, data_dir, output_dir,
             n_workers, gpus, memory_limit,
             tile_prefetch_capacity=tile_prefetch_capacity,
+            run_crop=run_crop,
             run_best_focus=run_best_focus,
             run_drift_comp=run_drift_comp,
             run_summary=run_summary,
+            run_tile_generator=run_tile_generator,
+            run_cytometry=run_cytometry,
             n_iter_decon=n_iter_decon,
             scale_factor_decon=scale_factor_decon
         )
@@ -131,4 +139,4 @@ def resolve_int_list_arg(arg):
 
 
 if __name__ == '__main__':
-    fire.Fire(CodexProcessor)
+    fire.Fire(Processor)

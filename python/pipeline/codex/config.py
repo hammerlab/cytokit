@@ -119,6 +119,22 @@ class CodexConfigV1(object):
         tiler = tiling.get_tiling_by_name(self.tiling_mode)
         return tiler.coordinates_from_index(tile_index, w=self.region_width, h=self.region_height)
 
+    def get_channel_coordinates(self, channel_name):
+        """Get 0-based cycle and per-cycle-channel index coordinates for a channel name
+
+        Args:
+            channel_name: String name of channel
+        Returns:
+            (cycle, channel) - 0-based indexes for cycle and channel
+        """
+        if channel_name not in self.channel_names:
+            raise ValueError('Channel "{}" is not configured channel list {}'.format(channel_name, self.channel_names))
+        i = self.channel_names.index(channel_name)
+        cycle_index = i // self.n_cycles
+        ch_index = i % self.n_cycles
+        return cycle_index, ch_index
+
+
     @property
     def drift_compensation_reference(self):
         """Get reference image configured for drift compensation
@@ -138,6 +154,16 @@ class CodexConfigV1(object):
         cycle = self._conf['bestFocusReferenceCycle'] - 1
         channel = self._conf['best_focus_channel'] - 1
         return cycle, channel
+
+    @property
+    def cytometry_reference(self):
+        nuc_name = self._conf['cytometry_nuclei_channel_name']
+        mem_name = self._conf.get('cytometry_membrane_channel_name')
+        params = self._conf.get('cytometry_params')
+        return self.get_channel_coordinates(nuc_name), \
+               self.get_channel_coordinates(mem_name) if mem_name else None, \
+               params
+
 
     @property
     def _n_actual_channels(self):

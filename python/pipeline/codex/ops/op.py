@@ -31,7 +31,8 @@ def get_tf_config(op, cpu_only=None):
         config = tf.ConfigProto(device_count={'GPU': 0}, log_device_placement=False)
         config.gpu_options.visible_device_list = ''
     else:
-        config = tf.ConfigProto(log_device_placement=False)
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=1.)
+        config = tf.ConfigProto(log_device_placement=False, gpu_options=gpu_options)
         config.gpu_options.allow_growth = True
         if GPU_DEVICE is not None:
             config.gpu_options.visible_device_list = str(GPU_DEVICE)

@@ -75,17 +75,17 @@ class Cytometry(codex_op.CodexOp):
 
         stats = self.cytometer.quantify(tile, img_seg, channel_names=self.config.channel_names)
 
-        # Segmentation image will be integer value labeled volume with shape (z, height, width) so
-        # add back missing dimensions to conform with typical 5D shape and then convert to 16-bit
-        # (typically from int32)
-        # assert img_seg.ndim == 3
-        # img_seg = img_seg[np.newaxis, :, np.newaxis, :, :].astype(np.uint16)
-
-        # Create overlay image of nucleus channel and boundaries
+        # Create overlay image of nucleus channel and boundaries and convert to 5D
+        # shape to conform with usual tile convention
         img_boundary = _overlay_boundaries(img_nuc, img_seg)
+        assert img_boundary.ndim == 3
         img_boundary = img_boundary[np.newaxis, :, np.newaxis, :, :]
 
-        return img_boundary, stats
+        # Convert segmentation image to uint16 (from int32) and also conform to 5D standard
+        assert img_seg.ndim == 3
+        img_seg = img_seg[np.newaxis, :, np.newaxis, :, :].astype(np.uint16)
+
+        return img_seg, img_boundary, stats
 
     def _run(self, tile, **kwargs):
         return self._run_2d(tile)

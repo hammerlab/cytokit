@@ -5,7 +5,7 @@ from skimage import morphology
 from skimage import measure
 from scipy import ndimage
 
-DEFAULT_BATCH_SIZE = 16
+DEFAULT_BATCH_SIZE = 8
 
 
 class Cytometer(object):
@@ -143,11 +143,11 @@ class Cytometer2D(Cytometer):
                 intensities = tile[iz][prop.coords[:, 0], prop.coords[:, 1]].mean(axis=0)
                 assert intensities.ndim == 1
                 assert len(intensities) == nch
-                row = [i, prop.centroid[1], prop.centroid[0], iz, prop.area]
+                row = [prop.label, prop.centroid[1], prop.centroid[0], iz, prop.area, prop.solidity]
                 row += list(intensities)
                 res.append(row)
 
-        return pd.DataFrame(res, columns=['id', 'x', 'y', 'z', 'area'] + channel_names)
+        return pd.DataFrame(res, columns=['id', 'x', 'y', 'z', 'area', 'solidity'] + channel_names)
 
 
 class Cytometer3D(Cytometer):
@@ -234,8 +234,8 @@ class Cytometer3D(Cytometer):
             intensities = tile[prop.coords[:, 0], prop.coords[:, 1], prop.coords[:, 0]].mean(axis=0)
             assert intensities.ndim == 1
             assert len(intensities) == nch
-            row = [i, prop.centroid[2], prop.centroid[1], prop.centroid[0], prop.area]
+            row = [prop.label, prop.centroid[2], prop.centroid[1], prop.centroid[0], prop.area, prop.solidity]
             row += list(intensities)
             res.append(row)
 
-        return pd.DataFrame(res, columns=['id', 'x', 'y', 'z', 'volume'] + channel_names)
+        return pd.DataFrame(res, columns=['id', 'x', 'y', 'z', 'volume', 'solidity'] + channel_names)

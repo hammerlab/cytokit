@@ -82,9 +82,11 @@ class CodexDeconvolution(CodexOp):
         self.n_iter = n_iter
         self.scale_factor = scale_factor
         self.algo = None
+        self.psfs = None
 
     def initialize(self):
         self.algo = fd_restoration.RichardsonLucyDeconvolver(n_dims=3).initialize()
+        self.psfs = generate_psfs(self.config)
         return self
 
     def _run(self, tile, **kwargs):
@@ -97,12 +99,11 @@ class CodexDeconvolution(CodexOp):
         # Tile should have shape (cycles, z, channel, height, width)
         ncyc, nz, nch, nh, nw = self.config.tile_dims
 
-        psfs = generate_psfs(self.config)
         img_cyc = []
         for icyc in range(ncyc):
             img_ch = []
             for ich in range(nch):
-                acq = fd_data.Acquisition(tile[icyc, :, ich, :, :], kernel=psfs[ich])
+                acq = fd_data.Acquisition(tile[icyc, :, ich, :, :], kernel=self.psfs[ich])
                 logger.debug('Running deconvolution for cycle {}, channel {} [dtype = {}]'.format(icyc, ich, acq.data.dtype))
                 res = self.algo.run(acq, self.n_iter, session_config=get_tf_config(self)).data
 

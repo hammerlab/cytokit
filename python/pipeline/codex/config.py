@@ -37,9 +37,67 @@ def _load_channel_names(data_dir):
 
 
 TileDims = namedtuple('TileDims', ['cycles', 'z', 'channels', 'height', 'width'])
+TileIndices = namedtuple('TileIndices', ['region_index', 'tile_index', 'tile_x', 'tile_y'])
 
 
-class CodexConfigV1(object):
+class Config(object):
+
+    @property
+    def n_tiles_per_region(self):
+        return self.region_width * self.region_height
+
+    @property
+    def tile_dims(self):
+        """Get tile dimensions as (cycles, z, channels, height, width)"""
+        return TileDims(self.n_cycles, self.n_z_planes, self.n_channels_per_cycle, self.tile_height, self.tile_width)
+
+    def get_tile_indices(self):
+        """Get coordinates (as indexes) of experiment tiles
+
+        Returns:
+            List of TileIndices tuples like (region_index, tile_index, tile_x, tile_y)
+        """
+        indices = []
+        for ireg in self.region_indexes:
+            for itile in range(self.n_tiles_per_region):
+                tx, ty = self.get_tile_coordinates(itile)
+                indices.append(TileIndices(ireg, itile, tx, ty))
+        return indices
+
+    def get_tile_coordinates(self, tile_index):
+        """Get 0-based X and Y coordinates of a tile using the configured 'tiling_mode'
+
+        Args:
+            tile_index: 0-based tile index
+        Returns:
+            Integer tuple as (X, Y) where 0 <= X < region_width and 0 <= Y < region_height
+        """
+        if tile_index >= self.n_tiles_per_region:
+            raise ValueError(
+                'Cannot get coordinates for tile with 0-based index {} when only {} '
+                'iles are expected (region width = {}, height = {})'
+                    .format(tile_index, self.n_tiles_per_region, self.region_width, self.region_height)
+            )
+        tiler = tiling.get_tiling_by_name(self.tiling_mode)
+        return tiler.coordinates_from_index(tile_index, w=self.region_width, h=self.region_height)
+
+    def get_channel_coordinates(self, channel_name):
+        """Get 0-based cycle and per-cycle-channel index coordinates for a channel name
+
+        Args:
+            channel_name: String name of channel
+        Returns:
+            (cycle, channel) - 0-based indexes for cycle and channel
+        """
+        if channel_name not in self.channel_names:
+            raise ValueError('Channel "{}" is not configured channel list {}'.format(channel_name, self.channel_names))
+        i = self.channel_names.index(channel_name)
+        cycle_index = i // self.n_cycles
+        ch_index = i % self.n_cycles
+        return cycle_index, ch_index
+
+
+class CodexConfigV1(Config):
 
     def __init__(self, conf):
         self._conf = conf
@@ -69,11 +127,6 @@ class CodexConfigV1(object):
         return self._conf['tile_height']
 
     @property
-    def tile_dims(self):
-        """Get tile dimensions as (cycles, z, channels, height, width)"""
-        return TileDims(self.n_cycles, self.n_z_planes, self.n_channels_per_cycle, self.tile_height, self.tile_width) 
-
-    @property
     def overlap_x(self):
         return self._conf['tile_overlap_X']
 
@@ -94,46 +147,9 @@ class CodexConfigV1(object):
         return self._conf['tiling_mode']
 
     @property
-    def n_tiles_per_region(self):
-        return self.region_width * self.region_height
-
-    @property
     def region_indexes(self):
         """Get 0-based region index list"""
         return [i - 1 for i in self._conf['regIdx']]
-
-    def get_tile_coordinates(self, tile_index):
-        """Get 0-based X and Y coordinates of a tile using the configured 'tiling_mode'
-
-        Args:
-            tile_index: 0-based tile index
-        Returns:
-            Integer tuple as (X, Y) where 0 <= X < region_width and 0 <= Y < region_height
-        """
-        if tile_index >= self.n_tiles_per_region:
-            raise ValueError(
-                'Cannot get coordinates for tile with 0-based index {} when only {} '
-                'iles are expected (region width = {}, height = {})'
-                .format(tile_index, self.n_tiles_per_region, self.region_width, self.region_height)
-            )
-        tiler = tiling.get_tiling_by_name(self.tiling_mode)
-        return tiler.coordinates_from_index(tile_index, w=self.region_width, h=self.region_height)
-
-    def get_channel_coordinates(self, channel_name):
-        """Get 0-based cycle and per-cycle-channel index coordinates for a channel name
-
-        Args:
-            channel_name: String name of channel
-        Returns:
-            (cycle, channel) - 0-based indexes for cycle and channel
-        """
-        if channel_name not in self.channel_names:
-            raise ValueError('Channel "{}" is not configured channel list {}'.format(channel_name, self.channel_names))
-        i = self.channel_names.index(channel_name)
-        cycle_index = i // self.n_cycles
-        ch_index = i % self.n_cycles
-        return cycle_index, ch_index
-
 
     @property
     def drift_compensation_reference(self):

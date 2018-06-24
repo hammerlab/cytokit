@@ -210,14 +210,14 @@ def process_tile(tile, ops, log_fn):
 
     res_tile = decon_tile
 
-    cyto_tile, cyto_stats = None, None
+    cyto_seg_tile, cyto_viz_tile, cyto_stats = None, None, None
     if ops.cytometry_op:
-        cyto_tile, cyto_stats = ops.cytometry_op.run(decon_tile)
+        cyto_seg_tile, cyto_viz_tile, cyto_stats = ops.cytometry_op.run(decon_tile)
         log_fn('Tile cytometry complete')
     else:
         log_fn('Skipping tile cytometry')
 
-    return res_tile, (focus_tile, focus_z_plane), (cyto_tile, cyto_stats)
+    return res_tile, (focus_tile, focus_z_plane), (cyto_seg_tile, cyto_viz_tile, cyto_stats)
 
 
 def get_log_fn(i, n_tiles, region_index, tx, ty):
@@ -286,10 +286,13 @@ def run_pipeline_task(task_config):
 
                 # Save cytometry data if enabled
                 if ops.cytometry_op:
-                    cyto_tile, cyto_stats = cyto_data
+                    cyto_seg_tile, cyto_viz_tile, cyto_stats = cyto_data
 
-                    cyto_tile_path = codex_io.get_cytometry_file_path('.tif', region_index, tx, ty)
-                    codex_io.save_tile(osp.join(task_config.output_dir, cyto_tile_path), cyto_tile)
+                    cyto_tile_path = codex_io.get_cytometry_file_path('.seg.tif', region_index, tx, ty)
+                    codex_io.save_tile(osp.join(task_config.output_dir, cyto_tile_path), cyto_seg_tile)
+
+                    cyto_tile_path = codex_io.get_cytometry_file_path('.viz.tif', region_index, tx, ty)
+                    codex_io.save_tile(osp.join(task_config.output_dir, cyto_tile_path), cyto_viz_tile)
 
                     # Append useful metadata to cytometry stats
                     cyto_stats.insert(0, 'tile_y', ty + 1)
@@ -299,7 +302,7 @@ def run_pipeline_task(task_config):
                     cyto_stats_path = codex_io.get_cytometry_file_path('.csv', region_index, tx, ty)
                     cyto_stats.to_csv(osp.join(task_config.output_dir, cyto_stats_path), index=False)
 
-                    log_fn('Saved cytometry data to path "{}"'.format(cyto_stats_path), cyto_tile)
+                    log_fn('Saved cytometry data to path "{}"'.format(cyto_stats_path), cyto_seg_tile)
 
                 # Save the output tile if tile generation/assembly was enabled
                 if task_config.run_tile_generator:

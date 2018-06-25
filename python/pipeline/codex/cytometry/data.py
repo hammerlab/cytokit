@@ -13,7 +13,7 @@ def aggregate(config, output_dir):
     """
     df = []
     for idx in config.get_tile_indices():
-        path = codex_io.get_cytometry_file_path('.csv', idx.region_index, idx.tile_x, idx.tile_y)
+        path = codex_io.get_cytometry_data_file_path(idx.region_index, idx.tile_x, idx.tile_y, 'csv')
         path = osp.join(output_dir, path)
         if not osp.exists(path):
             warnings.warn(

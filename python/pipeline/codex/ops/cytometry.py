@@ -1,5 +1,6 @@
 from codex.ops import op as codex_op
 from codex.cytometry import cytometer
+from codex import io as codex_io
 import os
 import os.path as osp
 import codex
@@ -29,14 +30,14 @@ def close_keras_session():
 
 class Cytometry(codex_op.CodexOp):
 
-    def __init__(self, config, mode='2D', segmentation_params={}, quantification_params={}):
+    def __init__(self, config, mode='2D', segmentation_params=None, quantification_params=None):
         super(Cytometry, self).__init__(config)
 
         params = config.cytometry_params
         self.mode = params.get('mode', mode)
-        self.segmentation_params = params.get('segmentation_params', segmentation_params)
+        self.segmentation_params = params.get('segmentation_params', segmentation_params or {})
 
-        self.quantification_params = params.get('quantification_params', quantification_params)
+        self.quantification_params = params.get('quantification_params', quantification_params or {})
         if 'channel_names' not in self.quantification_params:
             self.quantification_params['channel_names'] = self.config.channel_names
 
@@ -105,19 +106,19 @@ class Cytometry(codex_op.CodexOp):
         region_index, tile_index, tx, ty = tile_indices
         img_seg, img_boundary, stats = data
 
-        seg_tile_path = codex_io.get_cytometry_file_path(region_index, tx, ty, 'seg.tif')
+        seg_tile_path = codex_io.get_cytometry_data_file_path(region_index, tx, ty, 'seg.tif')
         codex_io.save_tile(osp.join(output_dir, seg_tile_path), img_seg)
 
-        viz_tile_path = codex_io.get_cytometry_file_path(region_index, tx, ty, 'viz.tif')
+        viz_tile_path = codex_io.get_cytometry_data_file_path(region_index, tx, ty, 'viz.tif')
         codex_io.save_tile(osp.join(output_dir, viz_tile_path), img_boundary)
 
-        # Append useful metadata to cytometry stats
-        stats.insert(0, 'tile_y', ty + 1)
-        stats.insert(0, 'tile_x', tx + 1)
-        stats.insert(0, 'tile_i', tile_index + 1)
-        stats.insert(0, 'region', region_index + 1)
-        stats_path = codex_io.get_cytometry_file_path(region_index, tx, ty, 'csv')
-        stats.to_csv(osp.join(output_dir, stats_path ), index=False)
+        # Append useful metadata to cytometry stats (align these names to those used in config.TileDims)
+        stats.insert(0, 'tile_y', ty)
+        stats.insert(0, 'tile_x', tx)
+        stats.insert(0, 'tile_index', tile_index)
+        stats.insert(0, 'region_index', region_index)
+        stats_path = codex_io.get_cytometry_data_file_path(region_index, tx, ty, 'csv')
+        stats.to_csv(osp.join(output_dir, stats_path), index=False)
 
         return seg_tile_path, viz_tile_path, stats_path
 

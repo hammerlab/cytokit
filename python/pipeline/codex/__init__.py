@@ -30,13 +30,12 @@ def register_environment(env):
 # Configuration Schema Versions #
 # ############################# #
 
-CONFIG_V01 = 'v0.1'
 CONFIG_V10 = 'v1.0'
-CONFIG_VERSIONS = [CONFIG_V01, CONFIG_V10]
+CONFIG_VERSIONS = [CONFIG_V10]
 
 
 def get_config_version():
-    return os.getenv(ENV_CONFIG_VERSION, CONFIG_V01)
+    return os.getenv(ENV_CONFIG_VERSION, CONFIG_V10)
 
 
 def set_config_version(version):

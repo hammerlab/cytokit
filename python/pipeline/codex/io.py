@@ -3,7 +3,6 @@ import codex
 import warnings
 import os.path as osp
 import numpy as np
-from collections import namedtuple
 from skimage.external.tifffile import imread, imsave
 
 # Define a list of helpful path formats (i.e. these are common and don't necessarily need to be configured
@@ -101,7 +100,11 @@ def get_processor_img_path(ireg, tx, ty):
 
 
 def get_best_focus_img_path(ireg, tx, ty, best_z):
-    return _formats()['best_focus'].format(region=ireg + 1, x=tx + 1, y=ty + 1, z=best_z + 1)
+    return _formats()['best_focus_image'].format(region=ireg + 1, x=tx + 1, y=ty + 1, z=best_z + 1)
+
+
+def get_best_focus_montage_path(ireg):
+    return _formats()['best_focus_montage'].format(region=ireg + 1)
 
 
 def get_region_expression_path(ireg, typ='Compensated'):
@@ -110,8 +113,20 @@ def get_region_expression_path(ireg, typ='Compensated'):
     return _formats()['expr_file'].format(region=ireg + 1, type=typ)
 
 
-def get_cytometry_file_path(ireg, tx, ty, suffix):
-    return _formats()['cyto_data'].format(region=ireg + 1, x=tx + 1, y=ty + 1, suffix=suffix)
+def get_cytometry_data_file_path(ireg, tx, ty, extension):
+    return _formats()['cyto_data'].format(region=ireg + 1, x=tx + 1, y=ty + 1, extension=extension)
+
+
+def get_cytometry_agg_file_path(extension):
+    return _formats()['cyto_agg'].format(extension=extension)
+
+
+def get_processor_data_path():
+    return _formats()['proc_data']
+
+
+def get_processor_exec_path(date):
+    return _formats()['proc_exec'].format(date=date)
 
 
 def read_raw_microscope_image(path, file_type):

@@ -26,8 +26,14 @@ def _run_ops(data_dir, op_classes, config_path=None, config=None):
     config.register_environment()
 
     for opc in op_classes:
-        logging.info('Starting "{}" analysis operation'.format(opc))
         analysis_op = opc(config)
+
+        op_config = analysis_op.get_analysis_op_config()
+        if not op_config.get('enabled', True):
+            logging.info('Skipping "{}" analysis operation since it has been explicitly disabled'.format(opc))
+            continue
+
+        logging.info('Starting "{}" analysis operation'.format(opc))
         analysis_op.run(data_dir)
         logging.info('Completed "{}" analysis operation'.format(opc))
 

@@ -102,147 +102,6 @@ class Config(object):
         return cycle_index, ch_index
 
 
-class CodexConfigV01(Config):
-
-    def __init__(self, conf):
-        self._conf = conf
-
-    def get_environment(self):
-        return {}
-
-    @property
-    def channel_names(self):
-        return self._conf['all_channel_names']
-
-    @property
-    def n_cycles(self):
-        return self._conf['num_cycles']
-
-    @property
-    def n_z_planes(self):
-        return self._conf['num_z_planes']
-
-    @property
-    def n_channels_per_cycle(self):
-        return len(self._conf['channel_names'])
-
-    @property
-    def tile_width(self):
-        return self._conf['tile_width']
-
-    @property
-    def tile_height(self):
-        return self._conf['tile_height']
-
-    @property
-    def overlap_x(self):
-        return self._conf['tile_overlap_X']
-
-    @property
-    def overlap_y(self):
-        return self._conf['tile_overlap_Y']
-
-    @property
-    def region_width(self):
-        return self._conf['region_width']
-
-    @property
-    def region_height(self):
-        return self._conf['region_height']
-
-    @property
-    def tiling_mode(self):
-        return self._conf['tiling_mode']
-
-    @property
-    def region_indexes(self):
-        """Get 0-based region index list"""
-        return [i - 1 for i in self._conf['regIdx']]
-
-    @property
-    def drift_compensation_reference(self):
-        """Get reference image configured for drift compensation
-        Returns:
-            (cycle, channel) - 0-based indexes for cycle and channel
-        """
-        cycle = self._conf['driftCompReferenceCycle'] - 1
-        channel = self._conf['drift_comp_channel'] - 1
-        return cycle, channel
-
-    @property
-    def best_focus_reference(self):
-        """Get reference image configured for best focus plan selection
-        Returns:
-            (cycle, channel) - 0-based indexes for cycle and channel
-        """
-        cycle = self._conf['bestFocusReferenceCycle'] - 1
-        channel = self._conf['best_focus_channel'] - 1
-        return cycle, channel
-
-    @property
-    def cytometry_reference(self):
-        nuc_name = self._conf['cytometry_nuclei_channel_name']
-        mem_name = self._conf.get('cytometry_membrane_channel_name')
-        params = self._conf.get('cytometry_params')
-        return self.get_channel_coordinates(nuc_name), \
-               self.get_channel_coordinates(mem_name) if mem_name else None, \
-               params
-
-
-    @property
-    def _n_actual_channels(self):
-        return len(self.channel_names)
-
-    @property
-    def _n_expected_channels(self):
-        return self.n_cycles * self.n_channels_per_cycle
-
-    @property
-    def microscope_params(self):
-        mag = self._conf['magnification']
-        na = self._conf['numerical_aperture']
-        res_axial_nm = self._conf['z_pitch']
-        res_lateral_nm = self._conf['per_pixel_XY_resolution']
-        objective_type = self._conf['objectiveType']
-        em_wavelength_nm = self._conf['emission_wavelengths']
-        return mag, na, res_axial_nm, res_lateral_nm, objective_type, em_wavelength_nm
-
-    def _validate(self):
-        # Ensure that number of channel names equals expected number
-        if self._n_actual_channels != self._n_expected_channels:
-            raise ValueError(
-                'Full list of channel names does not have length equal '
-                'to num_cycles * n_channels_per_cycle; '
-                'n expected channel names = {}, n actual channel names = {}'
-                .format(self._n_expected_channels, self._n_actual_channels)
-            )
-
-        # Ensure that all one-based indexes do not have a value <= 0
-        def validate_one_based_index(k, v=None):
-            if v is None:
-                v = self._conf[k]
-            if v <= 0 or not isinstance(v, int):
-                raise ValueError('Expected 1-based index for "{}" to be int > 0 but found value {}'.format(k, v))
-        for k in [
-            'driftCompReferenceCycle', 'drift_comp_channel',
-            'bestFocusReferenceCycle', 'best_focus_channel',
-        ]:
-            validate_one_based_index(k)
-        for ireg in self._conf['regIdx']:
-            validate_one_based_index('regIdx', v=ireg)
-        return self
-
-    @staticmethod
-    def load(data_dir, filename=None, overrides=None):
-        """Load all CODEX related configuration files given a primary data directory"""
-        conf = _load_experiment_config(data_dir, filename if filename else 'Experiment.json')
-        conf.update(_load_processing_options(data_dir))
-        conf.update(dict(all_channel_names=_load_channel_names(data_dir)))
-        if overrides:
-            conf.update(overrides)
-        return CodexConfigV01(conf)._validate()
-
-
 class CodexConfigV10(Config):
 
     def __init__(self, conf):
@@ -309,7 +168,7 @@ class CodexConfigV10(Config):
     @property
     def region_indexes(self):
         """Get 0-based region index list"""
-        return list(range(len(self._conf['acquisition']['regions'])))
+        return list(range(len(self._conf['acquisition']['region_names'])))
 
     @property
     def drift_compensation_reference(self):
@@ -366,8 +225,8 @@ class CodexConfigV10(Config):
     def microscope_params(self):
         mag = self._conf['acquisition']['magnification']
         na = self._conf['acquisition']['numerical_aperture']
-        res_axial_nm = self._conf['acquisition']['z_pitch']
-        res_lateral_nm = self._conf['acquisition']['per_pixel_xy_resolution']
+        res_axial_nm = self._conf['acquisition']['axial_resolution']
+        res_lateral_nm = self._conf['acquisition']['lateral_resolution']
         objective_type = self._conf['acquisition']['objective_type']
         em_wavelength_nm = self._conf['acquisition']['emission_wavelengths']
         return mag, na, res_axial_nm, res_lateral_nm, objective_type, em_wavelength_nm
@@ -397,9 +256,7 @@ def load(path):
         dirname, filename = osp.dirname(path), osp.basename(path)
 
     version = codex.get_config_version()
-    if version == codex.CONFIG_V01:
-        return CodexConfigV01.load(dirname, filename)
-    elif version == codex.CONFIG_V10:
+    if version == codex.CONFIG_V10:
         return CodexConfigV10.load(dirname, filename)
     else:
         raise ValueError(

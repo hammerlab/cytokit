@@ -271,7 +271,10 @@ def run_pipeline_task(task_config):
             tile_indices = codex_config.TileIndices(
                 region_index=region_index, tile_index=tile_index, tile_x=tx, tile_y=ty)
 
+            # Set the "context" to store with monitor data meaning that the current tile location
+            # will become global information associated automatically with all other statistics
             context = tile_indices._asdict()
+
             log_fn = get_log_fn(i, n_tiles, region_index, tx, ty)
 
             with op.new_monitor(context) as monitor:

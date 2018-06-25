@@ -32,6 +32,21 @@ class CodexTileCrop(CodexOp):
         super(CodexTileCrop, self).__init__(config)
 
     def _run(self, tile, **kwargs):
+
+        # Check to see if tile dimensions indicate that cropping is not possible and return immediately if so
+        ih, iw = tile.shape[-2:]
+        nh, nw = self.config.tile_height, self.config.tile_width
+        if iw <= nw or ih <= nh:
+            logger.warning(
+                'Tile cropping is attempting to run on a tile of shape {} but the configured '
+                'target height and width {} already exceeds or equals the size of the provided tile '
+                'in the image dimensions.  The tile will be returned as-is but this could indicate '
+                'an issue and if not, tile crop should be disabled'
+                .format(tile.shape, (nh, nw))
+            )
+            return tile
+
+        # Otherwise, run the cropping operation
         slice_arr = get_slice(self.config)
         self.record({'slice': [str(v) for v in slice_arr]})
         return apply_slice(tile, slice_arr)

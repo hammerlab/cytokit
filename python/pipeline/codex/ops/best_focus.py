@@ -1,5 +1,3 @@
-
-
 from codex.ops.op import CodexOp, get_tf_config
 from codex.miq import prediction
 from codex import data as codex_data
@@ -75,11 +73,15 @@ class CodexFocalPlaneSelector(CodexOp):
         self.record({'classifications': classifications, 'best_z': best_z})
         logger.debug('Best focal plane: z = {} (classifications: {})'.format(best_z, classifications))
 
-        # Return best z plane and other context
-        return best_z, classifications, probabilities
+        # Subset tile to best focal plane
+        best_focus_tile = tile[:, [best_z], :, :, :]
 
+        # Return best focus tile and other context
+        return best_focus_tile, best_z, classifications, probabilities
 
-
-
-
-
+    def save(self, tile_indices, output_dir, data):
+        region_index, tile_index, tx, ty = tile_indices
+        best_focus_tile, best_z, classifications, probabilities = data
+        path = codex_io.get_best_focus_img_path(region_index, tx, ty, best_z)
+        codex_io.save_tile(osp.join(output_dir, path), best_focus_tile)
+        return [path]

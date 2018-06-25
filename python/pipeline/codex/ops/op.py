@@ -169,22 +169,22 @@ class CodexOp(MonitorMixin):
     def record(self, data):
         self._records.append(data)
 
-    def _run(self, tile, **kwargs):
+    def _run(self, *args, **kwargs):
         raise NotImplementedError()
 
-    def run(self, tile, **kwargs):
+    def run(self, *args, **kwargs):
         # Reset monitor record list
         self._records = []
 
         # Time all operations executed by underlying implementations
         start = timer()
-        res = self._run(tile, **kwargs)
+        res = self._run(*args, **kwargs)
         stop = timer()
 
         # Merge execution time with other contextual data before recording
-        exec_time = {'time': stop - start}
-        for monitor_record in (self._records or [{}]):
-            self.add_monitor_data({**monitor_record, **exec_time})
+        self._records.append({'execution_time': stop - start})
+        for monitor_record in self._records:
+            self.add_monitor_data(monitor_record)
 
         return res
 
@@ -211,3 +211,4 @@ class CodexOpSet(object):
         for v in self.ops.values():
             if v is not None:
                 v.__exit__(type, value, traceback)
+

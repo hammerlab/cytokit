@@ -101,6 +101,26 @@ class Cytometry(codex_op.CodexOp):
     def _run(self, tile, **kwargs):
         return self._run_2d(tile)
 
+    def save(self, tile_indices, output_dir, data):
+        region_index, tile_index, tx, ty = tile_indices
+        img_seg, img_boundary, stats = data
+
+        seg_tile_path = codex_io.get_cytometry_file_path(region_index, tx, ty, 'seg.tif')
+        codex_io.save_tile(osp.join(output_dir, seg_tile_path), img_seg)
+
+        viz_tile_path = codex_io.get_cytometry_file_path(region_index, tx, ty, 'viz.tif')
+        codex_io.save_tile(osp.join(output_dir, viz_tile_path), img_boundary)
+
+        # Append useful metadata to cytometry stats
+        stats.insert(0, 'tile_y', ty + 1)
+        stats.insert(0, 'tile_x', tx + 1)
+        stats.insert(0, 'tile_i', tile_index + 1)
+        stats.insert(0, 'region', region_index + 1)
+        stats_path = codex_io.get_cytometry_file_path(region_index, tx, ty, 'csv')
+        stats.to_csv(osp.join(output_dir, stats_path ), index=False)
+
+        return seg_tile_path, viz_tile_path, stats_path
+
 
 def _overlay_boundaries(img, img_seg):
     """Overlay labeled image into another

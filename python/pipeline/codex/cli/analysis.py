@@ -3,74 +3,66 @@
 import fire
 import codex
 from codex import cli
+from codex import config as codex_config
+from codex.ops import analysis as codex_analysis
+from codex.ops import op as codex_op
 import os.path as osp
 import papermill as pm
 import logging
 logging.basicConfig(level=logging.INFO, format=cli.LOG_FORMAT)
 
 
+def _run_ops(data_dir, op_classes, config_path=None, config=None):
+    if not data_dir or not osp.exists(data_dir):
+        raise ValueError('Provided data directory "{}" does not exist'.format(data_dir))
+
+    if not config_path:
+        config_path = data_dir
+    if not config:
+        config = codex_config.load(config_path)
+
+    # "Register the environment" meaning that any variables not explicitly defined by env variables
+    # should set based on what is present in the configuration
+    config.register_environment()
+
+    for opc in op_classes:
+        logging.info('Starting "{}" analysis operation'.format(opc))
+        analysis_op = opc(config)
+        analysis_op.run(data_dir)
+        logging.info('Completed "{}" analysis operation'.format(opc))
+
+    logging.info('Analysis execution complete')
+
+
 class Analysis(object):
 
-    def _get_nb_path(self, nb_name):
-        return osp.join(codex.nb_dir, 'data_analysis', nb_name)
+    def run(self, data_dir, config_path=None):
+        if config_path is None:
+            config_path = data_dir
+        config = codex_config.load(config_path)
 
-    def analyze_processor_statistics(self, output_dir, processor_data_filepath=cli.DEFAULT_PROCESSOR_DATA_PATH):
-        """Analyze data collected by the processing pipeline
-        
-        This operation will execute a parameterized notebook and print the notebook location
-        (as well as how to view it) on completion.
-
-        Args:
-            output_dir: Directory containing processor output (should be same as output_dir specified
-                to that application)
-            processor_data_filepath: In the event that the processor data (json) file was given a non-default name,
-                it can be specified here; otherwise, the default value should not be changed
-        """
-        logging.info('Running processor data analysis')
-        processor_data_path = osp.join(output_dir, processor_data_filepath)
-        nb_input_path = self._get_nb_path('processor_data_analysis.ipynb')
-        nb_output_path = osp.join(output_dir, 'processor_data_analysis.ipynb')
-        pm.execute_notebook(nb_input_path, nb_output_path, parameters={'processor_data_path': processor_data_path})
-        logging.info('Processor data analysis complete; view with `jupyter notebook {}`'.format(nb_output_path))
-
-    def create_best_focus_montage(self, config_dir, output_dir, region_indexes=None,
-                           processor_data_filepath=cli.DEFAULT_PROCESSOR_DATA_PATH):
-        from codex.ops import op, best_focus
-        from codex import config as codex_config
-        from codex.ops import op, best_focus
-        from codex.exec import montage
-        from codex import io as codex_io
-
-        config = codex_config.load(config_dir)
-        if region_indexes is None:
-            region_indexes = config.region_indexes
-
-        best_focus_op = op.CodexOp.get_op_for_class(best_focus.CodexFocalPlaneSelector)
-        processor_data_filepath = osp.join(output_dir, processor_data_filepath)
-        focus_data = cli.read_processor_data(processor_data_filepath)
-        if best_focus_op not in focus_data:
+        analysis_params = config.analysis_params
+        if len(analysis_params) == 0:
             raise ValueError(
-                'No focal plane statistics found in statistics file "{}".  '
-                'Are you sure the processor.py app was run with `run_best_focus`=True?'
-                .format(processor_data_filepath)
+                'Project configuration at "{}" does not currently have any analysis operations specified; '
+                'Either specify them in the configuration or run individual operations using this same script '
+                '(see ctk-analysis help for available options)'
             )
-        focus_data = focus_data[best_focus_op].set_index(['region', 'tile_x', 'tile_y'])['best_z']
 
-        for ireg in region_indexes:
-            logging.info('Generating montage for region %d of %d', ireg + 1, len(region_indexes))
-            tiles = []
-            for itile in range(config.n_tiles_per_region):
-                tx, ty = config.get_tile_coordinates(itile)
-                best_z = focus_data.loc[(ireg, tx, ty)]
-                path = codex_io.get_best_focus_img_path(ireg, tx, ty, best_z)
-                tile = codex_io.read_image(osp.join(output_dir, path))
-                tiles.append(tile)
-            reg_img_montage = montage.montage(tiles, config)
-            path = osp.join(output_dir, 'bestFocus', 'reg{:03d}_montage.tif'.format(ireg+1))
-            logging.info('Saving montage to file "%s"', path)
-            codex_io.save_image(path, reg_img_montage)
-        logging.info('Montage generation complete')
+        op_classes = []
+        for op_name in analysis_params.keys():
+            if op_name not in codex_analysis.OP_CLASSES_MAP:
+                raise ValueError(
+                    'Analysis operation "{}" specified in configuration is not valid.  Must be one of {}'
+                    .format(list(codex_analysis.OP_CLASSES_MAP.keys()))
+                )
+            op_classes.append(codex_analysis.OP_CLASSES_MAP[op_name])
 
+        self._run_ops(data_dir, op_classes, config_path=config_path, config=config)
+        logging.info('Analysis execution complete')
+
+    def run_best_focus_montage_generator(self, data_dir, config_path=None):
+        _run_ops(data_dir, [codex_analysis.BestFocusMontageGenerator], config_path=config_path)
 
 
 if __name__ == '__main__':

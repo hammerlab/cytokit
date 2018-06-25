@@ -57,5 +57,5 @@ ENV SHELL /bin/bash
 # Create cli links at runtime instead of container buildtime due to source scripts being
 # in repos mounted at runtime
 CMD chmod a+x $CODEX_REPO_DIR/python/pipeline/codex/cli/processor.py && \
-    ln -s $CODEX_REPO_DIR/python/pipeline/codex/cli/processor.py /usr/local/bin/codex-processor && \
+    ln -s $CODEX_REPO_DIR/python/pipeline/codex/cli/processor.py /usr/local/bin/ctk-processor && \
     jupyter lab --allow-root

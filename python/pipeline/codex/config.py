@@ -351,6 +351,10 @@ class CodexConfigV10(Config):
         return self._op_params('cytometry')
 
     @property
+    def analysis_params(self):
+        return self._conf['analysis']
+
+    @property
     def _n_actual_channels(self):
         return len(self.channel_names)
 

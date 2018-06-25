@@ -3,7 +3,7 @@
 
 ## Cytokit
 
-Cytokit is a processing and analysis toolkit for analyzing high-dimensional microscopy images.  The 
+Cytokit is an image processing toolkit for analyzing high-dimensional microscopy acquisitions.  The 
 majority of the operations provided within Cytokit are intended to run as trained
 deep learning models or other computational graphs on top of TensorFlow so as to exploit
 GPU acceleration for processing terabyte-sized experiments.  

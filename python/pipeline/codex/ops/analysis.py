@@ -29,27 +29,6 @@ class NotebookAnalysisOp(AnalysisOp):
         logger.info('{} operation complete; view results with `jupyter notebook {}`'.format(op_name, nb_output_path))
 
 
-def get_best_focus_data(output_dir):
-    """Get precomputed best focus plane information
-
-    Note that this will return a data frame with references to 0-based region/tile indexes
-    """
-    from codex.ops import best_focus
-    from codex import cli
-
-    # Extract best focal plane selections from precomputed processor data
-    best_focus_op = CodexOp.get_op_for_class(best_focus.CodexFocalPlaneSelector)
-    processor_data_filepath = osp.join(output_dir, codex_io.get_processor_data_path())
-    focus_data = cli.read_processor_data(processor_data_filepath)
-    if best_focus_op not in focus_data:
-        raise ValueError(
-            'No focal plane statistics found in statistics file "{}".  '
-            'Are you sure the processor.py app was run with `run_best_focus`=True?'
-            .format(processor_data_filepath)
-        )
-    return focus_data[best_focus_op][['region', 'tile_index', 'tile_x', 'tile_y', 'best_z']].dropna().drop_duplicates()
-
-
 class CytometryStatisticsAggregation(AnalysisOp):
 
     MODES = ['best_z_plane', 'most_cells', 'all']
@@ -163,7 +142,7 @@ class BestFocusMontageGenerator(AnalysisOp):
         region_indexes = self.config.region_indexes
 
         # Extract best focal plane selections from precomputed processor data
-        focus_data = get_best_focus_data(output_dir).set_index('region')
+        focus_data = get_best_focus_data(output_dir).set_index('region_index')
 
         # Loop through regions and generate a montage for each, skipping any (with a warning) that
         # do not have focal plane selection information
@@ -190,6 +169,28 @@ class BestFocusMontageGenerator(AnalysisOp):
             logging.info('Saving montage to file "%s"', path)
             codex_io.save_image(path, reg_img_montage)
         logging.info('Montage generation complete')
+
+
+def get_best_focus_data(output_dir):
+    """Get precomputed best focus plane information
+
+    Note that this will return a data frame with references to 0-based region/tile indexes
+    """
+    from codex.ops import best_focus
+    from codex import cli
+
+    # Extract best focal plane selections from precomputed processor data
+    best_focus_op = CodexOp.get_op_for_class(best_focus.CodexFocalPlaneSelector)
+    processor_data_filepath = osp.join(output_dir, codex_io.get_processor_data_path())
+    focus_data = cli.read_processor_data(processor_data_filepath)
+    if best_focus_op not in focus_data:
+        raise ValueError(
+            'No focal plane statistics found in statistics file "{}".  '
+            'Are you sure the processor.py app was run with `run_best_focus`=True?'
+            .format(processor_data_filepath)
+        )
+    return focus_data[best_focus_op][['region_index', 'tile_index', 'tile_x', 'tile_y', 'best_z']]\
+        .dropna().drop_duplicates().astype(int)
 
 
 OP_CLASSES = [

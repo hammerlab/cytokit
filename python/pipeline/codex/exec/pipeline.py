@@ -32,7 +32,6 @@ class TaskConfig(object):
             run_tile_generator=True, run_crop=True, run_deconvolution=True, run_cytometry=True):
         self.region_indexes = region_indexes
         self.tile_indexes = tile_indexes
-        self.config_path = pipeline_config.config_path
         self.data_dir = pipeline_config.data_dir
         self.output_dir = pipeline_config.output_dir
         self.gpu = gpu
@@ -64,24 +63,17 @@ class TaskConfig(object):
 
 class PipelineConfig(object):
 
-    def __init__(self, region_indexes, tile_indexes, config_path, data_dir, output_dir, n_workers,
+    def __init__(self, exp_config, region_indexes, tile_indexes, data_dir, output_dir, n_workers,
                  gpus, memory_limit, **task_kwargs):
+        self.exp_config = exp_config
         self.region_idx = region_indexes
         self.tile_idx = tile_indexes
-        self.config_path = config_path
         self.data_dir = data_dir
         self.output_dir = output_dir
         self.n_workers = n_workers
         self.gpus = gpus
         self.memory_limit = memory_limit
         self.task_kwargs = task_kwargs
-
-        # Load experiment configuration in order to determine defaults
-        self.exp_config = codex_config.load(config_path)
-
-        # "Register the environment" meaning that any variables not explicitly defined by env variables
-        # should set based on what is present in the configuration
-        self.exp_config.register_environment()
 
         # Default region and tile index list to that in experiment configuration if not provided explicitly
         if self.region_idx is None:
@@ -98,7 +90,7 @@ class PipelineConfig(object):
 
     def __str__(self):
         return str({
-            k:v for k, v in self.__dict__.items() 
+            k: v for k, v in self.__dict__.items()
             if k not in ['exp_config', 'tile_idx', 'region_idx']
         })
 

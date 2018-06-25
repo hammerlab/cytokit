@@ -12,40 +12,37 @@ import logging
 logging.basicConfig(level=logging.INFO, format=cli.LOG_FORMAT)
 
 
-def _run_ops(data_dir, op_classes, config_path=None, config=None):
-    if not data_dir or not osp.exists(data_dir):
-        raise ValueError('Provided data directory "{}" does not exist'.format(data_dir))
-
-    if not config_path:
-        config_path = data_dir
-    if not config:
-        config = codex_config.load(config_path)
-
-    # "Register the environment" meaning that any variables not explicitly defined by env variables
-    # should set based on what is present in the configuration
-    config.register_environment()
-
+def _run_ops(data_dir, config, op_classes):
     for opc in op_classes:
         analysis_op = opc(config)
 
         op_config = analysis_op.get_analysis_op_config()
         if not op_config.get('enabled', True):
-            logging.info('Skipping "{}" analysis operation since it has been explicitly disabled'.format(opc))
+            logging.info('Skipping "{}" analysis operation since it has been explicitly disabled'.format(opc.__name__))
             continue
 
-        logging.info('Starting "{}" analysis operation'.format(opc))
+        logging.info('Starting "{}" analysis operation'.format(opc.__name__))
         analysis_op.run(data_dir)
-        logging.info('Completed "{}" analysis operation'.format(opc))
+        logging.info('Completed "{}" analysis operation'.format(opc.__name__))
 
     logging.info('Analysis execution complete')
+
+
+def _get_config(data_dir, config_path=None):
+    # Load experiment configuration and "register" the environment meaning that any variables not
+    # explicitly defined by env variables should set based on what is present in the configuration
+    # (it is crucial that this happen first)
+    if not config_path:
+        config_path = data_dir
+    config = codex_config.load(config_path)
+    config.register_environment()
+    return config
 
 
 class Analysis(object):
 
     def run(self, data_dir, config_path=None):
-        if config_path is None:
-            config_path = data_dir
-        config = codex_config.load(config_path)
+        config = _get_config(data_dir, config_path)
 
         analysis_params = config.analysis_params
         if len(analysis_params) == 0:
@@ -60,15 +57,15 @@ class Analysis(object):
             if op_name not in codex_analysis.OP_CLASSES_MAP:
                 raise ValueError(
                     'Analysis operation "{}" specified in configuration is not valid.  Must be one of {}'
-                    .format(list(codex_analysis.OP_CLASSES_MAP.keys()))
+                    .format(op_name, list(codex_analysis.OP_CLASSES_MAP.keys()))
                 )
             op_classes.append(codex_analysis.OP_CLASSES_MAP[op_name])
 
-        self._run_ops(data_dir, op_classes, config_path=config_path, config=config)
+        _run_ops(data_dir, config, op_classes)
         logging.info('Analysis execution complete')
 
     def run_best_focus_montage_generator(self, data_dir, config_path=None):
-        _run_ops(data_dir, [codex_analysis.BestFocusMontageGenerator], config_path=config_path)
+        _run_ops(data_dir, _get_config(data_dir, config_path), [codex_analysis.BestFocusMontageGenerator])
 
 
 if __name__ == '__main__':

@@ -3,6 +3,7 @@
 import fire
 from codex.exec import pipeline
 from codex.utils import tf_utils
+from codex import config as codex_config
 from codex import cli
 import logging
 import sys
@@ -12,8 +13,7 @@ import os.path as osp
 
 class Processor(object):
 
-    def run(
-            self,
+    def run(self,
 
             # Data and configuration locations
             data_dir, output_dir, config_path=None,
@@ -62,7 +62,7 @@ class Processor(object):
         Args:
             data_dir: Path to directoring containing raw acquisition data files
             output_dir: Directory to save results in; will be created if it does not exist
-            config_path: Either a directory containing a configuration file named "experiment.json" or a path
+            config_path: Either a directory containing a configuration file named "experiment.yaml" or a path
                 to a single file; If not provided this will default to `data_dir`
             region_indexes: 1-based sequence of region indexes to process; can be specified as:
                 - None: Region indexes will be inferred from experiment configuration
@@ -101,12 +101,21 @@ class Processor(object):
             record_data: Flag indicating whether or not summary information from each operation
                 performed should be included within a file in the output directory; defaults to True
         """
+        # Load experiment configuration and "register" the environment meaning that any variables not
+        # explicitly defined by env variables should set based on what is present in the configuration
+        # (it is crucial that this happen first)
+        if not config_path:
+            config_path = data_dir
+        exp_config = codex_config.load(config_path)
+        exp_config.register_environment()
+
         # Initialize logging (use a callable function for passing to spawned processes in pipeline)
         def logging_init_fn():
             logging.basicConfig(level=tf_utils.log_level_code(codex_py_log_level), format=cli.LOG_FORMAT)
             tf_utils.init_tf_logging(tf_cpp_log_level, tf_py_log_level)
         logging_init_fn()
 
+        # Save a record of execution environment and arguments
         if record_execution:
             path = cli.record_execution(output_dir)
             logging.info('Execution arguments and environment saved to "%s"', path)
@@ -116,16 +125,14 @@ class Processor(object):
         tile_indexes = resolve_int_list_arg(tile_indexes)
         gpus = resolve_int_list_arg(gpus)
 
-        # Set dynamic defaults
-        if config_path is None:
-            config_path = data_dir
+        # Set other dynamic defaults
         if n_workers is None:
             # Default to 1 worker given no knowledge of available gpus 
             n_workers = len(gpus) if gpus is not None else 1
 
         # Execute pipeline on localhost
         conf = pipeline.PipelineConfig(
-            region_indexes, tile_indexes, config_path, data_dir, output_dir,
+            exp_config, region_indexes, tile_indexes, data_dir, output_dir,
             n_workers, gpus, memory_limit,
             tile_prefetch_capacity=tile_prefetch_capacity,
             run_crop=run_crop,
@@ -141,10 +148,6 @@ class Processor(object):
         if record_data:
             path = cli.record_processor_data(data, output_dir)
             logging.info('Operation summary data saved to "%s"', path)
-
-    def gke(self):
-        # Ultimately, a GKE impementation should use the same "localhost" code above on cluster containers
-        pass
 
 
 def resolve_int_list_arg(arg):

@@ -3,6 +3,7 @@ import os.path as osp
 
 ENV_PATH_FORMATS = 'CODEX_PATH_FORMATS'
 ENV_CONFIG_VERSION = 'CODEX_CONFIG_VERSION'
+ENV_CONFIG_DEFAULT_FILENAME = 'CODEX_CONFIG_DEFAULT_FILENAME'
 ENV_CPU_ONLY_OPS = 'CODEX_CPU_ONLY_OPS'
 ENV_RAW_INDEX_SYMLINKS = 'CODEX_RAW_INDEX_SYMLINKS'
 ENV_CYTOMETRY_2D_MODEL_PATH = 'CODEX_CYTOMETRY_2D_MODEL_PATH'
@@ -26,9 +27,9 @@ def register_environment(env):
             os.environ[k] = v
 
 
-# ############################# #
-# Configuration Schema Versions #
-# ############################# #
+# ####################### #
+# Configuration Variables #
+# ####################### #
 
 CONFIG_V10 = 'v1.0'
 CONFIG_VERSIONS = [CONFIG_V10]
@@ -40,6 +41,14 @@ def get_config_version():
 
 def set_config_version(version):
     os.environ[ENV_CONFIG_VERSION] = version
+
+
+def get_config_default_filename():
+    return os.getenv(ENV_CONFIG_DEFAULT_FILENAME, 'experiment.yaml')
+
+
+def set_config_default_filename(filename):
+    os.environ[ENV_CONFIG_DEFAULT_FILENAME] = filename
 
 
 # #################### #

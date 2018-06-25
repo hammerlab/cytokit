@@ -1,6 +1,8 @@
+import os.path as osp
 from codex.ops.op import CodexOp, get_tf_config
 from codex.miq import prediction
 from codex import data as codex_data
+from codex import io as codex_io
 import tensorflow as tf
 import numpy as np
 import logging

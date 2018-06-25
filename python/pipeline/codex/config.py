@@ -9,31 +9,24 @@ from collections import namedtuple
 TILING_MODE_SNAKE = 'snake'
 
 
-def _load_json_config(data_dir, filename, default=None):
+def _load_json_config(data_dir, filename):
     f = osp.join(data_dir, filename)
     if not osp.exists(f):
-        if default is None:
-            raise ValueError('Required configuration file "{}" does not exist'.format(f))
-        else:
-            return default
-    with open(f, 'r') as fd:
-        return json.load(fd)
+        raise ValueError('Required configuration file "{}" does not exist'.format(f))
+    if filename.endswith('.yaml'):
+        import yaml
+        with open(f, 'r') as fd:
+            return yaml.load(fd)
+    elif filename.endswith('.json'):
+        import json
+        with open(f, 'r') as fd:
+            return json.load(fd)
+    else:
+        raise ValueError('Configuration file "{}" has invalid extension (should be json or yaml)'.format(f))
 
 
 def _load_experiment_config(data_dir, filename):
     return _load_json_config(data_dir, filename)
-
-
-def _load_processing_options(data_dir):
-    return _load_json_config(data_dir, 'processingOptions.json', default={})
-
-
-def _load_channel_names(data_dir):
-    f = osp.join(data_dir, 'channelNames.txt')
-    if not osp.exists(f):
-        raise ValueError('Required channel names configuration file "{}" does not exist'.format(f))
-    with open(f, 'r') as fd:
-        return [l.strip() for l in fd.readlines() if l.strip()]
 
 
 TileDims = namedtuple('TileDims', ['cycles', 'z', 'channels', 'height', 'width'])
@@ -242,25 +235,35 @@ class CodexConfigV10(Config):
             )
         return self
 
+    def __str__(self):
+        return str(self._conf)
+
+    __repr__ = __str__
+
     @staticmethod
     def load(data_dir, filename=None):
         """Load all CODEX related configuration files given a primary data directory"""
-        conf = _load_experiment_config(data_dir, filename if filename else 'experiment.json')
+        conf = _load_experiment_config(data_dir, filename if filename else codex.get_config_default_filename())
         return CodexConfigV10(conf)._validate()
 
 
 def load(path):
+    if not osp.exists(path):
+        raise ValueError('Configuration path "{}" does not exist'.format(path))
+
+    # Split path into directory and filename
     if osp.isdir(path):
         dirname, filename = path, None
     else:
         dirname, filename = osp.dirname(path), osp.basename(path)
 
+    # Load configuration based on version specified in environment
     version = codex.get_config_version()
     if version == codex.CONFIG_V10:
         return CodexConfigV10.load(dirname, filename)
     else:
         raise ValueError(
-            'CODEX Version "{}" not supported (determined by env variable {})'
+            'Configuration version "{}" not supported (determined by env variable {})'
             .format(version, codex.ENV_CONFIG_VERSION)
         )
 

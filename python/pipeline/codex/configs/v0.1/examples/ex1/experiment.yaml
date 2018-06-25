@@ -1,0 +1,43 @@
+name: 'TestExperiment'
+date: '2018-01-01 00:00:00'
+environment:
+  index_symlinks:
+    channel: {3: 4}
+  path_formats:
+    best_focus_image: 'best_focus/reg{region:03d}_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'
+    best_focus_montage: 'best_focus/reg{region:03d}_montage.tif'
+    cyto_agg: 'cytometry/data.{extension}'
+    cyto_data: 'cytometry/reg{region:03d}_X{x:02d}_Y{y:02d}.{extension}'
+    proc_data: 'processor/data.json'
+    proc_exec: 'processor/execution_{date}.json'
+    proc_image: 'reg{region:03d}_X{x:02d}_Y{y:02d}.tif'
+    raw_image: '1_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'
+acquisition:
+  axial_resolution: 1000.0
+  channel_names: [DAPI, CD4, CD8]
+  emission_wavelengths: [425, 525, 670]
+  lateral_resolution: 377.442
+  magnification: 20
+  num_cycles: 1
+  num_z_planes: 33
+  numerical_aperture: 0.75
+  objective_type: air
+  per_cycle_channel_names: [CH1, CH2, CH4]
+  region_height: 5
+  region_names: [Region1]
+  region_width: 5
+  tile_height: 1008
+  tile_overlap_x: 576
+  tile_overlap_y: 432
+  tile_width: 1344
+  tiling_mode: snake
+analysis:
+  best_focus_montage_generator: {}
+  cytometry_statistics_aggregation: {enabled: true, mode: best_z_plane, variant: null}
+  processor_data_summary: {}
+operation:
+  best_focus: {channel: DAPI}
+  cytometry: {nuclei_channel_name: DAPI}
+  deconvolution: {n_iter: 10, scale_factor: 0.5}
+  drift_compensation: {channel: DAPI}
+  tile_generator: {raw_file_type: keyence_rgb}

@@ -35,7 +35,7 @@ but would support any imaging process that produces tiled images with a specific
 #### CODEX Backport
 
 As a small piece of standalone functionality, instructions can be found here for how to
-run deconvolution for free on CODEX samples: [Standalone Deconvolution Instructions](python/standalone/deconvolution)
+run deconvolution on CODEX samples: [Standalone Deconvolution Instructions](python/standalone/deconvolution)
 
 
 ### Installation

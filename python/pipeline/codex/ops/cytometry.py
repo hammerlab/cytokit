@@ -29,12 +29,23 @@ def close_keras_session():
 
 class Cytometry(codex_op.CodexOp):
 
-    def __init__(self, config, mode='2D'):
+    def __init__(self, config, mode='2D', segmentation_params={}, quantification_params={}):
         super(Cytometry, self).__init__(config)
-        self.mode = mode
+
+        params = config.cytometry_params
+        self.mode = params.get('mode', mode)
+        self.segmentation_params = params.get('segmentation_params', segmentation_params)
+
+        self.quantification_params = params.get('quantification_params', quantification_params)
+        if 'channel_names' not in self.quantification_params:
+            self.quantification_params['channel_names'] = self.config.channel_names
+
+        self.nuc_channel_coords = config.get_channel_coordinates(params['nuclei_channel_name'])
+        self.mem_channel_coords = None if 'membrane_channel_name' not in params else \
+            config.get_channel_coordinates(params['membrane_channel_name'])
+
         if self.mode != '2D':
             raise ValueError('Cytometry mode should be one of ["2D"] not {}'.format(self.mode))
-        self.nuc_channel_coords, self.mem_channel_coords, self.cytometry_params = config.cytometry_reference
         self.input_shape = (config.tile_height, config.tile_width, 1)
         self.cytometer = None
 
@@ -58,7 +69,7 @@ class Cytometry(codex_op.CodexOp):
 
         # Tile should have shape (cycles, z, channel, height, width)
         img_nuc = tile[nuc_cycle, :, nuc_channel]
-        img_seg, _, _ = self.cytometer.segment(img_nuc, **(self.cytometry_params or {}))
+        img_seg, _, _ = self.cytometer.segment(img_nuc, **self.segmentation_params)
 
         # Ensure segmentation image is of integer type and >= 0
         assert np.issubdtype(img_seg.dtype, np.integer), \
@@ -73,7 +84,7 @@ class Cytometry(codex_op.CodexOp):
                 'Segmentation resulted in {} cells, a number which is both suspiciously high '
                 'and too large to store as the assumed 16-bit format'.format(img_seg.max()))
 
-        stats = self.cytometer.quantify(tile, img_seg, channel_names=self.config.channel_names)
+        stats = self.cytometer.quantify(tile, img_seg, **self.quantification_params)
 
         # Create overlay image of nucleus channel and boundaries and convert to 5D
         # shape to conform with usual tile convention

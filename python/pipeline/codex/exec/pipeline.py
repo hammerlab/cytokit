@@ -29,23 +29,21 @@ class TaskConfig(object):
 
     def __init__(self, pipeline_config, region_indexes, tile_indexes, gpu, tile_prefetch_capacity=2, 
             run_best_focus=True, run_drift_comp=True, run_summary=True,
-            run_tile_generator=True, run_crop=True, run_cytometry=True,
-            n_iter_decon=25, scale_factor_decon=.5):
+            run_tile_generator=True, run_crop=True, run_deconvolution=True, run_cytometry=True):
         self.region_indexes = region_indexes
         self.tile_indexes = tile_indexes
-        self.config_dir = pipeline_config.config_dir
+        self.config_path = pipeline_config.config_path
         self.data_dir = pipeline_config.data_dir
         self.output_dir = pipeline_config.output_dir
         self.gpu = gpu
         self.tile_prefetch_capacity = tile_prefetch_capacity
         self.run_tile_generator = run_tile_generator
         self.run_crop = run_crop
+        self.run_deconvolution = run_deconvolution
         self.run_drift_comp = run_drift_comp
         self.run_best_focus = run_best_focus
         self.run_summary = run_summary
         self.run_cytometry = run_cytometry
-        self.n_iter_decon = n_iter_decon
-        self.scale_factor_decon = scale_factor_decon
         self.exp_config = pipeline_config.exp_config
 
         if len(self.region_indexes) != len(self.tile_indexes):
@@ -53,10 +51,6 @@ class TaskConfig(object):
                 'Region and tile index lists must have same length (region indexes = {}, tile indexes = {})'
                 .format(self.region_indexes, self.tile_indexes)
             )
-
-    @property
-    def run_deconvolution(self):
-        return self.n_iter_decon > 0
 
     @property
     def n_tiles(self):
@@ -70,11 +64,11 @@ class TaskConfig(object):
 
 class PipelineConfig(object):
 
-    def __init__(self, region_indexes, tile_indexes, config_dir, data_dir, output_dir, n_workers,
+    def __init__(self, region_indexes, tile_indexes, config_path, data_dir, output_dir, n_workers,
                  gpus, memory_limit, **task_kwargs):
         self.region_idx = region_indexes
         self.tile_idx = tile_indexes
-        self.config_dir = config_dir
+        self.config_path = config_path
         self.data_dir = data_dir
         self.output_dir = output_dir
         self.n_workers = n_workers
@@ -83,7 +77,11 @@ class PipelineConfig(object):
         self.task_kwargs = task_kwargs
 
         # Load experiment configuration in order to determine defaults
-        self.exp_config = codex_config.load(config_dir)
+        self.exp_config = codex_config.load(config_path)
+
+        # "Register the enviornment" meaning that any variables not explicitly defined by env variables
+        # should set based on what is present in the configuration
+        self.exp_config.register_environment()
 
         # Default region and tile index list to that in experiment configuration if not provided explicitly
         if self.region_idx is None:
@@ -237,9 +235,7 @@ def get_op_set(task_config):
     return op.CodexOpSet(
         align_op=drift_compensation.CodexDriftCompensator(exp_config) if task_config.run_drift_comp else None,
         focus_op=best_focus.CodexFocalPlaneSelector(exp_config) if task_config.run_best_focus else None,
-        decon_op=deconvolution.CodexDeconvolution(
-            exp_config, n_iter=task_config.n_iter_decon, scale_factor=task_config.scale_factor_decon
-        ) if task_config.run_deconvolution else None,
+        decon_op=deconvolution.CodexDeconvolution(exp_config) if task_config.run_deconvolution else None,
         summary_op=tile_summary.CodexTileSummary(exp_config) if task_config.run_summary else None,
         crop_op=tile_crop.CodexTileCrop(exp_config) if task_config.run_crop else None,
         cytometry_op=cytometry.Cytometry(exp_config) if task_config.run_cytometry else None
@@ -288,10 +284,10 @@ def run_pipeline_task(task_config):
                 if ops.cytometry_op:
                     cyto_seg_tile, cyto_viz_tile, cyto_stats = cyto_data
 
-                    cyto_tile_path = codex_io.get_cytometry_file_path('.seg.tif', region_index, tx, ty)
+                    cyto_tile_path = codex_io.get_cytometry_file_path(region_index, tx, ty, 'seg.tif')
                     codex_io.save_tile(osp.join(task_config.output_dir, cyto_tile_path), cyto_seg_tile)
 
-                    cyto_tile_path = codex_io.get_cytometry_file_path('.viz.tif', region_index, tx, ty)
+                    cyto_tile_path = codex_io.get_cytometry_file_path(region_index, tx, ty, 'viz.tif')
                     codex_io.save_tile(osp.join(task_config.output_dir, cyto_tile_path), cyto_viz_tile)
 
                     # Append useful metadata to cytometry stats
@@ -299,7 +295,7 @@ def run_pipeline_task(task_config):
                     cyto_stats.insert(0, 'tile_x', tx + 1)
                     cyto_stats.insert(0, 'tile_i', tile_index + 1)
                     cyto_stats.insert(0, 'region', region_index + 1)
-                    cyto_stats_path = codex_io.get_cytometry_file_path('.csv', region_index, tx, ty)
+                    cyto_stats_path = codex_io.get_cytometry_file_path(region_index, tx, ty, 'csv')
                     cyto_stats.to_csv(osp.join(task_config.output_dir, cyto_stats_path), index=False)
 
                     log_fn('Saved cytometry data to path "{}"'.format(cyto_stats_path), cyto_seg_tile)

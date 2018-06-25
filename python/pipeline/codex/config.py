@@ -20,8 +20,8 @@ def _load_json_config(data_dir, filename, default=None):
         return json.load(fd)
 
 
-def _load_experiment_config(data_dir):
-    return _load_json_config(data_dir, 'Experiment.json')
+def _load_experiment_config(data_dir, filename):
+    return _load_json_config(data_dir, filename)
 
 
 def _load_processing_options(data_dir):
@@ -41,6 +41,11 @@ TileIndices = namedtuple('TileIndices', ['region_index', 'tile_index', 'tile_x',
 
 
 class Config(object):
+
+    def register_environment(self):
+        # Delegate this registration to the main codex module as it is the only
+        # one that should ever set environment variables
+        codex.register_environment(self.get_environment())
 
     @property
     def n_tiles_per_region(self):
@@ -97,10 +102,13 @@ class Config(object):
         return cycle_index, ch_index
 
 
-class CodexConfigV1(Config):
+class CodexConfigV01(Config):
 
     def __init__(self, conf):
         self._conf = conf
+
+    def get_environment(self):
+        return {}
 
     @property
     def channel_names(self):
@@ -225,20 +233,170 @@ class CodexConfigV1(Config):
         return self
 
     @staticmethod
-    def load(data_dir, overrides=None):
+    def load(data_dir, filename=None, overrides=None):
         """Load all CODEX related configuration files given a primary data directory"""
-        conf = _load_experiment_config(data_dir)
+        conf = _load_experiment_config(data_dir, filename if filename else 'Experiment.json')
         conf.update(_load_processing_options(data_dir))
         conf.update(dict(all_channel_names=_load_channel_names(data_dir)))
         if overrides:
             conf.update(overrides)
-        return CodexConfigV1(conf)._validate()
+        return CodexConfigV01(conf)._validate()
 
 
-def load(data_dir):
+class CodexConfigV10(Config):
+
+    def __init__(self, conf):
+        self._conf = conf
+
+    def get_environment(self):
+        res = {}
+        env = self._conf.get('environment', {})
+        acq = self._conf.get('acquisition', {})
+
+        if 'index_symlinks' in env:
+            res[codex.ENV_RAW_INDEX_SYMLINKS] = str(env['index_symlinks'])
+        if 'path_formats' in env:
+            res[codex.ENV_PATH_FORMATS] = str(env['path_formats'])
+        if 'raw_file_type' in acq:
+            res[codex.ENV_RAW_FILE_TYPE] = acq['raw_file_type']
+
+        return res
+
+    @property
+    def channel_names(self):
+        return self._conf['acquisition']['channel_names']
+
+    @property
+    def n_cycles(self):
+        return self._conf['acquisition']['num_cycles']
+
+    @property
+    def n_z_planes(self):
+        return self._conf['acquisition']['num_z_planes']
+
+    @property
+    def n_channels_per_cycle(self):
+        return len(self._conf['acquisition']['channel_names'])
+
+    @property
+    def tile_width(self):
+        return self._conf['acquisition']['tile_width']
+
+    @property
+    def tile_height(self):
+        return self._conf['acquisition']['tile_height']
+
+    @property
+    def overlap_x(self):
+        return self._conf['acquisition']['tile_overlap_x']
+
+    @property
+    def overlap_y(self):
+        return self._conf['acquisition']['tile_overlap_y']
+
+    @property
+    def region_width(self):
+        return self._conf['acquisition']['region_width']
+
+    @property
+    def region_height(self):
+        return self._conf['acquisition']['region_height']
+
+    @property
+    def tiling_mode(self):
+        return self._conf['acquisition']['tiling_mode']
+
+    @property
+    def region_indexes(self):
+        """Get 0-based region index list"""
+        return list(range(len(self._conf['acquisition']['regions'])))
+
+    @property
+    def drift_compensation_reference(self):
+        """Get reference image configured for drift compensation
+        Returns:
+            (cycle, channel) - 0-based indexes for cycle and channel
+        """
+        return self.get_channel_coordinates(self._conf['operation']['drift_compensation']['channel'])
+
+    @property
+    def best_focus_reference(self):
+        """Get reference image configured for best focus plan selection
+        Returns:
+            (cycle, channel) - 0-based indexes for cycle and channel
+        """
+        return self.get_channel_coordinates(self._conf['operation']['best_focus']['channel'])
+
+    def _op_params(self, op):
+        return self._conf['operation'].get(op, {})
+
+    @property
+    def tile_generator_params(self):
+        return self._op_params('tile_generator')
+
+    @property
+    def drift_compensation_params(self):
+        return self._op_params('drift_compensation')
+
+    @property
+    def best_focus_params(self):
+        return self._op_params('best_focus')
+
+    @property
+    def deconvolution_params(self):
+        return self._op_params('deconvolution')
+
+    @property
+    def cytometry_params(self):
+        return self._op_params('cytometry')
+
+    @property
+    def _n_actual_channels(self):
+        return len(self.channel_names)
+
+    @property
+    def _n_expected_channels(self):
+        return self.n_cycles * self.n_channels_per_cycle
+
+    @property
+    def microscope_params(self):
+        mag = self._conf['acquisition']['magnification']
+        na = self._conf['acquisition']['numerical_aperture']
+        res_axial_nm = self._conf['acquisition']['z_pitch']
+        res_lateral_nm = self._conf['acquisition']['per_pixel_xy_resolution']
+        objective_type = self._conf['acquisition']['objective_type']
+        em_wavelength_nm = self._conf['acquisition']['emission_wavelengths']
+        return mag, na, res_axial_nm, res_lateral_nm, objective_type, em_wavelength_nm
+
+    def _validate(self):
+        # Ensure that number of channel names equals expected number
+        if self._n_actual_channels != self._n_expected_channels:
+            raise ValueError(
+                'Full list of channel names does not have length equal '
+                'to num_cycles * n_channels_per_cycle; '
+                'n expected channel names = {}, n actual channel names = {}'
+                .format(self._n_expected_channels, self._n_actual_channels)
+            )
+        return self
+
+    @staticmethod
+    def load(data_dir, filename=None):
+        """Load all CODEX related configuration files given a primary data directory"""
+        conf = _load_experiment_config(data_dir, filename if filename else 'experiment.json')
+        return CodexConfigV10(conf)._validate()
+
+
+def load(path):
+    if osp.isdir(path):
+        dirname, filename = path, None
+    else:
+        dirname, filename = osp.dirname(path), osp.basename(path)
+
     version = codex.get_config_version()
     if version == codex.CONFIG_V01:
-        return CodexConfigV1.load(data_dir)
+        return CodexConfigV01.load(dirname, filename)
+    elif version == codex.CONFIG_V10:
+        return CodexConfigV10.load(dirname, filename)
     else:
         raise ValueError(
             'CODEX Version "{}" not supported (determined by env variable {})'

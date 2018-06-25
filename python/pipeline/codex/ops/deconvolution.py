@@ -79,8 +79,10 @@ class CodexDeconvolution(CodexOp):
 
     def __init__(self, config, n_iter=25, scale_factor=.5):
         super(CodexDeconvolution, self).__init__(config)
-        self.n_iter = n_iter
-        self.scale_factor = scale_factor
+
+        params = config.deconvolution_params
+        self.n_iter = params.get('n_iter', n_iter)
+        self.scale_factor = params.get('scale_factor', scale_factor)
         self.algo = None
         self.psfs = None
 

@@ -40,8 +40,11 @@ class CodexFocalPlaneSelector(CodexOp):
         super(CodexFocalPlaneSelector, self).__init__(config)
         self.mqiest = None
         self.graph = None
-        self.patch_size = patch_size
-        self.n_classes = n_classes
+
+        params = config.best_focus_params
+        self.patch_size = params.get('patch_size', patch_size)
+        self.n_classes = params.get('n_classes', n_classes)
+        self.focus_cycle, self.focus_channel = config.get_channel_coordinates(params['channel'])
 
     def initialize(self):
         model_path = codex_data.initialize_best_focus_model()
@@ -57,11 +60,9 @@ class CodexFocalPlaneSelector(CodexOp):
         return self
 
     def _run(self, tile, **kwargs):
-        focus_cycle, focus_channel = self.config.best_focus_reference
-
         # Subset to 3D stack based on reference cycle and channel
         # * tile should have shape (cycles, z, channel, height, width)
-        img = tile[focus_cycle, :, focus_channel, :, :]
+        img = tile[self.focus_cycle, :, self.focus_channel, :, :]
         nz = img.shape[0]
 
         classifications = []

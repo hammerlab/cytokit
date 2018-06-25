@@ -19,12 +19,13 @@ def _validate_mode(mode):
 
 class CodexTileGenerator(CodexOp):
 
-    def __init__(self, config, data_dir, region_index, tile_index, mode='raw'):
+    def __init__(self, config, data_dir, region_index, tile_index, mode='raw', raw_file_type=codex.FT_GRAYSCALE):
         super(CodexTileGenerator, self).__init__(config)
         self.data_dir = data_dir
         self.mode = mode
         self.region_index = region_index
         self.tile_index = tile_index
+        self.raw_file_type = config.tile_generator_params.get('raw_file_type', raw_file_type)
         _validate_mode(self.mode)
 
     def _run(self, *args, **kwargs):
@@ -43,7 +44,7 @@ class CodexTileGenerator(CodexOp):
                     for iz in range(nz):
                         img_path = codex_io.get_raw_img_path(self.region_index, self.tile_index, icyc, ich, iz)
                         img_path = osp.join(self.data_dir, img_path)
-                        img = codex_io.read_raw_microscope_image(img_path)
+                        img = codex_io.read_raw_microscope_image(img_path, self.raw_file_type)
                         if img.ndim != 2:
                             raise ValueError(
                                 'Expecting raw image at path "{}" to have 2 dims but found shape {}'

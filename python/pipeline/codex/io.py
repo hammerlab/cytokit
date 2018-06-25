@@ -6,38 +6,38 @@ import numpy as np
 from collections import namedtuple
 from skimage.external.tifffile import imread, imsave
 
-
-FileFormats = namedtuple('FileFormats', ['raw_image', 'best_focus', 'proc_image', 'expr_file'])
+# Define a list of helpful path formats (i.e. these are common and don't necessarily need to be configured
+# explicitly everywhere)
 FILE_FORMATS = {
-    codex.FF_V01: FileFormats(
+    codex.FF_V01: dict(
         raw_image=osp.join('Cyc{cycle:d}_reg{region:d}', '{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
         best_focus=osp.join('bestFocus', 'reg{region:03d}_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
         proc_image='reg{region:03d}_X{x:02d}_Y{y:02d}.tif',
         expr_file='reg{region:03d}_Expression_{type}.txt'
     ),
     # Proposed format (haven't seen this in the wild yet but it may be coming in the future)
-    codex.FF_V02: FileFormats(
+    codex.FF_V02: dict(
         raw_image=osp.join('Cyc{cycle:d}_reg{region:d}', 'C{channel:03d}_Z{z:03d}_T{cycle:03d}.tif'),
         best_focus=osp.join('bestFocus', 'R{region:03d}_X{x:03d}_Y{y:03d}_Z{z:03d}.tif'),
         proc_image='R{region:03d}_X{x:03d}_Y{y:03d}.tif',
         expr_file='reg{region:03d}_Expression_{type}.txt'
     ),
     # Format for single region, single cycle Keyence experiments
-    codex.FF_V03: FileFormats(
+    codex.FF_V03: dict(
         raw_image=osp.join('Image_{tile:05d}_CH{channel:d}.tif'),
         best_focus=osp.join('bestFocus', 'reg001_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
         proc_image='reg001_X{x:02d}_Y{y:02d}.tif',
         expr_file='reg{region:03d}_Expression_{type}.txt'
     ),
     # Format identical to v01 except for case sensitivity on raw image region name
-    codex.FF_V04: FileFormats(
+    codex.FF_V04: dict(
         raw_image=osp.join('Cyc{cycle:d}_Reg{region:d}', '{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
         best_focus=osp.join('bestFocus', 'reg{region:03d}_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
         proc_image='reg{region:03d}_X{x:02d}_Y{y:02d}.tif',
         expr_file='reg{region:03d}_Expression_{type}.txt'
     ),
     # Another format for single region, single cycle Keyence experiments
-    codex.FF_V05: FileFormats(
+    codex.FF_V05: dict(
         raw_image=osp.join('1_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
         best_focus=osp.join('bestFocus', 'reg001_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
         proc_image='reg001_X{x:02d}_Y{y:02d}.tif',
@@ -47,7 +47,13 @@ FILE_FORMATS = {
 
 
 def _formats():
-    return FILE_FORMATS[codex.get_file_format_version()]
+    # Return pre-defined formats if configured formats is a string key,
+    # otherwise assume the formats are specified as a dictionary compatible
+    # with pre-defined path format dictionaries
+    formats = codex.get_path_formats()
+    if formats in FILE_FORMATS:
+        return FILE_FORMATS[formats]
+    return eval(formats)
 
 
 def save_image(file, image, **kwargs):
@@ -87,31 +93,29 @@ def get_raw_img_path(ireg, itile, icyc, ich, iz):
     args = dict(cycle=icyc + 1, region=ireg + 1, tile=itile + 1, z=iz + 1, channel=ich + 1)
     # Remap indexes of input elements if any explicit overrides have been defined
     args = {k: index_symlinks.get(k, {}).get(v, v) for k, v in args.items()}
-    return _formats().raw_image.format(**args)
+    return _formats()['raw_image'].format(**args)
 
 
 def get_processor_img_path(ireg, tx, ty):
-    return _formats().proc_image.format(region=ireg + 1, x=tx + 1, y=ty + 1)
+    return _formats()['proc_image'].format(region=ireg + 1, x=tx + 1, y=ty + 1)
 
 
 def get_best_focus_img_path(ireg, tx, ty, best_z):
-    return _formats().best_focus.format(region=ireg + 1, x=tx + 1, y=ty + 1, z=best_z + 1)
+    return _formats()['best_focus'].format(region=ireg + 1, x=tx + 1, y=ty + 1, z=best_z + 1)
 
 
 def get_region_expression_path(ireg, typ='Compensated'):
     if typ not in ['Compensated', 'Uncompensated']:
         raise ValueError('Expression file type should be one of "Compensated" or "Uncompensated" (given = "{}")'.format(typ))
-    return _formats().expr_file.format(region=ireg + 1, type=typ)
+    return _formats()['expr_file'].format(region=ireg + 1, type=typ)
 
 
-def get_cytometry_file_path(suffix, ireg, tx, ty):
-    filename = 'reg{region:03d}_X{x:02d}_Y{y:02d}{suffix}'.format(region=ireg + 1, x=tx + 1, y=ty + 1, suffix=suffix)
-    return osp.join('cytometry', filename)
+def get_cytometry_file_path(ireg, tx, ty, suffix):
+    return _formats()['cyto_data'].format(region=ireg + 1, x=tx + 1, y=ty + 1, suffix=suffix)
 
 
-def read_raw_microscope_image(path):
-    file_type = codex.get_raw_file_type()
-    if file_type == codex.FT_STANDARD:
+def read_raw_microscope_image(path, file_type):
+    if file_type == codex.FT_GRAYSCALE:
         return read_image(path)
     elif file_type == codex.FT_KEYENCE_RGB:
         img = read_image(path)

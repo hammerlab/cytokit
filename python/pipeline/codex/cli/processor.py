@@ -16,13 +16,11 @@ class Processor(object):
             self, data_dir, output_dir, 
             region_indexes=None,
             tile_indexes=None,
-            config_dir=None,
+            config_path=None,
             n_workers=None, gpus=None, memory_limit=48e9,
             tile_prefetch_capacity=1,
-            run_tile_generator=True, run_crop=True, run_best_focus=True, run_drift_comp=True,
+            run_tile_generator=True, run_crop=True, run_deconvolution=True, run_best_focus=True, run_drift_comp=True,
             run_summary=True, run_cytometry=True,
-            n_iter_decon=25,
-            scale_factor_decon=.5,
             codex_py_log_level=logging.INFO, 
             tf_py_log_level=logging.ERROR,
             tf_cpp_log_level=logging.ERROR,
@@ -51,7 +49,8 @@ class Processor(object):
                 - tuple: A two-item tuple will be interpreted as a right-open range (e.g. '(1,4)' --> [1, 2, 3]) 
                 - list: A list of integers will be used as is
             tile_indexes: 1-based sequence of tile indexes to process; has same semantics as `region_indexes`
-            config_dir: Directory containing experiment configuration files; defaults to `data_dir` if not given
+            config_path: Either a directory containing a configuration file named "experiment.json" or a path
+                to a single file; If not provided this will default to `data_dir`
             n_workers: Number of tiles to process in parallel; should generally match number of gpus and if
                 the `gpus` argument is given, then the length of that list will be used as a default (otherwise
                 default is 1)
@@ -64,9 +63,6 @@ class Processor(object):
             run_best_focus: Flag indicating that best focal plan selection operations should be executed
             run_drift_comp: Flag indicating that drift compensation should be executed
             run_summary: Flag indicating that tile summary statistics should be computed
-            n_iter_decon: Number of deconvolution iterations (setting this to <= 0 will disable deconvolution)
-            scale_factor_decon: Scale factor to apply to deconvolution results (defaults to .5); This can
-                help post-deconvolution saturation but setting this parameter to 1. would be reasonable as well
             codex_py_log_level: Logging level for CODEX and dependent modules (except TensorFlow); can be
                 specified as string or integer compatible with python logging levels (e.g. 'info', 'debug',
                 'warn', 'error', 'fatal' or corresponding integers)
@@ -93,25 +89,24 @@ class Processor(object):
         gpus = resolve_int_list_arg(gpus)
 
         # Set dynamic defaults
-        if config_dir is None:
-            config_dir = data_dir 
+        if config_path is None:
+            config_path = data_dir
         if n_workers is None:
             # Default to 1 worker given no knowledge of available gpus 
             n_workers = len(gpus) if gpus is not None else 1
 
         # Execute pipeline on localhost
         conf = pipeline.PipelineConfig(
-            region_indexes, tile_indexes, config_dir, data_dir, output_dir,
+            region_indexes, tile_indexes, config_path, data_dir, output_dir,
             n_workers, gpus, memory_limit,
             tile_prefetch_capacity=tile_prefetch_capacity,
             run_crop=run_crop,
+            run_deconvolution=run_deconvolution,
             run_best_focus=run_best_focus,
             run_drift_comp=run_drift_comp,
             run_summary=run_summary,
             run_tile_generator=run_tile_generator,
-            run_cytometry=run_cytometry,
-            n_iter_decon=n_iter_decon,
-            scale_factor_decon=scale_factor_decon
+            run_cytometry=run_cytometry
         )
         data = pipeline.run(conf, logging_init_fn=logging_init_fn)
 

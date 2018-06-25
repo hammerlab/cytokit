@@ -21,7 +21,8 @@ RUN pip --no-cache-dir install \
     papermill \
     plotnine \
     seaborn \
-    keras
+    keras \
+    fcswrite
 
 # OpenCV / Imgaug installation
 RUN apt-get install -y libsm6 libxext6 libfontconfig1 libxrender1

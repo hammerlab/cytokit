@@ -103,6 +103,9 @@ class CodexDriftCompensator(CodexOp):
         self.calculator = None
         self.applier = None
 
+        params = config.drift_compensation_params
+        self.drift_cycle, self.drift_channel = config.get_channel_coordinates(params['channel'])
+
     def initialize(self):
         self.calculator = TranslationCalculator(n_dims=3).initialize()
         self.applier = TranslationApplier(n_dims=4).initialize()
@@ -111,21 +114,18 @@ class CodexDriftCompensator(CodexOp):
     def _get_translations(self, tile):
         ncyc, nch = self.config.n_cycles, self.config.n_channels_per_cycle
 
-        # Determine cycle + channel to be used as reference for compensation
-        drift_cycle, drift_channel = self.config.drift_compensation_reference
-
         # Extract reference from tile that should have shape (cycles, z, channel, height, width)
-        reference_image = tile[drift_cycle, :, drift_channel, :, :]
+        reference_image = tile[self.drift_cycle, :, self.drift_channel, :, :]
 
         # Determine set of cycles to be aligned (everything except reference)
-        target_cycles = list(set(range(ncyc)) - set([drift_cycle]))
+        target_cycles = list(set(range(ncyc)) - {self.drift_cycle})
 
         # Compute translations that need to be applied
         translations = []
         for icyc in target_cycles:
             logger.debug('Calculating drift translation for reference cycle {}, comparison cycle {}'
-                            .format(drift_cycle, icyc))
-            offset_image = tile[icyc, :, drift_channel, :, :]
+                            .format(self.drift_cycle, icyc))
+            offset_image = tile[icyc, :, self.drift_channel, :, :]
             res = self.calculator.run(reference_image, offset_image)
             # Extract dy, dx translation from translation as dz, dy, dx
             translations.append(res['translation'][1:])
@@ -139,13 +139,12 @@ class CodexDriftCompensator(CodexOp):
 
     def _apply_translations(self, tile, translations):
         ncyc, nch = self.config.n_cycles, self.config.n_channels_per_cycle
-        drift_cycle, _ = self.config.drift_compensation_reference
 
         translation_iter = iter(translations)
         img_cyc = []
         for icyc in range(ncyc):
             # Assign translation if processing non-reference cycle (otherwise use noop translation)
-            translation = np.zeros(2) if icyc == drift_cycle else next(translation_iter)
+            translation = np.zeros(2) if icyc == self.drift_cycle else next(translation_iter)
             logger.debug('Applying translation {} to cycle {}'.format(translation, icyc))
 
             # Extract image from tile (ncyc, nz, nch, ny, nx) as (nz, ny, nx, nch) to comply
@@ -170,6 +169,11 @@ class CodexDriftCompensator(CodexOp):
         # Compute drift between reference cycle and all others
         logger.info('Calculating drift translations')
         translations = self._get_translations(tile)
+
+        # If there is only one cycle, then drift compensation is not possible so return the given tile as-is
+        if self.config.n_cycles < 2:
+            logger.debug('Experiment has less than 2 cycles so drift compensation operation will result in no changes')
+            return tile
 
         # Apply translations and convert back to original type from float32
         logger.info('Applying drift translations')

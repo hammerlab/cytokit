@@ -10,18 +10,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_best_z_index(classifications):
-    """Get optimal z index based on quality classifications
-
-    Ties are broken using the index nearest to the center of the sequence
-    of all possible z indexes
-    """
-    nz = len(classifications)
-    best_score = np.min(classifications)
-    top_z = np.argwhere(np.array(classifications) == best_score).ravel()
-    return top_z[np.argmin(np.abs(top_z - (nz // 2)))]
-
-
 class CodexFocalPlaneSelector(CodexOp):
     """Best focal plan selection operation
 
@@ -65,25 +53,31 @@ class CodexFocalPlaneSelector(CodexOp):
         img = tile[self.focus_cycle, :, self.focus_channel, :, :]
         nz = img.shape[0]
 
-        classifications = []
-        probabilities = []
+        scores = []
         for iz in range(nz):
             pred = self.mqiest.predict(img[iz])
-            classifications.append(pred.predictions)
-            probabilities.append(pred.probabilities)
-        best_z = get_best_z_index(classifications)
-        self.record({'classifications': classifications, 'best_z': best_z})
-        logger.debug('Best focal plane: z = {} (classifications: {})'.format(best_z, classifications))
+            # Append n_classes length array of class probabilities ordered from 0 to n_classes
+            # where 0 is the best possible quality and n_classes the worst
+            scores.append(pred.probabilities)
+
+        # Calculate scores as probability weighted sum of class indexes, giving one score per z-plane
+        scores = np.dot(np.array(scores), np.arange(self.n_classes)[::-1])
+        assert len(scores) == nz, \
+            'Expecting {} scores but only {} were found (scores = {})'.format(nz, len(scores), scores)
+        # Determine best z plane as index with highest score
+        best_z = np.argmax(scores)
+        self.record({'scores': scores, 'best_z': best_z})
+        logger.debug('Best focal plane: z = {} (score: {})'.format(best_z, scores.max()))
 
         # Subset tile to best focal plane
         best_focus_tile = tile[:, [best_z], :, :, :]
 
         # Return best focus tile and other context
-        return best_focus_tile, best_z, classifications, probabilities
+        return best_focus_tile, best_z, scores
 
     def save(self, tile_indices, output_dir, data):
         region_index, tile_index, tx, ty = tile_indices
-        best_focus_tile, best_z, classifications, probabilities = data
+        best_focus_tile, best_z, scores = data
         path = codex_io.get_best_focus_img_path(region_index, tx, ty, best_z)
         codex_io.save_tile(osp.join(output_dir, path), best_focus_tile)
         return [path]

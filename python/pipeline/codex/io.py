@@ -113,11 +113,19 @@ def get_region_expression_path(ireg, typ='Compensated'):
     return _formats()['expr_file'].format(region=ireg + 1, type=typ)
 
 
-def get_cytometry_data_file_path(ireg, tx, ty, extension):
-    return _formats()['cyto_data'].format(region=ireg + 1, x=tx + 1, y=ty + 1, extension=extension)
+def get_cytometry_stats_path(ireg, tx, ty):
+    return _formats()['cyto_stats'].format(region=ireg + 1, x=tx + 1, y=ty + 1)
 
 
-def get_cytometry_agg_file_path(extension):
+def get_cytometry_segmentation_path(ireg, tx, ty):
+    return _formats()['cyto_segm_image'].format(region=ireg + 1, x=tx + 1, y=ty + 1)
+
+
+def get_cytometry_mask_path(ireg, tx, ty):
+    return _formats()['cyto_mask_image'].format(region=ireg + 1, x=tx + 1, y=ty + 1)
+
+
+def get_cytometry_agg_path(extension):
     return _formats()['cyto_agg'].format(extension=extension)
 
 

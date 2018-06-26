@@ -3,9 +3,12 @@ import pandas as pd
 from skimage import segmentation
 from skimage import morphology
 from skimage import measure
+from skimage import filters
 from scipy import ndimage
 
 DEFAULT_BATCH_SIZE = 8
+CELL_CHANNEL = 0
+NUCLEUS_CHANNEL = 1
 
 
 class Cytometer(object):
@@ -59,34 +62,39 @@ class Cytometer2D(Cytometer):
         img = morphology.remove_small_objects(img, min_size=min_size)
         return img
 
-    def get_segmentation_mask(self, img_bin_nuci, dilation_factor=0):
+    def get_segmentation_mask(self, img_bin_nuci, img_memb=None, dilation_factor=0):
         if dilation_factor > 0:
-            return morphology.dilation(img_bin_nuci, selem=morphology.disk(dilation_factor))
-        else:
+            img_bin_nuci = morphology.dilation(img_bin_nuci, selem=morphology.disk(dilation_factor))
+        if img_memb is None:
             return img_bin_nuci
 
-    def segment(self, img, nucleus_dilation=8, proba_threshold=.5, min_size=6, batch_size=DEFAULT_BATCH_SIZE):
+        # Construct mask as thresholded membrane image OR binary nucleus mask
+        img_bin_memb = img_memb > filters.threshold_otsu(img_memb)
+        img_bin_memb = img_bin_memb | img_bin_nuci
+        return morphology.remove_small_holes(img_bin_memb, 64)
+
+    def segment(self, img_nuc, img_memb=None, nucleus_dilation=4, proba_threshold=.5, min_size=6, batch_size=DEFAULT_BATCH_SIZE):
         if not self.initialized:
             self.initialize()
 
-        if img.dtype != np.uint8:
-            raise ValueError('Must provide uint8 image not {}'.format(img.dtype))
+        if img_nuc.dtype != np.uint8:
+            raise ValueError('Must provide uint8 image not {}'.format(img_nuc.dtype))
 
         # Add batch dimension if not present
-        if img.ndim == 2:
-            img = np.expand_dims(img, 0)
-        if img.ndim != 3:
-            raise ValueError('Must provide image as NHW or HW (image shape w/ batch dimension = {})'.format(img.shape))
+        if img_nuc.ndim == 2:
+            img = np.expand_dims(img_nuc, 0)
+        if img_nuc.ndim != 3:
+            raise ValueError('Must provide image as NHW or HW (image shape w/ batch dimension = {})'.format(img_nuc.shape))
 
         # Make predictions for each image in batch
-        img_pred = self.model.predict(np.expand_dims(img, -1) / 255., batch_size=batch_size)
-        assert img_pred.shape[0] == img.shape[0], \
-            'Expecting {} predictions (shape = {})'.format(img.shape[0], img_pred.shape)
+        img_pred = self.model.predict(np.expand_dims(img_nuc, -1) / 255., batch_size=batch_size)
+        assert img_pred.shape[0] == img_nuc.shape[0], \
+            'Expecting {} predictions (shape = {})'.format(img_nuc.shape[0], img_pred.shape)
         assert img_pred.shape[-1] == 3, \
             'Expecting 3 outputs in predictions (shape = {})'.format(img_pred.shape)
 
         img_seg_list, img_bin_list = [], []
-        nz = img.shape[0]
+        nz = img_nuc.shape[0]
         for i in range(nz):
             # Extract prediction channels
             img_bin_nuci, img_bin_nucb, img_bin_nucm = [
@@ -102,18 +110,36 @@ class Cytometer2D(Cytometer):
             img_basin = -img_bin_nuci_basin + img_bin_nucb_basin
 
             # Determine the overall mask to segment across by dilating nuclei as an approximation for cytoplasm/membrane
-            seg_mask = self.get_segmentation_mask(img_bin_nuci, dilation_factor=nucleus_dilation)
+            img_bin_mask = self.get_segmentation_mask(
+                img_bin_nuci, img_memb=img_memb[i] if img_memb is not None else None,
+                dilation_factor=nucleus_dilation)
 
-            # Run segmentation and return results
-            img_seg_list.append(segmentation.watershed(img_basin, img_bin_nucm_label, mask=seg_mask))
+            # Run cell segmentation and append to results
+            img_cell_seg = segmentation.watershed(img_basin, img_bin_nucm_label, mask=img_bin_mask)
 
-            # Add all binarized images (which in this case conveniently stack as RGB)
-            img_bin_list.append(np.stack([img_bin_nuci, img_bin_nucb, img_bin_nucm], axis=-1))
+            # Generate nucleus segmentation based on cell segmentation and nucleus mask
+            # (with the same integer labels as in the cell segmentation)
+            img_nuc_seg = ((img_cell_seg > 0) & img_bin_nuci) * img_cell_seg
 
-        assert img.shape[0] == len(img_seg_list) == len(img_bin_list)
-        return np.stack(img_seg_list), img_pred, np.stack(img_bin_list)
+            # Add labeled images to results
+            assert img_cell_seg.dtype == img_nuc_seg.dtype, \
+                'Cell segmentation dtype {} != nucleus segmentation dtype {}'\
+                .format(img_cell_seg.dtype, img_nuc_seg.dtype)
+            img_seg_list.append(np.stack([img_cell_seg, img_nuc_seg], axis=0))
 
-    def quantify(self, tile, cell_segmentation, channel_names=None, channel_name_prefix='ch:'):
+            # Add mask images to results
+            img_bin_list.append(np.stack([img_bin_nuci, img_bin_nucb, img_bin_nucm, img_bin_mask], axis=0))
+
+        assert img_nuc.shape[0] == len(img_seg_list) == len(img_bin_list)
+
+        # Stack final segmentation image as (z, c, h, w)
+        img_seg = np.stack(img_seg_list, axis=0)
+        img_bin = np.stack(img_bin_list, axis=0)
+
+        # Return (in this order) labeled volumes, prediction volumes, mask volumes
+        return img_seg, img_pred, img_bin
+
+    def quantify(self, tile, img_seg, channel_names=None, channel_name_prefix='ch:'):
         ncyc, nz, _, nh, nw = tile.shape
 
         # Move cycles and channels to last axes (in that order)
@@ -136,18 +162,32 @@ class Cytometer2D(Cytometer):
 
         res = []
         for iz in range(nz):
-            props = measure.regionprops(cell_segmentation[iz])
-            for i, prop in enumerate(props):
+            cell_props = measure.regionprops(img_seg[iz][CELL_CHANNEL], cache=False)
+            nuc_props = measure.regionprops(img_seg[iz][NUCLEUS_CHANNEL], cache=False)
+            assert len(cell_props) == len(nuc_props), \
+                'Expecting cell and nucleus properties to have same length (nuc props = {}, cell props = {})'\
+                .format(len(nuc_props), len(cell_props))
+
+            for i in range(len(cell_props)):
+                cell_prop, nuc_prop = cell_props[i], nuc_props[i]
+                assert cell_prop.label == nuc_prop.label, \
+                    'Expecting equal labels for cell and nucleus (nuc label = {}, cell label = {})'\
+                    .format(nuc_prop.label, cell_prop.label)
+
                 # Get a (n_pixels, n_channels) array of intensity values associated with
                 # this region and then average across n_pixels dimension
-                intensities = tile[iz][prop.coords[:, 0], prop.coords[:, 1]].mean(axis=0)
+                intensities = tile[iz][cell_prop.coords[:, 0], cell_prop.coords[:, 1]].mean(axis=0)
                 assert intensities.ndim == 1
                 assert len(intensities) == nch
-                row = [prop.label, prop.centroid[1], prop.centroid[0], iz, prop.area, prop.solidity]
+                row = [
+                    cell_prop.label, cell_prop.centroid[1], cell_prop.centroid[0], iz,
+                    cell_prop.area, cell_prop.solidity, nuc_prop.area, nuc_prop.solidity
+                ]
                 row += list(intensities)
                 res.append(row)
 
-        return pd.DataFrame(res, columns=['id', 'x', 'y', 'z', 'area', 'solidity'] + channel_names)
+        columns = ['id', 'x', 'y', 'z', 'cell_size', 'cell_solidity', 'nucleus_size', 'nucleus_solidity']
+        return pd.DataFrame(res, columns=columns + channel_names)
 
 
 class Cytometer3D(Cytometer):
@@ -168,7 +208,7 @@ class Cytometer3D(Cytometer):
         else:
             return img_bin_nuci
 
-    def segment(self, img, nucleus_dilation=8, proba_threshold=.5, min_size=6, batch_size=DEFAULT_BATCH_SIZE):
+    def segment(self, img, nucleus_dilation=4, proba_threshold=.5, min_size=6, batch_size=DEFAULT_BATCH_SIZE):
         if not self.initialized:
             self.initialize()
 

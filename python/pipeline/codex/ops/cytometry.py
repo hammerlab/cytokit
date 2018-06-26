@@ -65,12 +65,17 @@ class Cytometry(codex_op.CodexOp):
         return self
 
     def _run_2d(self, tile):
+        # Tile should have shape (cycles, z, channel, height, width)
         nuc_cycle = self.nuc_channel_coords[0]
         nuc_channel = self.nuc_channel_coords[1]
-
-        # Tile should have shape (cycles, z, channel, height, width)
         img_nuc = tile[nuc_cycle, :, nuc_channel]
-        img_seg, _, _ = self.cytometer.segment(img_nuc, **self.segmentation_params)
+
+        if self.mem_channel_coords is not None:
+            memb_cycle = self.nuc_channel_coords[0]
+            memb_channel = self.nuc_channel_coords[1]
+            img_memb = tile[memb_cycle, :, memb_channel]
+
+        img_seg, img_pred, img_bin = self.cytometer.segment(img_nuc, img_memb=img_memb, **self.segmentation_params)
 
         # Ensure segmentation image is of integer type and >= 0
         assert np.issubdtype(img_seg.dtype, np.integer), \
@@ -89,60 +94,60 @@ class Cytometry(codex_op.CodexOp):
 
         # Create overlay image of nucleus channel and boundaries and convert to 5D
         # shape to conform with usual tile convention
-        img_boundary = _overlay_boundaries(img_nuc, img_seg)
-        assert img_boundary.ndim == 3
-        img_boundary = img_boundary[np.newaxis, :, np.newaxis, :, :]
 
-        # Convert segmentation image to uint16 (from int32) and also conform to 5D standard
-        assert img_seg.ndim == 3
-        img_seg = img_seg[np.newaxis, :, np.newaxis, :, :].astype(np.uint16)
+        img_boundary = np.stack([
+            _find_boundaries(img_seg[:, i], as_binary=False)
+            for i in range(img_seg.shape[1])
+        ], axis=1)
+        assert img_boundary.ndim == 4, 'Expecting 4D image, got shape {}'.format(img_boundary.shape)
 
-        return img_seg, img_boundary, stats
+        # Stack labeled volumes to 5D tiles and convert to uint16
+        img_label = np.stack([img_seg, img_boundary], axis=0).astype(np.uint16)
+
+        # Add cycle axis to mask volumes to give 5D tile as uint8
+        img_bin = (img_bin[np.newaxis] * np.iinfo(np.uint8).max).astype(np.uint8)
+
+        return img_label, img_bin, stats
 
     def _run(self, tile, **kwargs):
         return self._run_2d(tile)
 
     def save(self, tile_indices, output_dir, data):
         region_index, tile_index, tx, ty = tile_indices
-        img_seg, img_boundary, stats = data
+        img_label, img_bin, stats = data
 
-        seg_tile_path = codex_io.get_cytometry_data_file_path(region_index, tx, ty, 'seg.tif')
-        codex_io.save_tile(osp.join(output_dir, seg_tile_path), img_seg)
+        label_tile_path = codex_io.get_cytometry_segmentation_path(region_index, tx, ty)
+        codex_io.save_tile(osp.join(output_dir, label_tile_path), img_label)
 
-        viz_tile_path = codex_io.get_cytometry_data_file_path(region_index, tx, ty, 'viz.tif')
-        codex_io.save_tile(osp.join(output_dir, viz_tile_path), img_boundary)
+        mask_tile_path = codex_io.get_cytometry_mask_path(region_index, tx, ty)
+        codex_io.save_tile(osp.join(output_dir, mask_tile_path), img_bin)
 
         # Append useful metadata to cytometry stats (align these names to those used in config.TileDims)
         stats.insert(0, 'tile_y', ty)
         stats.insert(0, 'tile_x', tx)
         stats.insert(0, 'tile_index', tile_index)
         stats.insert(0, 'region_index', region_index)
-        stats_path = codex_io.get_cytometry_data_file_path(region_index, tx, ty, 'csv')
+        stats_path = codex_io.get_cytometry_stats_path(region_index, tx, ty)
         stats.to_csv(osp.join(output_dir, stats_path), index=False)
 
-        return seg_tile_path, viz_tile_path, stats_path
+        return label_tile_path, mask_tile_path, stats_path
 
 
-def _overlay_boundaries(img, img_seg):
-    """Overlay labeled image into another
+def _find_boundaries(img, as_binary=False):
+    """Identify boundaries in labeled image volume
 
     Args:
-        img: Any image
-        img_seg: A labeled segmentation image (of some integer type) that must be equal in trailing dimensions
-            to the `img` array
+        img: A labeled 3D volume with shape (z, h, w)
+        as_binary: Flag indicating whether to return binary boundary image or labeled boundaries
     """
-    from skimage import exposure, segmentation
-
-    # Copy and rescale to uint8 with one entry left at top of range
-    res = exposure.rescale_intensity(img.copy(), out_range=(0, 254)).astype(np.uint8)
+    from skimage import segmentation
+    assert img.ndim == 3, 'Expecting 3D volume but got image with shape {}'.format(img.shape)
 
     # Find boundaries (per z-plane since find_boundaries is buggy in 3D)
-    img_border = np.stack([
-        segmentation.find_boundaries(img_seg[i], mode='inner', background=img_seg.min())
-        for i in range(img_seg.shape[0])
+    res = np.stack([
+        segmentation.find_boundaries(img[i], mode='inner', background=img.min())
+        for i in range(img.shape[0])
     ], axis=0)
 
-    mask = img_border > 0
-    mask = np.broadcast_to(mask, img.shape)
-    res[mask] = 255
-    return res
+    return res if as_binary else res * img
+

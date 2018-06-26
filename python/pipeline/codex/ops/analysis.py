@@ -106,7 +106,7 @@ class CytometryStatisticsAggregation(AnalysisOp):
         # Export result as csv
         csv_path, fcs_path = None, None
         if export_csv:
-            csv_path = osp.join(output_dir, codex_io.get_cytometry_agg_file_path(ext('csv')))
+            csv_path = osp.join(output_dir, codex_io.get_cytometry_agg_path(ext('csv')))
             res.to_csv(csv_path, index=False)
             logger.info('Saved cytometry aggregation results to csv at "{}"'.format(csv_path))
         if export_fcs:

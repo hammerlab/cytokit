@@ -90,8 +90,8 @@ class Config(object):
         if channel_name not in self.channel_names:
             raise ValueError('Channel "{}" is not configured channel list {}'.format(channel_name, self.channel_names))
         i = self.channel_names.index(channel_name)
-        cycle_index = i // self.n_cycles
-        ch_index = i % self.n_cycles
+        cycle_index = i // self.n_channels_per_cycle
+        ch_index = i % self.n_channels_per_cycle
         return cycle_index, ch_index
 
 
@@ -128,7 +128,7 @@ class CodexConfigV10(Config):
 
     @property
     def n_channels_per_cycle(self):
-        return len(self._conf['acquisition']['channel_names'])
+        return len(self._conf['acquisition']['per_cycle_channel_names'])
 
     @property
     def tile_width(self):

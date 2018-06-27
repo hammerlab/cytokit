@@ -182,7 +182,7 @@ def read_raw_microscope_image(path, file_type):
         if img.ndim != 3:
             raise ValueError(
                 'With {} file types enabled, raw image at path "{}" should have 3 dims (shape = {})'
-                .format(file_type, img.shape)
+                .format(file_type, path, img.shape)
             )
         # Compute image sum for each channel giving 3 item vector
         ch_sum = np.squeeze(np.apply_over_axes(np.sum, img, [0, 1]))

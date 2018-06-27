@@ -108,7 +108,7 @@ class Cytometer2D(Cytometer):
             img_bin_nucm_label = morphology.label(img_bin_nucm)
             img_bin_nuci_basin = ndimage.distance_transform_edt(img_bin_nuci)
             img_bin_nucb_basin = ndimage.distance_transform_edt(img_bin_nucb)
-            img_basin = -img_bin_nuci_basin + img_bin_nucb_basin
+            img_basin = img_bin_nucb_basin - img_bin_nuci_basin
 
             # Determine the overall mask to segment across by dilating nuclei as an approximation for cytoplasm/membrane
             img_bin_mask = self.get_segmentation_mask(

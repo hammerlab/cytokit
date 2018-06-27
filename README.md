@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/hammerlab/codex.svg?branch=master)](https://travis-ci.org/hammerlab/codex)
+[![Build Status](https://travis-ci.org/hammerlab/cytokit.svg?branch=master)](https://travis-ci.org/hammerlab/cytokit)
 [![Coverage Status](https://coveralls.io/repos/github/hammerlab/codex/badge.svg?branch=master)](https://coveralls.io/github/hammerlab/codex?branch=master)
 
 ## Cytokit

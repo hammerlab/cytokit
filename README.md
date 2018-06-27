@@ -37,7 +37,7 @@ but would support any imaging process that produces tiled images with a specific
 One of the major goals of Cytokit is to make it as easy as possible to reproduce complicated workflows on big image datasets and to that end, the majority of the logic that
 drives how Cytokit functions is determined by json/yaml configurations like this:
 
-```
+```yaml
 name: '20180614_TCell_CD4_CD8'
 date: '2018-06-14 00:00:00'
 
@@ -103,7 +103,7 @@ analysis:
 
 A fairly detailed configuration like the above could be used in conjunction with the CLI to run all configured operations or they can also be run in more composable, ad-hoc ways like this (based on [Python-Fire](https://github.com/google/python-fire)) :
 
-```
+```bash
 export EXPERIMENT_DIR=/data/20180614_TCell_CD4_CD8
 
 # Pre-process, create visualization, and export cytometry stats

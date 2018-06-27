@@ -57,6 +57,6 @@ ENV PYTHONWARNINGS "ignore::FutureWarning:h5py"
 
 # Create cli links at runtime instead of container buildtime due to source scripts being
 # in repos mounted at runtime
-CMD chmod a+x $CODEX_REPO_DIR/python/pipeline/codex/cli/processor.py && \
-    ln -s $CODEX_REPO_DIR/python/pipeline/codex/cli/processor.py /usr/local/bin/ctk-processor && \
+CMD chmod a+x $CODEX_REPO_DIR/python/pipeline/codex/cli/cytokit.py && \
+    ln -s $CODEX_REPO_DIR/python/pipeline/codex/cli/cytokit.py /usr/local/bin/cytokit && \
     jupyter lab --allow-root

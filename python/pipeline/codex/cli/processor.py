@@ -115,6 +115,8 @@ class Processor(cli.DataCLI):
             path = cli.record_processor_data(data, output_dir)
             logging.info('Operation summary data saved to "%s"', path)
 
+        return self
+
     def _get_function_configs(self):
         raise NotImplementedError()
 

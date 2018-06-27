@@ -126,16 +126,16 @@ analysis aggregate_cytometry_statistics \
 ```
 
 For the above case specifically, this roughly translates to:
-- Load the 25 raw 3D image tiles (on a 5x5 grid), each with dimensions (25, 1008, 1344) in ZHW format
+- Load the 25 raw 3D image tiles (on a 5x5 grid), each with dimensions (25, 3, 1008, 1344) in ZCHW format
 - Determine the best focal planes, apply deconvolution, crop off overlap, etc.
 - Run cell segmentation model to determine cell and nucleus boundaries
 - Extract some raw, processed, and segmented data (whatever channels you want) from each tile and put it all in new ones
 - Montage all the results together
 - Export csvs and fcs
 
-After that, you could load the now 5,040 x 6,720 montage image into ImageJ, fiddle with some color/contrast settings, and then get fairly informative images like this:
+After that, you could load the 6 channel 5,040 x 6,720 montage image into ImageJ, fiddle with some color/contrast settings on the channels, and then get fairly informative images like this:
 
-<img src="docs/images/cytokit_tcell_example.png" width="959" height="560"/>
+<img src="docs/images/cytokit_tcell_example.png" width="727" height="424"/>
 
 *These are mostly isolated t-cells with nuclei and cell borders overlayed on 3 channels:*
 
@@ -148,11 +148,11 @@ Additionally, stats on those cells and associated signal intensities would be ag
 |              |            |        |        |    |                    |                    |   |           |                    |              |                    |                    |                    |                   |        | 
 |--------------|------------|--------|--------|----|--------------------|--------------------|---|-----------|--------------------|--------------|--------------------|--------------------|--------------------|-------------------|--------| 
 | region_index | tile_index | tile_x | tile_y | id | x                  | y                  | z | cell_size | cell_solidity      | nucleus_size | nucleus_solidity   | ch:DAPI            | ch:CD4             | ch:CD8            | best_z | 
-| 0            | 0          | 0      | 0      | 1  | 68.50143266475645  | 6.014326647564469  | 4 | 349       | 0.9748603351955308 | 99           | 0.9801980198019802 | 80.40687679083095  | 30.555873925501434 | 93.87106017191977 | 4      | 
-| 0            | 0          | 0      | 0      | 2  | 1209.9765625       | 8.228515625        | 4 | 512       | 0.9678638941398866 | 180          | 0.9782608695652174 | 74.873046875       | 87.59765625        | 61.416015625      | 4      | 
-| 0            | 0          | 0      | 0      | 3  | 1224.5             | 0.0                | 4 | 12        | 1.0                | 4            | 1.0                | 73.75              | 82.41666666666667  | 64.41666666666667 | 4      | 
-| 0            | 0          | 0      | 0      | 4  | 1250.3039999999999 | 3.2960000000000003 | 4 | 125       | 0.9689922480620154 | 21           | 0.9545454545454546 | 49.608000000000004 | 108.024            | 85.336            | 4      | 
-| 0            | 0          | 0      | 0      | 5  | 5.986547085201794  | 7.6188340807174875 | 4 | 223       | 0.9653679653679652 | 72           | 0.935064935064935  | 57.309417040358746 | 25.00896860986547  | 36.68609865470852 | 4      | 
+| 0            | 0          | 0      | 0      | 1  | 68.501  | 6.014  | 4 | 349       | 0.974 | 99           | 0.980 | 80.406  | 30.555 | 93.871 | 4      | 
+| 0            | 0          | 0      | 0      | 2  | 1209.9765625       | 8.228        | 4 | 512       | 0.967 | 180          | 0.978 | 74.873       | 87.59765625        | 61.416015625      | 4      | 
+| 0            | 0          | 0      | 0      | 3  | 1224.5             | 0.0                | 4 | 12        | 1.0                | 4            | 1.0                | 73.75              | 82.416  | 64.416 | 4      | 
+| 0            | 0          | 0      | 0      | 4  | 1250.303 | 3.296 | 4 | 125       | 0.968 | 21           | 0.954 | 49.608 | 108.024            | 85.336            | 4      | 
+| 0            | 0          | 0      | 0      | 5  | 5.986  | 7.618 | 4 | 223       | 0.965 | 72           | 0.935  | 57.309 | 25.008  | 36.686 | 4      | 
 
 
 ### Installation

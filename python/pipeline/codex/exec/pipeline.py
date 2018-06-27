@@ -187,8 +187,8 @@ def process_tile(tile, tile_indices, ops, log_fn, output_dir):
     if ops.focus_op:
         # Used the cropped, but un-deconvolved tile for focal plane selection
         best_focus_data = ops.focus_op.run(crop_tile)
-        paths = ops.focus_op.save(tile_indices, output_dir, best_focus_data)
-        log_fn('Focal plane selection complete; 2D tile saved to "{}"'.format(paths[-1]), best_focus_data[0])
+        ops.focus_op.save(tile_indices, output_dir, best_focus_data)
+        log_fn('Focal plane selection complete', best_focus_data[0])
     else:
         log_fn('Skipping focal plane selection')
 

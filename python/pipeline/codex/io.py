@@ -131,6 +131,7 @@ def get_raw_img_path(ireg, itile, icyc, ich, iz):
 FMT_PROC_IMAGE = 'proc_image'
 FMT_PROC_DATA = 'proc_data'
 FMT_PROC_EXEC = 'proc_exec'
+FMT_FOCUS_IMAGE = 'best_focus_image'
 FMT_CYTO_IMAGE = 'cyto_image'
 FMT_CYTO_AGG = 'cyto_agg'
 FMT_CYTO_STATS = 'cyto_stats'
@@ -146,11 +147,7 @@ def get_processor_img_path(ireg, tx, ty):
 
 
 def get_best_focus_img_path(ireg, tx, ty, best_z):
-    return _formats()['best_focus_image'].format(region=ireg + 1, x=tx + 1, y=ty + 1, z=best_z + 1)
-
-
-def get_best_focus_montage_path(ireg):
-    return _formats()['best_focus_montage'].format(region=ireg + 1)
+    return _formats()[FMT_FOCUS_IMAGE].format(region=ireg + 1, x=tx + 1, y=ty + 1, z=best_z + 1)
 
 
 def get_cytometry_stats_path(ireg, tx, ty):

@@ -19,12 +19,13 @@ class CodexFocalPlaneSelector(CodexOp):
             in originating classifier project
         n_classes: number of different quality strata to predict logits for; defaults to 11, same as default
             in originating classifier project
+        save_tile: Indicates whether or not best-focus tiles (with single z-plane) should be saved; default false
 
     Note:
         See https://github.com/google/microscopeimagequality for more details on the classifier used by this operation
     """
 
-    def __init__(self, config, patch_size=84, n_classes=11):
+    def __init__(self, config, patch_size=84, n_classes=11, save_tile=False):
         super(CodexFocalPlaneSelector, self).__init__(config)
         self.mqiest = None
         self.graph = None
@@ -33,6 +34,7 @@ class CodexFocalPlaneSelector(CodexOp):
         self.patch_size = params.get('patch_size', patch_size)
         self.n_classes = params.get('n_classes', n_classes)
         self.focus_cycle, self.focus_channel = config.get_channel_coordinates(params['channel'])
+        self.save_tile = params.get('save_tile', save_tile)
 
     def initialize(self):
         model_path = codex_data.initialize_best_focus_model()
@@ -79,5 +81,6 @@ class CodexFocalPlaneSelector(CodexOp):
         region_index, tile_index, tx, ty = tile_indices
         best_focus_tile, best_z, scores = data
         path = codex_io.get_best_focus_img_path(region_index, tx, ty, best_z)
-        codex_io.save_tile(osp.join(output_dir, path), best_focus_tile)
+        if self.save_tile:
+            codex_io.save_tile(osp.join(output_dir, path), best_focus_tile)
         return [path]

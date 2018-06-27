@@ -82,16 +82,16 @@ operator:
     # For example, this operation will extract the raw verion of the DAPI channel, the deconvolved/cleanup-version of the same image,
     # and processed versions of the CD4 and CD8 channels as well as labeled cell and nucleus boundary volumes before combining them
     # back together again in a new dataset (and this will all be scoped to only the z-planes assessed to have the best focus)
-	- extract:
-	    name: viz_extract
-	    channels: ['raw_dapi','proc_dapi','proc_cd4','proc_cd8','cyto_cell_boundary','cyto_nucleus_boundary']
-	    z: best
+  - extract:
+      name: viz_extract
+      channels: ['raw_dapi','proc_dapi','proc_cd4','proc_cd8','cyto_cell_boundary','cyto_nucleus_boundary']
+      z: best
 
-	# Next, this step will take all of the newly merged images above and "montage" them together, which in this case means 
-	# reconstructing the 5x5 grid of images that were all taken separately with the microscope
-	- montage:
-	    name: viz_extract_montage
-	    extract_name: viz_extract
+  # Next, this step will take all of the newly merged images above and "montage" them together, which in this case means 
+  # reconstructing the 5x5 grid of images that were all taken separately with the microscope
+  - montage:
+      name: viz_extract_montage
+      extract_name: viz_extract
 
 # Similarly, "Analysis" operations can do helpful things like run parameterized notebooks that demonstrate how much each tile
 # was adjusted during drift compensation or show channel intensity boxplots over the tiles as way to identify over/under exposure

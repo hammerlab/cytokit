@@ -6,7 +6,7 @@ from codex.exec import pipeline
 from codex import cli
 
 
-class Processor(cli.CLI):
+class Processor(cli.DataCLI):
 
     def run(self,
             output_dir,
@@ -114,6 +114,9 @@ class Processor(cli.CLI):
         if record_data:
             path = cli.record_processor_data(data, output_dir)
             logging.info('Operation summary data saved to "%s"', path)
+
+    def _get_function_configs(self):
+        raise NotImplementedError()
 
 
 if __name__ == '__main__':

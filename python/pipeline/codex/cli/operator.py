@@ -5,11 +5,12 @@ import numpy as np
 import pandas as pd
 from codex import config as codex_config
 from codex.ops import cytometry
-from codex.ops import analysis
 from codex.ops import tile_generator
 from codex.ops import tile_crop
 from codex import io as codex_io
 from codex import cli
+from codex.function import core
+from codex.function import data as function_data
 import logging
 
 CH_SRC_RAW = 'raw'
@@ -73,7 +74,7 @@ def _get_z_slice_fn(z, data_dir):
 
     # Look for keyword strings
     if isinstance(z, str) and z == 'best':
-        map = analysis.get_best_focus_coord_map(data_dir)
+        map = function_data.get_best_focus_coord_map(data_dir)
         return lambda ri, tx, ty: [map[(ri, tx, ty)]]
     if isinstance(z, str) and z == 'all':
         return lambda ri, tx, ty: slice(None)
@@ -94,7 +95,10 @@ def _get_tile_locations(config, region_indexes, tile_indexes):
     return res
 
 
-class Operator(cli.CLI):
+class Operator(cli.DataCLI):
+
+    def _get_function_configs(self):
+        return self.config.operator_params
 
     def extract(self, name, channels, z='best', region_indexes=None, tile_indexes=None):
         """Create a new data extraction include either raw, processed, or cytometric imaging data
@@ -123,7 +127,7 @@ class Operator(cli.CLI):
         region_indexes = cli.resolve_index_list_arg(region_indexes, zero_based=True)
         tile_indexes = cli.resolve_index_list_arg(tile_indexes, zero_based=True)
 
-        logging.info('Creating extraction "{}" ...'.format(name))
+        logging.info('Creating extraction "%s"', name)
 
         tile_locations = _get_tile_locations(self.config, region_indexes, tile_indexes)
 
@@ -170,6 +174,13 @@ class Operator(cli.CLI):
             codex_io.save_tile(extract_path, extract_tile)
 
         logging.info('Extraction complete (results saved to %s)', osp.dirname(extract_path) if extract_path else None)
+        return self
+
+    def montage(self, name, extract_name, region_indexes=None):
+        logging.info('Creating montage "%s" from extraction "%s"', name, extract_name)
+        region_indexes = cli.resolve_index_list_arg(region_indexes, zero_based=True)
+        core.create_montage(self.data_dir, self.config, extract_name, name, region_indexes)
+        return self
 
 
 if __name__ == '__main__':

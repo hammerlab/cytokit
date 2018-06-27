@@ -171,7 +171,7 @@ class CodexConfigV10(Config):
         Returns:
             (cycle, channel) - 0-based indexes for cycle and channel
         """
-        return self.get_channel_coordinates(self._conf['operation']['drift_compensation']['channel'])
+        return self.get_channel_coordinates(self._conf['processor']['drift_compensation']['channel'])
 
     @property
     def best_focus_reference(self):
@@ -179,34 +179,38 @@ class CodexConfigV10(Config):
         Returns:
             (cycle, channel) - 0-based indexes for cycle and channel
         """
-        return self.get_channel_coordinates(self._conf['operation']['best_focus']['channel'])
+        return self.get_channel_coordinates(self._conf['processor']['best_focus']['channel'])
 
-    def _op_params(self, op):
-        return self._conf['operation'].get(op, {})
+    def _processor_params(self, op):
+        return self._conf['processor'].get(op, {})
 
     @property
     def tile_generator_params(self):
-        return self._op_params('tile_generator')
+        return self._processor_params('tile_generator')
 
     @property
     def drift_compensation_params(self):
-        return self._op_params('drift_compensation')
+        return self._processor_params('drift_compensation')
 
     @property
     def best_focus_params(self):
-        return self._op_params('best_focus')
+        return self._processor_params('best_focus')
 
     @property
     def deconvolution_params(self):
-        return self._op_params('deconvolution')
+        return self._processor_params('deconvolution')
 
     @property
     def cytometry_params(self):
-        return self._op_params('cytometry')
+        return self._processor_params('cytometry')
 
     @property
     def analysis_params(self):
-        return self._conf['analysis']
+        return self._conf.get('analysis', [])
+
+    @property
+    def operator_params(self):
+        return self._conf.get('operator', [])
 
     @property
     def _n_actual_channels(self):

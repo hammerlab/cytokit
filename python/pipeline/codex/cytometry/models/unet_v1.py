@@ -1,5 +1,5 @@
 import keras
-
+import numpy as np
 
 DEFAULT_CONV_ARGS = {"padding": "same", 'kernel_initializer': 'he_normal'}
 DEFAULT_BN_ARGS = {'momentum': 0.9}

@@ -106,11 +106,30 @@ def get_logging_init_fn(py_log_level, tf_py_log_level, tf_cpp_log_level):
 
 class CLI(object):
 
+    def __init__(self, py_log_level=logging.INFO,
+                 tf_py_log_level=logging.ERROR,
+                 tf_cpp_log_level=logging.ERROR):
+        """CLI Initialization
+
+        Args:
+            py_log_level: Logging level for CODEX and dependent modules (except TensorFlow); can be
+                specified as string or integer compatible with python logging levels (e.g. 'info', 'debug',
+                'warn', 'error', 'fatal' or corresponding integers); default is 'info'
+            tf_py_log_level: TensorFlow python logging level; same semantics as `py_log_level`; default is 'error'
+            tf_cpp_log_level: TensorFlow C++ logging level; same semantics as `py_log_level`; default is 'error'
+        """
+        # Get and run logging initializer
+        self._logging_init_fn = get_logging_init_fn(py_log_level, tf_py_log_level, tf_cpp_log_level)
+        self._logging_init_fn()
+
+
+class DataCLI(CLI):
+
     def __init__(self,
                  data_dir, config_path=None,
                  py_log_level=logging.INFO,
                  tf_py_log_level=logging.ERROR,
-                 tf_cpp_log_level=logging.ERROR,):
+                 tf_cpp_log_level=logging.ERROR):
         """CLI Initialization
 
         Args:
@@ -124,9 +143,20 @@ class CLI(object):
             tf_py_log_level: TensorFlow python logging level; same semantics as `py_log_level`; default is 'error'
             tf_cpp_log_level: TensorFlow C++ logging level; same semantics as `py_log_level`; default is 'error'
         """
+        super(DataCLI, self).__init__(py_log_level, tf_py_log_level, tf_cpp_log_level)
         self.config = get_config(config_path or data_dir)
         self.data_dir = data_dir
 
-        # Get and run logging initializer
-        self._logging_init_fn = get_logging_init_fn(py_log_level, tf_py_log_level, tf_cpp_log_level)
-        self._logging_init_fn()
+    def run_all(self):
+        for config in self._get_function_configs():
+            if 'enabled' in config and not config['enabled']:
+                logging.debug('Skipping explicitly disabled processing function %s', config)
+                continue
+            config.pop('enabled', None)
+            if len(config) != 1:
+                raise ValueError('Processing function configuration "%s" is not valid (should only have 1 key)', config)
+            op = list(config.keys())[0]
+            if not hasattr(self, op):
+                raise ValueError('Processing function name "%s" is invalid', op)
+            logging.info('Running operation "%s" with arguments "%s"', op, config[op])
+            getattr(self, op)(**config[op])

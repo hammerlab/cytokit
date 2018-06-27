@@ -76,7 +76,7 @@ def read_image(file):
         return imread(file)
 
 
-def read_tile(file, config):
+def read_tile(file, config=None):
     """Read a codex-specific 5D image tile
 
     Technical Note: This is a fairly complex process as it is necessary to deal with the fact that files
@@ -132,6 +132,7 @@ FMT_PROC_IMAGE = 'proc_image'
 FMT_PROC_DATA = 'proc_data'
 FMT_PROC_EXEC = 'proc_exec'
 FMT_FOCUS_IMAGE = 'best_focus_image'
+FMT_MONTAGE_IMAGE = 'montage_image'
 FMT_CYTO_IMAGE = 'cyto_image'
 FMT_CYTO_AGG = 'cyto_agg'
 FMT_CYTO_STATS = 'cyto_stats'
@@ -164,6 +165,10 @@ def get_cytometry_agg_path(extension):
 
 def get_extract_image_path(ireg, tx, ty, name):
     return _formats()[FMT_EXTRACT_IMAGE].format(region=ireg + 1, x=tx + 1, y=ty + 1, name=name)
+
+
+def get_montage_image_path(ireg, name):
+    return _formats()[FMT_MONTAGE_IMAGE].format(region=ireg + 1, name=name)
 
 
 def get_processor_data_path():

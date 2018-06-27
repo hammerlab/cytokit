@@ -101,13 +101,8 @@ class Processor(object):
             record_data: Flag indicating whether or not summary information from each operation
                 performed should be included within a file in the output directory; defaults to True
         """
-        # Load experiment configuration and "register" the environment meaning that any variables not
-        # explicitly defined by env variables should set based on what is present in the configuration
-        # (it is crucial that this happen first)
-        if not config_path:
-            config_path = data_dir
-        exp_config = codex_config.load(config_path)
-        exp_config.register_environment()
+        # Load experiment configuration
+        config = cli.get_config(config_path or data_dir)
 
         # Initialize logging (use a callable function for passing to spawned processes in pipeline)
         def logging_init_fn():
@@ -121,9 +116,9 @@ class Processor(object):
             logging.info('Execution arguments and environment saved to "%s"', path)
 
         # Resolve arguments with multiple supported forms
-        region_indexes = resolve_int_list_arg(region_indexes)
-        tile_indexes = resolve_int_list_arg(tile_indexes)
-        gpus = resolve_int_list_arg(gpus)
+        region_indexes = cli.resolve_int_list_arg(region_indexes)
+        tile_indexes = cli.resolve_int_list_arg(tile_indexes)
+        gpus = cli.resolve_int_list_arg(gpus)
 
         # Set other dynamic defaults
         if n_workers is None:
@@ -131,8 +126,8 @@ class Processor(object):
             n_workers = len(gpus) if gpus is not None else 1
 
         # Execute pipeline on localhost
-        conf = pipeline.PipelineConfig(
-            exp_config, region_indexes, tile_indexes, data_dir, output_dir,
+        pl_config = pipeline.PipelineConfig(
+            config, region_indexes, tile_indexes, data_dir, output_dir,
             n_workers, gpus, memory_limit,
             tile_prefetch_capacity=tile_prefetch_capacity,
             run_crop=run_crop,
@@ -143,25 +138,11 @@ class Processor(object):
             run_tile_generator=run_tile_generator,
             run_cytometry=run_cytometry
         )
-        data = pipeline.run(conf, logging_init_fn=logging_init_fn)
+        data = pipeline.run(pl_config, logging_init_fn=logging_init_fn)
 
         if record_data:
             path = cli.record_processor_data(data, output_dir)
             logging.info('Operation summary data saved to "%s"', path)
-
-
-def resolve_int_list_arg(arg):
-    """Resolve a CLI argument as a list of integers"""
-    if arg is None:
-        return None
-    if isinstance(arg, int):
-        return [arg]
-    if isinstance(arg, str):
-        return [int(arg)]
-    if isinstance(arg, tuple):
-        # Interpret as range (ignore any other items in tuple beyond second)
-        return list(range(arg[0], arg[1]))
-    return arg
 
 
 if __name__ == '__main__':

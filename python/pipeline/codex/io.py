@@ -62,6 +62,13 @@ def save_image(file, image, **kwargs):
     imsave(file, image, imagej=True, **kwargs)
 
 
+def save_csv(file, df, **kwargs):
+    """Save image array in ImageJ-compatible format"""
+    if not osp.exists(osp.dirname(file)):
+        os.makedirs(osp.dirname(file), exist_ok=True)
+    df.to_csv(file, **kwargs)
+
+
 def read_image(file):
     # Ignore tiff metadata warnings from skimage
     with warnings.catch_warnings():
@@ -118,15 +125,15 @@ def get_cytometry_stats_path(ireg, tx, ty):
 
 
 def get_cytometry_segmentation_path(ireg, tx, ty):
-    return _formats()['cyto_segm_image'].format(region=ireg + 1, x=tx + 1, y=ty + 1)
-
-
-def get_cytometry_mask_path(ireg, tx, ty):
-    return _formats()['cyto_mask_image'].format(region=ireg + 1, x=tx + 1, y=ty + 1)
+    return _formats()['cyto_image'].format(region=ireg + 1, x=tx + 1, y=ty + 1)
 
 
 def get_cytometry_agg_path(extension):
     return _formats()['cyto_agg'].format(extension=extension)
+
+
+def get_extract_image_path(ireg, tx, ty, name):
+    return _formats()['extract_image'].format(region=ireg + 1, x=tx + 1, y=ty + 1, name=name)
 
 
 def get_processor_data_path():

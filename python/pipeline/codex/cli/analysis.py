@@ -28,21 +28,10 @@ def _run_ops(data_dir, config, op_classes):
     logging.info('Analysis execution complete')
 
 
-def _get_config(data_dir, config_path=None):
-    # Load experiment configuration and "register" the environment meaning that any variables not
-    # explicitly defined by env variables should set based on what is present in the configuration
-    # (it is crucial that this happen first)
-    if not config_path:
-        config_path = data_dir
-    config = codex_config.load(config_path)
-    config.register_environment()
-    return config
-
-
 class Analysis(object):
 
     def run(self, data_dir, config_path=None):
-        config = _get_config(data_dir, config_path)
+        config = cli.get_config(config_path or data_dir)
 
         analysis_params = config.analysis_params
         if len(analysis_params) == 0:

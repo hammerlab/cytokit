@@ -193,6 +193,10 @@ def get_best_focus_data(output_dir):
         .dropna().drop_duplicates().astype(int)
 
 
+def get_best_focus_coord_map(output_dir):
+    return get_best_focus_data(output_dir).groupby(['region_index', 'tile_x', 'tile_y'])['best_z'].to_dict()
+
+
 OP_CLASSES = [
     CytometryStatisticsAggregation,
     ProcessorDataSummary,

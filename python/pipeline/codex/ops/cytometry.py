@@ -9,6 +9,28 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+VOLUME_CYCLE = 0
+BOUNDARY_CYCLE = 1
+
+CHANNEL_COORDINATES = {
+    # Map channel names to (cycle, channel) coordinates
+    'cell_volume': (VOLUME_CYCLE, cytometer.CELL_CHANNEL),
+    'cell_boundary': (BOUNDARY_CYCLE, cytometer.CELL_CHANNEL),
+    'nucleus_volume': (VOLUME_CYCLE, cytometer.NUCLEUS_CHANNEL),
+    'nucleus_boundary': (BOUNDARY_CYCLE, cytometer.NUCLEUS_CHANNEL),
+}
+
+
+def get_channel_coordinates(channel):
+    channel = channel.lower().strip()
+    if channel not in CHANNEL_COORDINATES:
+        raise ValueError(
+            'Cytometry channel "{}" is not valid.  Must be one of {}'
+            .format(channel, list(CHANNEL_COORDINATES.keys()))
+        )
+    return CHANNEL_COORDINATES[channel]
+
+
 def get_model_path():
     return os.getenv(
         codex.ENV_CYTOMETRY_2D_MODEL_PATH,
@@ -70,12 +92,13 @@ class Cytometry(codex_op.CodexOp):
         nuc_channel = self.nuc_channel_coords[1]
         img_nuc = tile[nuc_cycle, :, nuc_channel]
 
+        img_memb = None
         if self.mem_channel_coords is not None:
             memb_cycle = self.nuc_channel_coords[0]
             memb_channel = self.nuc_channel_coords[1]
             img_memb = tile[memb_cycle, :, memb_channel]
 
-        img_seg, img_pred, img_bin = self.cytometer.segment(img_nuc, img_memb=img_memb, **self.segmentation_params)
+        img_seg, img_pred, _ = self.cytometer.segment(img_nuc, img_memb=img_memb, **self.segmentation_params)
 
         # Ensure segmentation image is of integer type and >= 0
         assert np.issubdtype(img_seg.dtype, np.integer), \
@@ -94,7 +117,6 @@ class Cytometry(codex_op.CodexOp):
 
         # Create overlay image of nucleus channel and boundaries and convert to 5D
         # shape to conform with usual tile convention
-
         img_boundary = np.stack([
             _find_boundaries(img_seg[:, i], as_binary=False)
             for i in range(img_seg.shape[1])
@@ -102,35 +124,33 @@ class Cytometry(codex_op.CodexOp):
         assert img_boundary.ndim == 4, 'Expecting 4D image, got shape {}'.format(img_boundary.shape)
 
         # Stack labeled volumes to 5D tiles and convert to uint16
+        # * Note that this ordering should align to VOLUME_CYCLE and BOUNDARY_CYCLE constants
         img_label = np.stack([img_seg, img_boundary], axis=0).astype(np.uint16)
 
-        # Add cycle axis to mask volumes to give 5D tile as uint8
-        img_bin = (img_bin[np.newaxis] * np.iinfo(np.uint8).max).astype(np.uint8)
-
-        return img_label, img_bin, stats
+        return img_label, stats
 
     def _run(self, tile, **kwargs):
         return self._run_2d(tile)
 
     def save(self, tile_indices, output_dir, data):
         region_index, tile_index, tx, ty = tile_indices
-        img_label, img_bin, stats = data
+        img_label, stats = data
 
-        label_tile_path = codex_io.get_cytometry_segmentation_path(region_index, tx, ty)
-        codex_io.save_tile(osp.join(output_dir, label_tile_path), img_label)
-
-        mask_tile_path = codex_io.get_cytometry_mask_path(region_index, tx, ty)
-        codex_io.save_tile(osp.join(output_dir, mask_tile_path), img_bin)
+        # Save label volumes if present
+        label_tile_path = None
+        if img_label is not None:
+            label_tile_path = codex_io.get_cytometry_segmentation_path(region_index, tx, ty)
+            codex_io.save_tile(osp.join(output_dir, label_tile_path), img_label)
 
         # Append useful metadata to cytometry stats (align these names to those used in config.TileDims)
+        # and export as csv
         stats.insert(0, 'tile_y', ty)
         stats.insert(0, 'tile_x', tx)
         stats.insert(0, 'tile_index', tile_index)
         stats.insert(0, 'region_index', region_index)
         stats_path = codex_io.get_cytometry_stats_path(region_index, tx, ty)
-        stats.to_csv(osp.join(output_dir, stats_path), index=False)
-
-        return label_tile_path, mask_tile_path, stats_path
+        codex_io.save_csv(osp.join(output_dir, stats_path), stats, index=False)
+        return label_tile_path, stats_path
 
 
 def _find_boundaries(img, as_binary=False):

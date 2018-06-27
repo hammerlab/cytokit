@@ -1,22 +1,15 @@
 #!/usr/bin/python
 """Processing pipeline CLI application"""
 import fire
-from codex.exec import pipeline
-from codex.utils import tf_utils
-from codex import config as codex_config
-from codex import cli
 import logging
-import sys
-import os
-import os.path as osp
+from codex.exec import pipeline
+from codex import cli
 
 
-class Processor(object):
+class Processor(cli.CLI):
 
     def run(self,
-
-            # Data and configuration locations
-            data_dir, output_dir, config_path=None,
+            output_dir,
 
             # Data subsets to process
             region_indexes=None,
@@ -37,11 +30,6 @@ class Processor(object):
             run_summary=True,
             run_cytometry=True,
 
-            # Logging levels
-            codex_py_log_level=logging.INFO, 
-            tf_py_log_level=logging.ERROR,
-            tf_cpp_log_level=logging.ERROR,
-
             # Bookkeeping
             record_execution=True,
             record_data=True):
@@ -60,10 +48,7 @@ class Processor(object):
         should only need to be changed in special scenarios.
 
         Args:
-            data_dir: Path to directoring containing raw acquisition data files
             output_dir: Directory to save results in; will be created if it does not exist
-            config_path: Either a directory containing a configuration file named "experiment.yaml" or a path
-                to a single file; If not provided this will default to `data_dir`
             region_indexes: 1-based sequence of region indexes to process; can be specified as:
                 - None: Region indexes will be inferred from experiment configuration
                 - str or int: A single value will be interpreted as a single index 
@@ -91,33 +76,19 @@ class Processor(object):
             run_drift_comp: Flag indicating that drift compensation should be executed
             run_summary: Flag indicating that tile summary statistics should be computed (eg mean, max, min, etc)
             run_cytometry: Flag indicating whether or not image tiles should be segmented and quantified
-            codex_py_log_level: Logging level for CODEX and dependent modules (except TensorFlow); can be
-                specified as string or integer compatible with python logging levels (e.g. 'info', 'debug',
-                'warn', 'error', 'fatal' or corresponding integers)
-            tf_py_log_level: TensorFlow python logging level; same semantics as `codex_py_log_level`
-            tf_cpp_log_level: TensorFlow C++ logging level; same semantics as `codex_py_log_level`
             record_execution: Flag indicating whether or not to store arguments and environment in
                 a file within the output directory; defaults to True
             record_data: Flag indicating whether or not summary information from each operation
                 performed should be included within a file in the output directory; defaults to True
         """
-        # Load experiment configuration
-        config = cli.get_config(config_path or data_dir)
-
-        # Initialize logging (use a callable function for passing to spawned processes in pipeline)
-        def logging_init_fn():
-            logging.basicConfig(level=tf_utils.log_level_code(codex_py_log_level), format=cli.LOG_FORMAT)
-            tf_utils.init_tf_logging(tf_cpp_log_level, tf_py_log_level)
-        logging_init_fn()
-
         # Save a record of execution environment and arguments
         if record_execution:
             path = cli.record_execution(output_dir)
             logging.info('Execution arguments and environment saved to "%s"', path)
 
         # Resolve arguments with multiple supported forms
-        region_indexes = cli.resolve_int_list_arg(region_indexes)
-        tile_indexes = cli.resolve_int_list_arg(tile_indexes)
+        region_indexes = cli.resolve_index_list_arg(region_indexes)
+        tile_indexes = cli.resolve_index_list_arg(tile_indexes)
         gpus = cli.resolve_int_list_arg(gpus)
 
         # Set other dynamic defaults
@@ -127,7 +98,7 @@ class Processor(object):
 
         # Execute pipeline on localhost
         pl_config = pipeline.PipelineConfig(
-            config, region_indexes, tile_indexes, data_dir, output_dir,
+            self.config, region_indexes, tile_indexes, self.data_dir, output_dir,
             n_workers, gpus, memory_limit,
             tile_prefetch_capacity=tile_prefetch_capacity,
             run_crop=run_crop,
@@ -138,7 +109,7 @@ class Processor(object):
             run_tile_generator=run_tile_generator,
             run_cytometry=run_cytometry
         )
-        data = pipeline.run(pl_config, logging_init_fn=logging_init_fn)
+        data = pipeline.run(pl_config, logging_init_fn=self._logging_init_fn)
 
         if record_data:
             path = cli.record_processor_data(data, output_dir)

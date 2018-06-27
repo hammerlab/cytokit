@@ -19,13 +19,15 @@ def _validate_mode(mode):
 
 class CodexTileGenerator(CodexOp):
 
-    def __init__(self, config, data_dir, region_index, tile_index, mode='raw', raw_file_type=codex.FT_GRAYSCALE):
+    def __init__(self, config, data_dir, region_index, tile_index, mode='raw',
+                 raw_file_type=codex.FT_GRAYSCALE, path_fmt_name=codex_io.FMT_PROC_IMAGE):
         super(CodexTileGenerator, self).__init__(config)
         self.data_dir = data_dir
         self.mode = mode
         self.region_index = region_index
         self.tile_index = tile_index
         self.raw_file_type = config.tile_generator_params.get('raw_file_type', raw_file_type)
+        self.path_fmt_name = path_fmt_name
         _validate_mode(self.mode)
 
     def _run(self, *args, **kwargs):
@@ -58,7 +60,7 @@ class CodexTileGenerator(CodexOp):
         # Otherwise assume that the tile has already been assembled and just read it in instead
         else:
             tx, ty = self.config.get_tile_coordinates(self.tile_index)
-            img_path = codex_io.get_processor_img_path(self.region_index, tx, ty)
+            img_path = codex_io.get_img_path(self.path_fmt_name, self.region_index, tx, ty)
             tile = codex_io.read_tile(osp.join(self.data_dir, img_path), self.config)
 
         return tile

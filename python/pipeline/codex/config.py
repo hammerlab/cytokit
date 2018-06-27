@@ -83,13 +83,15 @@ class Config(object):
         """Get 0-based cycle and per-cycle-channel index coordinates for a channel name
 
         Args:
-            channel_name: String name of channel
+            channel_name: String name of channel (matching is case insensitive)
         Returns:
             (cycle, channel) - 0-based indexes for cycle and channel
         """
-        if channel_name not in self.channel_names:
+        cnames = [c.lower() for c in self.channel_names]
+        cname = channel_name.lower()
+        if cname not in cnames:
             raise ValueError('Channel "{}" is not configured channel list {}'.format(channel_name, self.channel_names))
-        i = self.channel_names.index(channel_name)
+        i = cnames.index(cname)
         cycle_index = i // self.n_channels_per_cycle
         ch_index = i % self.n_channels_per_cycle
         return cycle_index, ch_index

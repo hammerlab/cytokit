@@ -139,7 +139,7 @@ class Cytometry(codex_op.CodexOp):
         # Save label volumes if present
         label_tile_path = None
         if img_label is not None:
-            label_tile_path = codex_io.get_cytometry_segmentation_path(region_index, tx, ty)
+            label_tile_path = codex_io.get_cytometry_image_path(region_index, tx, ty)
             codex_io.save_tile(osp.join(output_dir, label_tile_path), img_label)
 
         # Append useful metadata to cytometry stats (align these names to those used in config.TileDims)
@@ -164,8 +164,9 @@ def _find_boundaries(img, as_binary=False):
     assert img.ndim == 3, 'Expecting 3D volume but got image with shape {}'.format(img.shape)
 
     # Find boundaries (per z-plane since find_boundaries is buggy in 3D)
+    bg_value = img.min()
     res = np.stack([
-        segmentation.find_boundaries(img[i], mode='inner', background=img.min())
+        segmentation.find_boundaries(img[i], mode='inner', background=bg_value)
         for i in range(img.shape[0])
     ], axis=0)
 

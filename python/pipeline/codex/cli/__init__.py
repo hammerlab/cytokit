@@ -3,6 +3,7 @@ import sys
 import os
 import os.path as osp
 import codex
+import logging
 from codex import io as codex_io
 from codex import config as codex_config
 import pandas as pd
@@ -70,6 +71,62 @@ def resolve_int_list_arg(arg):
     if isinstance(arg, str):
         return [int(arg)]
     if isinstance(arg, tuple):
-        # Interpret as range (ignore any other items in tuple beyond second)
-        return list(range(arg[0], arg[1]))
-    return arg
+        if len(arg) not in [2, 3]:
+            raise ValueError(
+                'When specifying argument as a tuple it must contain 2 or 3 items indicating '
+                'a range as start, stop[, step] w/ inclusive stop (given = {})'.format(arg))
+        # Interpret as range inclusive of end point
+        vals = [int(v) for v in arg]
+        return list(range(vals[0], vals[1] + 1, None if len(vals) < 3 else vals[2]))
+    if isinstance(arg, list):
+        return [int(v) for v in arg]
+    raise ValueError('Argument of type {} could not be interpreted as a list (given = {})'.format(type(arg), arg))
+
+
+def resolve_index_list_arg(arg, zero_based=False):
+    indexes = resolve_int_list_arg(arg)
+    if indexes is None:
+        return None
+    if any([i < 1 for i in indexes]):
+        raise ValueError(
+            'Index argument is supposed to be 1-based but resolved to list with '
+            'index < 1 (arg = {}, resolved indexes = {})'.format(arg, indexes)
+        )
+    return [i - 1 for i in indexes] if zero_based else indexes
+
+
+def get_logging_init_fn(py_log_level, tf_py_log_level, tf_cpp_log_level):
+    from codex.utils import tf_utils
+
+    def init():
+        logging.basicConfig(level=tf_utils.log_level_code(py_log_level), format=LOG_FORMAT)
+        tf_utils.init_tf_logging(tf_cpp_log_level, tf_py_log_level)
+    return init
+
+
+class CLI(object):
+
+    def __init__(self,
+                 data_dir, config_path=None,
+                 py_log_level=logging.INFO,
+                 tf_py_log_level=logging.ERROR,
+                 tf_cpp_log_level=logging.ERROR,):
+        """CLI Initialization
+
+        Args:
+            data_dir: Path to experiment or output root directory
+            config_path: Either a directory containing a configuration by the default name (controlled via
+             env variable "CODEX_CONFIG_DEFAULT_FILENAME"), e.g. "experiment.yaml", or a path
+                to a single file; If not provided this will default to `data_dir`
+            py_log_level: Logging level for CODEX and dependent modules (except TensorFlow); can be
+                specified as string or integer compatible with python logging levels (e.g. 'info', 'debug',
+                'warn', 'error', 'fatal' or corresponding integers); default is 'info'
+            tf_py_log_level: TensorFlow python logging level; same semantics as `py_log_level`; default is 'error'
+            tf_cpp_log_level: TensorFlow C++ logging level; same semantics as `py_log_level`; default is 'error'
+        """
+        self.config = get_config(config_path or data_dir)
+        self.data_dir = data_dir
+
+        # Get and run logging initializer
+        self._logging_init_fn = get_logging_init_fn(py_log_level, tf_py_log_level, tf_cpp_log_level)
+        self._logging_init_fn()

@@ -132,11 +132,14 @@ class Cytometer2D(Cytometer):
             if return_masks:
                 img_bin_list.append(np.stack([img_bin_nuci, img_bin_nucb, img_bin_nucm, img_bin_mask], axis=0))
 
-        assert img_nuc.shape[0] == len(img_seg_list) == len(img_bin_list)
+        assert img_nuc.shape[0] == len(img_seg_list)
+        if return_masks:
+            assert img_nuc.shape[0] == len(img_bin_list)
 
         # Stack final segmentation image as (z, c, h, w)
         img_seg = np.stack(img_seg_list, axis=0)
         img_bin = np.stack(img_bin_list, axis=0) if return_masks else None
+        assert img_seg.ndim == 4, 'Expecting 4D segmentation image but shape is {}'.format(img_seg.shape)
 
         # Return (in this order) labeled volumes, prediction volumes, mask volumes
         return img_seg, img_pred, img_bin

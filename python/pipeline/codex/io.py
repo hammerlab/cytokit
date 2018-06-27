@@ -3,7 +3,7 @@ import codex
 import warnings
 import os.path as osp
 import numpy as np
-from skimage.external.tifffile import imread, imsave
+from skimage.external.tifffile import imread, imsave, TiffFile
 
 # Define a list of helpful path formats (i.e. these are common and don't necessarily need to be configured
 # explicitly everywhere)
@@ -77,12 +77,38 @@ def read_image(file):
 
 
 def read_tile(file, config):
-    """Read a codex-specific 5D image tile"""
-    # When saving tiles in ImageJ compatible format, any unit length
-    # dimensions are lost so when reading them back out, it is simplest
-    # to conform to 5D convention by reshaping if necessary
-    slices = [None if dim == 1 else slice(None) for dim in config.tile_dims]
-    return imread(file)[slices]
+    """Read a codex-specific 5D image tile
+
+    Technical Note: This is a fairly complex process as it is necessary to deal with the fact that files
+    saved using tifffile lose unit length dimensions.  To deal with this fact, the metadata in the image
+    is parsed here to ensure that missing dimensions are added back.
+    """
+
+    # The "imagej_tags" attribute looks like this for a 5D image with no unit-length dimensions
+    # and original shape cycles=2, z=25, channels=2:
+    # {'ImageJ': '1.11a', 'axes': 'TZCYX', 'channels': 2, 'frames': 2, 'hyperstack': True,
+    # 'images': 100, 'loop': False, 'mode': 'grayscale', 'slices': 25}
+    # However, if a unit-length dimension was dropped it simply does not show up in this dict
+    with TiffFile(file) as tif:
+        page = tif.pages[0]
+        tags = page.imagej_tags
+        if tags['axes'] != 'TZCYX':
+            raise ValueError(
+                'Image tile at "{}" has tags indicating that it was not saved in TZCYX format.  '
+                'The file should have been saved with this property explicitly set and further '
+                'processing of it is likely to be incorrect'.format(file)
+            )
+        slices = [
+            slice(None) if 'frames' in tags else None,
+            slice(None) if 'slices' in tags else None,
+            slice(None) if 'channels' in tags else None,
+            slice(None),
+            slice(None)
+        ]
+
+        return tif.asarray()[slices]
+    # slices = [None if dim == 1 else slice(None) for dim in config.tile_dims]
+    # return imread(file)[slices]
 
 
 def save_tile(file, tile):
@@ -102,8 +128,21 @@ def get_raw_img_path(ireg, itile, icyc, ich, iz):
     return _formats()['raw_image'].format(**args)
 
 
+FMT_PROC_IMAGE = 'proc_image'
+FMT_PROC_DATA = 'proc_data'
+FMT_PROC_EXEC = 'proc_exec'
+FMT_CYTO_IMAGE = 'cyto_image'
+FMT_CYTO_AGG = 'cyto_agg'
+FMT_CYTO_STATS = 'cyto_stats'
+FMT_EXTRACT_IMAGE = 'extract_image'
+
+
+def get_img_path(format_key, ireg, tx, ty):
+    return _formats()[format_key].format(region=ireg + 1, x=tx + 1, y=ty + 1)
+
+
 def get_processor_img_path(ireg, tx, ty):
-    return _formats()['proc_image'].format(region=ireg + 1, x=tx + 1, y=ty + 1)
+    return get_img_path(FMT_PROC_IMAGE, ireg, tx, ty)
 
 
 def get_best_focus_img_path(ireg, tx, ty, best_z):
@@ -114,34 +153,28 @@ def get_best_focus_montage_path(ireg):
     return _formats()['best_focus_montage'].format(region=ireg + 1)
 
 
-def get_region_expression_path(ireg, typ='Compensated'):
-    if typ not in ['Compensated', 'Uncompensated']:
-        raise ValueError('Expression file type should be one of "Compensated" or "Uncompensated" (given = "{}")'.format(typ))
-    return _formats()['expr_file'].format(region=ireg + 1, type=typ)
-
-
 def get_cytometry_stats_path(ireg, tx, ty):
-    return _formats()['cyto_stats'].format(region=ireg + 1, x=tx + 1, y=ty + 1)
+    return _formats()[FMT_CYTO_STATS].format(region=ireg + 1, x=tx + 1, y=ty + 1)
 
 
-def get_cytometry_segmentation_path(ireg, tx, ty):
-    return _formats()['cyto_image'].format(region=ireg + 1, x=tx + 1, y=ty + 1)
+def get_cytometry_image_path(ireg, tx, ty):
+    return get_img_path(FMT_CYTO_IMAGE, ireg, tx, ty)
 
 
 def get_cytometry_agg_path(extension):
-    return _formats()['cyto_agg'].format(extension=extension)
+    return _formats()[FMT_CYTO_AGG].format(extension=extension)
 
 
 def get_extract_image_path(ireg, tx, ty, name):
-    return _formats()['extract_image'].format(region=ireg + 1, x=tx + 1, y=ty + 1, name=name)
+    return _formats()[FMT_EXTRACT_IMAGE].format(region=ireg + 1, x=tx + 1, y=ty + 1, name=name)
 
 
 def get_processor_data_path():
-    return _formats()['proc_data']
+    return _formats()[FMT_PROC_DATA]
 
 
 def get_processor_exec_path(date):
-    return _formats()['proc_exec'].format(date=date)
+    return _formats()[FMT_PROC_EXEC].format(date=date)
 
 
 def read_raw_microscope_image(path, file_type):

@@ -2,14 +2,9 @@
 """Analysis CLI application"""
 import fire
 import codex
-from codex import cli
-from codex import config as codex_config
-from codex.ops import analysis as codex_analysis
-from codex.ops import op as codex_op
-import os.path as osp
-import papermill as pm
 import logging
-logging.basicConfig(level=logging.INFO, format=cli.LOG_FORMAT)
+from codex import cli
+from codex.ops import analysis as codex_analysis
 
 
 def _run_ops(data_dir, config, op_classes):
@@ -28,12 +23,10 @@ def _run_ops(data_dir, config, op_classes):
     logging.info('Analysis execution complete')
 
 
-class Analysis(object):
+class Analysis(cli.CLI):
 
-    def run(self, data_dir, config_path=None):
-        config = cli.get_config(config_path or data_dir)
-
-        analysis_params = config.analysis_params
+    def run(self):
+        analysis_params = self.config.analysis_params
         if len(analysis_params) == 0:
             raise ValueError(
                 'Project configuration at "{}" does not currently have any analysis operations specified; '
@@ -50,11 +43,11 @@ class Analysis(object):
                 )
             op_classes.append(codex_analysis.OP_CLASSES_MAP[op_name])
 
-        _run_ops(data_dir, config, op_classes)
+        _run_ops(self.data_dir, self.config, op_classes)
         logging.info('Analysis execution complete')
 
-    def run_best_focus_montage_generator(self, data_dir, config_path=None):
-        _run_ops(data_dir, _get_config(data_dir, config_path), [codex_analysis.BestFocusMontageGenerator])
+    # def run_best_focus_montage_generator(self, data_dir, config_path=None):
+    #     _run_ops(data_dir, _get_config(data_dir, config_path), [codex_analysis.BestFocusMontageGenerator])
 
 
 if __name__ == '__main__':

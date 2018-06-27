@@ -53,6 +53,7 @@ ENV CODEX_DATA_DIR $DATA_DIR
 ENV CODEX_REPO_DIR $CODEX_REPO_DIR
 ENV CVUTILS_REPO_DIR $CVUTILS_REPO_DIR
 ENV SHELL /bin/bash
+ENV PYTHONWARNINGS "ignore::FutureWarning:h5py"
 
 # Create cli links at runtime instead of container buildtime due to source scripts being
 # in repos mounted at runtime

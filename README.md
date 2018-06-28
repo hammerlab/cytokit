@@ -135,7 +135,7 @@ For the above case specifically, this roughly translates to:
 
 After that, you could load the 6 channel 5,040 x 6,720 montage image into ImageJ, fiddle with some color/contrast settings on the channels, and then get fairly informative images like this:
 
-<img src="docs/images/cytokit_tcell_example_2.png" width="872" height="509"/>
+<img src="docs/images/cytokit_tcell_example_2.png" width="831" height="403"/>
 
 *These are mostly isolated t-cells with nuclei and cell borders overlayed on 3 channels:*
 

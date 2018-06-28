@@ -296,7 +296,8 @@ def run(pl_conf, logging_init_fn=None):
     logger.debug('Pipeline configuration: %s', pl_conf)
     cluster = LocalCluster(
         n_workers=pl_conf.n_workers, threads_per_worker=1,
-        processes=True, memory_limit=pl_conf.memory_limit
+        processes=True, memory_limit=pl_conf.memory_limit,
+        ip='0.0.0.0'
     )
     client = Client(cluster)
 

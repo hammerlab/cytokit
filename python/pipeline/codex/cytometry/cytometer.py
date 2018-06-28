@@ -4,7 +4,9 @@ from skimage import segmentation
 from skimage import morphology
 from skimage import measure
 from skimage import filters
+from skimage import exposure
 from scipy import ndimage
+import cv2
 
 DEFAULT_BATCH_SIZE = 8
 CELL_CHANNEL = 0
@@ -51,6 +53,17 @@ def _get_flat_ball(size):
     return struct
 
 
+def _to_uint8(img, name):
+    if img.dtype != np.uint8 and img.dtype != np.uint16:
+        raise ValueError(
+            'Image must be 8 or 16 bit for segmentation (image name = {}, dtype = {}, shape = {})'
+            .format(name, img.dtype, img.shape)
+        )
+    if img.dtype == np.uint16:
+        img = exposure.rescale_intensity(img, in_range=np.uint16, out_range=np.uint8).astype(np.uint8)
+    return img
+
+
 class Cytometer2D(Cytometer):
 
     def _get_model(self, input_shape):
@@ -58,13 +71,15 @@ class Cytometer2D(Cytometer):
 
     def prepocess(self, img, thresh, min_size):
         img = img > thresh
-        # img = morphology.remove_small_holes(img, area_threshold=6)
-        img = morphology.remove_small_objects(img, min_size=min_size)
+        # img = morphology.remove_small_objects(img, min_size=min_size)
         return img
 
     def get_segmentation_mask(self, img_bin_nuci, img_memb=None, dilation_factor=0):
         if dilation_factor > 0:
-            img_bin_nuci = morphology.dilation(img_bin_nuci, selem=morphology.disk(dilation_factor))
+            img_bin_nuci = cv2.dilate(
+                img_bin_nuci.astype(np.uint8),
+                morphology.disk(dilation_factor)
+            ).astype(np.bool)
         if img_memb is None:
             return img_bin_nuci
 
@@ -73,13 +88,25 @@ class Cytometer2D(Cytometer):
         img_bin_memb = img_bin_memb | img_bin_nuci
         return morphology.remove_small_holes(img_bin_memb, 64)
 
-    def segment(self, img_nuc, img_memb=None, nucleus_dilation=4, proba_threshold=.5, min_size=6,
+    def segment(self, img_nuc, img_memb=None, nucleus_dilation=4, proba_threshold=.9, min_size=12,
                 batch_size=DEFAULT_BATCH_SIZE, return_masks=False):
         if not self.initialized:
             self.initialize()
 
-        if img_nuc.dtype != np.uint8:
-            raise ValueError('Must provide uint8 image not {}'.format(img_nuc.dtype))
+        if not np.isscalar(proba_threshold) and len(proba_threshold) != 3:
+            raise ValueError(
+                'Probability threshold must be either scalar value in [0, 1] or 3 value list (given = {}'
+                .format(proba_threshold)
+            )
+        if np.isscalar(proba_threshold):
+            # Default to threshold interpreted as marker threshold
+            proba_threshold = [.5, proba_threshold, .5]
+
+        # Convert images to segment or otherwise analyze to 8-bit since this is typically
+        # what any trained networks will expect
+        img_nuc = _to_uint8(img_nuc, 'nucleus')
+        if img_memb is not None:
+            img_memb = _to_uint8(img_memb, 'membrane')
 
         # Add batch dimension if not present
         if img_nuc.ndim == 2:
@@ -99,16 +126,19 @@ class Cytometer2D(Cytometer):
         for i in range(nz):
             # Extract prediction channels
             img_bin_nuci, img_bin_nucb, img_bin_nucm = [
-                self.prepocess(img_pred[i, ..., j], proba_threshold, min_size) for j in range(3)]
+                self.prepocess(img_pred[i, ..., j], proba_threshold[j], min_size) for j in range(3)]
 
             # Form watershed markers as marker class intersection with nuclei class, minus boundaries
-            img_bin_nucm = img_bin_nucm & img_bin_nuci & ~img_bin_nucb
+            img_bin_nucm = img_bin_nucm & img_bin_nuci & (~img_bin_nucb)
+
+            # Remove markers (which determine number of cells) below the given size
+            if min_size > 0:
+                img_bin_nucm = morphology.remove_small_objects(img_bin_nucm, min_size=min_size)
 
             # Label the markers and create the basin to segment (+boundary, -nucleus interior)
             img_bin_nucm_label = morphology.label(img_bin_nucm)
             img_bin_nuci_basin = ndimage.distance_transform_edt(img_bin_nuci)
-            img_bin_nucb_basin = ndimage.distance_transform_edt(img_bin_nucb)
-            img_basin = img_bin_nucb_basin - img_bin_nuci_basin
+            img_basin = -1 * img_bin_nuci_basin
 
             # Determine the overall mask to segment across by dilating nuclei as an approximation for cytoplasm/membrane
             img_bin_mask = self.get_segmentation_mask(
@@ -120,7 +150,11 @@ class Cytometer2D(Cytometer):
 
             # Generate nucleus segmentation based on cell segmentation and nucleus mask
             # (with the same integer labels as in the cell segmentation)
-            img_nuc_seg = ((img_cell_seg > 0) & img_bin_nuci) * img_cell_seg
+            img_nuc_seg = (img_cell_seg > 0) & img_bin_nuci
+            # img_nuc_seg = morphology.remove_small_holes(img_nuc_seg, area_threshold=32)
+            img_nuc_seg = cv2.morphologyEx(
+                    img_nuc_seg.astype(np.uint8), cv2.MORPH_CLOSE, morphology.disk(2))
+            img_nuc_seg = img_nuc_seg * img_cell_seg
 
             # Add labeled images to results
             assert img_cell_seg.dtype == img_nuc_seg.dtype, \

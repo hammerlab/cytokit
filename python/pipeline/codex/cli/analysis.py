@@ -23,6 +23,11 @@ class Analysis(cli.DataCLI):
         logging.info('Processor data summary complete; view results with `jupyter notebook %s`', nb_output_path)
         return self
 
+    def aggregate_cytometry_statistics(self, mode='all', export_csv=True, export_fcs=True):
+        logging.info('Running cytometry statistics aggregation')
+        core.aggregate_cytometry_statistics(
+            self.data_dir, self.config, mode=mode, export_csv=export_csv, export_fcs=export_fcs)
+
 
 if __name__ == '__main__':
     fire.Fire(Analysis)

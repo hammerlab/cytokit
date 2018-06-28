@@ -102,7 +102,7 @@ def aggregate_cytometry_statistics(output_dir, config, mode='all', export_csv=Tr
         # For FCS exports, save only integer and floating point values and replace any non-alphanumeric
         # column name characters with underscores
         res_fcs = res.select_dtypes(['int', 'float']).rename(columns=lambda c: re.sub(nonalnum, '_', c))
-        fcs_path = osp.join(output_dir, codex_io.get_cytometry_agg_file_path(ext('fcs')))
+        fcs_path = osp.join(output_dir, codex_io.get_cytometry_agg_path(ext('fcs')))
         if not osp.exists(osp.dirname(fcs_path)):
             os.makedirs(osp.dirname(fcs_path), exist_ok=True)
         fcswrite.write_fcs(filename=fcs_path, chn_names=res_fcs.columns.tolist(), data=res_fcs.values)

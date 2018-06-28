@@ -92,12 +92,15 @@ def read_tile(file, config=None):
     with TiffFile(file) as tif:
         page = tif.pages[0]
         tags = page.imagej_tags
-        if tags['axes'] != 'TZCYX':
-            raise ValueError(
-                'Image tile at "{}" has tags indicating that it was not saved in TZCYX format.  '
-                'The file should have been saved with this property explicitly set and further '
-                'processing of it is likely to be incorrect'.format(file)
-            )
+        if 'axes' not in tags:
+            warnings.warn('ImageJ tags do not contain "axes" property (file = {}, tags = {})'.format(file, tags))
+        else:
+            if tags['axes'] != 'TZCYX':
+                warnings.warn(
+                    'Image has tags indicating that it was not saved in TZCYX format.  '
+                    'The file should have been saved with this property explicitly set and further '
+                    'processing of it may be unsave (file = {})'.format(file)
+                )
         slices = [
             slice(None) if 'frames' in tags else None,
             slice(None) if 'slices' in tags else None,

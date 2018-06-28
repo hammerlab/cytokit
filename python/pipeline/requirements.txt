@@ -7,3 +7,4 @@ dask[distributed]
 papermill
 keras
 fcswrite
+opencv-python

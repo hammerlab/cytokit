@@ -24,3 +24,5 @@ def aggregate(config, output_dir):
             continue
         df.append(pd.read_csv(path))
     return pd.concat(df)
+
+

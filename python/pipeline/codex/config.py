@@ -31,6 +31,8 @@ def _load_experiment_config(data_dir, filename):
 
 TileDims = namedtuple('TileDims', ['cycles', 'z', 'channels', 'height', 'width'])
 TileIndices = namedtuple('TileIndices', ['region_index', 'tile_index', 'tile_x', 'tile_y'])
+MicroscopeParams = namedtuple(
+    'MicroscopeParams', ['magnification', 'na', 'res_axial_nm', 'res_lateral_nm', 'objective_type', 'em_wavelength_nm'])
 
 
 class Config(object):
@@ -222,13 +224,14 @@ class CodexConfigV10(Config):
 
     @property
     def microscope_params(self):
-        mag = self._conf['acquisition']['magnification']
-        na = self._conf['acquisition']['numerical_aperture']
-        res_axial_nm = self._conf['acquisition']['axial_resolution']
-        res_lateral_nm = self._conf['acquisition']['lateral_resolution']
-        objective_type = self._conf['acquisition']['objective_type']
-        em_wavelength_nm = self._conf['acquisition']['emission_wavelengths']
-        return mag, na, res_axial_nm, res_lateral_nm, objective_type, em_wavelength_nm
+        return MicroscopeParams(
+            magnification=self._conf['acquisition']['magnification'],
+            na=self._conf['acquisition']['numerical_aperture'],
+            res_axial_nm=self._conf['acquisition']['axial_resolution'],
+            res_lateral_nm=self._conf['acquisition']['lateral_resolution'],
+            objective_type=self._conf['acquisition']['objective_type'],
+            em_wavelength_nm=self._conf['acquisition']['emission_wavelengths']
+        )
 
     def _validate(self):
         # Ensure that number of channel names equals expected number

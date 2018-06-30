@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 import pandas as pd
 from skimage import segmentation
@@ -6,7 +7,7 @@ from skimage import measure
 from skimage import filters
 from skimage import exposure
 from scipy import ndimage
-import cv2
+from codex import math as codex_math
 
 DEFAULT_BATCH_SIZE = 8
 CELL_CHANNEL = 0
@@ -218,14 +219,22 @@ class Cytometer2D(Cytometer):
                 intensities = tile[iz][cell_prop.coords[:, 0], cell_prop.coords[:, 1]].mean(axis=0)
                 assert intensities.ndim == 1
                 assert len(intensities) == nch
+
+                cell_area, nuc_area = cell_prop.area, nuc_prop.area
                 row = [
                     cell_prop.label, cell_prop.centroid[1], cell_prop.centroid[0], iz,
-                    cell_prop.area, cell_prop.solidity, nuc_prop.area, nuc_prop.solidity
+                    cell_area, codex_math.area_to_diameter(cell_area), cell_prop.solidity,
+                    nuc_area, codex_math.area_to_diameter(nuc_area), nuc_prop.solidity
                 ]
                 row += list(intensities)
                 res.append(row)
 
-        columns = ['id', 'x', 'y', 'z', 'cell_size', 'cell_solidity', 'nucleus_size', 'nucleus_solidity']
+        # Note: "size" is used here instead of "area" for compatibility between 2D and 3D
+        columns = [
+            'id', 'x', 'y', 'z',
+            'cell_size', 'cell_diameter', 'cell_solidity',
+            'nucleus_size', 'nucleus_diameter', 'nucleus_solidity'
+        ]
         return pd.DataFrame(res, columns=columns + channel_names)
 
 

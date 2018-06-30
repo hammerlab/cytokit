@@ -1,6 +1,7 @@
 from codex.ops import op as codex_op
 from codex.cytometry import cytometer
 from codex import io as codex_io
+from codex import math as codex_math
 import os
 import os.path as osp
 import codex
@@ -94,8 +95,8 @@ class Cytometry(codex_op.CodexOp):
 
         img_memb = None
         if self.mem_channel_coords is not None:
-            memb_cycle = self.nuc_channel_coords[0]
-            memb_channel = self.nuc_channel_coords[1]
+            memb_cycle = self.mem_channel_coords[0]
+            memb_channel = self.mem_channel_coords[1]
             img_memb = tile[memb_cycle, :, memb_channel]
 
         img_seg, img_pred, _ = self.cytometer.segment(img_nuc, img_memb=img_memb, **self.segmentation_params)
@@ -114,6 +115,12 @@ class Cytometry(codex_op.CodexOp):
                 'and too large to store as the assumed 16-bit format'.format(img_seg.max()))
 
         stats = self.cytometer.quantify(tile, img_seg, **self.quantification_params)
+
+        # Convert size measurements to more meaningful scales and add diameter
+        resolution_um = config.microscope_params.res_lateral_nm / 1000.
+        for c in ['cell', 'nucleus']:
+            stats[c + '_size'] = codex_math.pixel_area_to_squared_um(stats[c + '_size'].values, resolution_um)
+            stats[c + '_diameter'] = stats[c + '_diameter'] * resolution_um
 
         # Create overlay image of nucleus channel and boundaries and convert to 5D
         # shape to conform with usual tile convention

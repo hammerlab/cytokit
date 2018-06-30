@@ -54,5 +54,5 @@ def interactive_image(id, layout):
     return dcc.Graph(id=id, figure={'data': [], 'layout': layout})
 
 
-def InteractiveImage(id, img):
-    return interactive_image(id, get_interactive_image_layout(img))
+# def InteractiveImage(id, img):
+#     return interactive_image(id, get_interactive_image_layout(img))

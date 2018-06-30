@@ -119,6 +119,10 @@ class CodexConfigV10(Config):
         return res
 
     @property
+    def experiment_name(self):
+        return self._conf['name']
+
+    @property
     def channel_names(self):
         return self._conf['acquisition']['channel_names']
 

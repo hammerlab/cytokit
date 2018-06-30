@@ -97,7 +97,8 @@ def set_raw_index_symlinks(links):
 
 FT_GRAYSCALE = 'grayscale'
 FT_KEYENCE_RGB = 'keyence_rgb'
-RAW_FILE_TYPES = [FT_GRAYSCALE, FT_KEYENCE_RGB]
+FT_KEYENCE_MIXED = 'keyence_mixed'
+RAW_FILE_TYPES = [FT_GRAYSCALE, FT_KEYENCE_RGB, FT_KEYENCE_MIXED]
 
 
 def get_raw_file_type():

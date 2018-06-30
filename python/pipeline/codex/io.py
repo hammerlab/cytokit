@@ -174,9 +174,19 @@ def get_processor_exec_path(date):
     return _formats()[FMT_PROC_EXEC].format(date=date)
 
 
+def _collapse_keyence_rgb(path, img):
+    # Compute image sum for each channel giving 3 item vector
+    ch_sum = np.squeeze(np.apply_over_axes(np.sum, img, [0, 1]))
+    if np.sum(ch_sum > 0) > 1:
+        raise ValueError('Found more than one channel with information in image file "{}"'.format(path))
+
+    # Select and return the single channel with a non-zero sum
+    return img[..., np.argmax(ch_sum)]
+
+
 def read_raw_microscope_image(path, file_type):
     if file_type == codex.FT_GRAYSCALE:
-        return read_image(path)
+        img = read_image(path)
     elif file_type == codex.FT_KEYENCE_RGB:
         img = read_image(path)
         if img.ndim != 3:
@@ -184,14 +194,23 @@ def read_raw_microscope_image(path, file_type):
                 'With {} file types enabled, raw image at path "{}" should have 3 dims (shape = {})'
                 .format(file_type, path, img.shape)
             )
-        # Compute image sum for each channel giving 3 item vector
-        ch_sum = np.squeeze(np.apply_over_axes(np.sum, img, [0, 1]))
-        if np.sum(ch_sum > 0) > 1:
-            raise ValueError('Found more than one channel with information in image file "{}"'.format(path))
-
-        # Select and return the single channel with a non-zero sum
-        return img[..., np.argmax(ch_sum)]
+        img = _collapse_keyence_rgb(path, img)
+    elif file_type == codex.FT_KEYENCE_MIXED:
+        img = read_image(path)
+        if img.ndim not in [2, 3]:
+            raise ValueError(
+                'With {} file types enabled, raw image at path "{}" should have 2 or 3 dims (shape = {})'
+                .format(file_type, path, img.shape)
+            )
+        if img.ndim == 3:
+            img = _collapse_keyence_rgb(path, img)
     else:
         raise ValueError('Raw file type "{}" is not valid; should be one of {}'.format(file_type, codex.RAW_FILE_TYPES))
 
+    # Validate that all file types result in 2D image
+    if img.ndim != 2:
+        raise AssertionError(
+            'Raw data file "{}" (with file type {} enabled) not processed correctly; should have resulted in '
+            'single channel image but shape is {}'.format(path, file_type, img.shape))
+    return img
 

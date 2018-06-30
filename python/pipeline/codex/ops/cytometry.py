@@ -62,7 +62,7 @@ class Cytometry(codex_op.CodexOp):
 
         self.quantification_params = params.get('quantification_params', quantification_params or {})
         if 'channel_names' not in self.quantification_params:
-            self.quantification_params['channel_names'] = self.config.channel_names
+            self.quantification_params['channel_names'] = config.channel_names
 
         self.nuc_channel_coords = config.get_channel_coordinates(params['nuclei_channel_name'])
         self.mem_channel_coords = None if 'membrane_channel_name' not in params else \
@@ -117,7 +117,7 @@ class Cytometry(codex_op.CodexOp):
         stats = self.cytometer.quantify(tile, img_seg, **self.quantification_params)
 
         # Convert size measurements to more meaningful scales and add diameter
-        resolution_um = config.microscope_params.res_lateral_nm / 1000.
+        resolution_um = self.config.microscope_params.res_lateral_nm / 1000.
         for c in ['cell', 'nucleus']:
             stats[c + '_size'] = codex_math.pixel_area_to_squared_um(stats[c + '_size'].values, resolution_um)
             stats[c + '_diameter'] = stats[c + '_diameter'] * resolution_um

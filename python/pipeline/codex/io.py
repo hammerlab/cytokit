@@ -5,44 +5,36 @@ import os.path as osp
 import numpy as np
 from skimage.external.tifffile import imread, imsave, TiffFile
 
-# Define a list of helpful path formats (i.e. these are common and don't necessarily need to be configured
-# explicitly everywhere)
-FILE_FORMATS = {
-    codex.FF_V01: dict(
-        raw_image=osp.join('Cyc{cycle:d}_reg{region:d}', '{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
-        best_focus=osp.join('bestFocus', 'reg{region:03d}_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
-        proc_image='reg{region:03d}_X{x:02d}_Y{y:02d}.tif',
-        expr_file='reg{region:03d}_Expression_{type}.txt'
-    ),
-    # Proposed format (haven't seen this in the wild yet but it may be coming in the future)
-    codex.FF_V02: dict(
-        raw_image=osp.join('Cyc{cycle:d}_reg{region:d}', 'C{channel:03d}_Z{z:03d}_T{cycle:03d}.tif'),
-        best_focus=osp.join('bestFocus', 'R{region:03d}_X{x:03d}_Y{y:03d}_Z{z:03d}.tif'),
-        proc_image='R{region:03d}_X{x:03d}_Y{y:03d}.tif',
-        expr_file='reg{region:03d}_Expression_{type}.txt'
-    ),
-    # Format for single region, single cycle Keyence experiments
-    codex.FF_V03: dict(
-        raw_image=osp.join('Image_{tile:05d}_CH{channel:d}.tif'),
-        best_focus=osp.join('bestFocus', 'reg001_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
-        proc_image='reg001_X{x:02d}_Y{y:02d}.tif',
-        expr_file='reg{region:03d}_Expression_{type}.txt'
-    ),
-    # Format identical to v01 except for case sensitivity on raw image region name
-    codex.FF_V04: dict(
-        raw_image=osp.join('Cyc{cycle:d}_Reg{region:d}', '{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
-        best_focus=osp.join('bestFocus', 'reg{region:03d}_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
-        proc_image='reg{region:03d}_X{x:02d}_Y{y:02d}.tif',
-        expr_file='reg{region:03d}_Expression_{type}.txt'
-    ),
-    # Another format for single region, single cycle Keyence experiments
-    codex.FF_V05: dict(
-        raw_image=osp.join('1_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
-        best_focus=osp.join('bestFocus', 'reg001_X{x:02d}_Y{y:02d}_Z{z:02d}.tif'),
-        proc_image='reg001_X{x:02d}_Y{y:02d}.tif',
-        expr_file='reg001_Expression_{type}.txt'
-    )
-}
+# Define the default layout for cytokit results on disk
+DEFAULT_FORMATS = dict(
+    best_focus_image='best_focus/tile/R{region:03d}_X{x:03d}_Y{y:03d}_Z{z:03d}.tif',
+    montage_image='montage/{name}/R{region:03d}_montage.tif',
+    cyto_agg='cytometry/data.{extension}',
+    cyto_image='cytometry/tile/R{region:03d}_X{x:03d}_Y{y:03d}.tif',
+    cyto_stats='cytometry/statistics/R{region:03d}_X{x:03d}_Y{y:03d}.csv',
+    proc_data='processor/data.json',
+    proc_exec='processor/execution/{date}.json',
+    proc_image='processor/tile/R{region:03d}_X{x:03d}_Y{y:03d}.tif',
+    extract_image='extract/{name}/R{region:03d}_X{x:03d}_Y{y:03d}.tif'
+)
+
+
+def _to_pd_sep(format):
+    """Convert path to platform-dependent path"""
+    return format.replace('/', os.sep)
+
+
+def _get_def_path_formats(raw_image_format):
+    formats = {k: _to_pd_sep(v) for k, v in DEFAULT_FORMATS.items()}
+    formats['raw_image'] = _to_pd_sep(raw_image_format)
+    return formats
+
+
+PATH_FORMATS = dict(
+    keyence_single_cycle_v01=_get_def_path_formats('1_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
+    keyence_multi_cycle_v01=_get_def_path_formats(
+        'Cyc{cycle:d}_reg{region:d}/{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif')
+)
 
 
 def _formats():
@@ -50,8 +42,8 @@ def _formats():
     # otherwise assume the formats are specified as a dictionary compatible
     # with pre-defined path format dictionaries
     formats = codex.get_path_formats()
-    if formats in FILE_FORMATS:
-        return FILE_FORMATS[formats]
+    if formats in PATH_FORMATS:
+        return PATH_FORMATS[formats]
     return eval(formats)
 
 

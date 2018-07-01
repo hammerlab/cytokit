@@ -103,7 +103,7 @@ def _get_montage_image():
     assert img.ndim == 2, 'Expecting 2 dims, image shape = {}'.format(img.shape)
 
     # Resize the montage image to something much smaller
-    img = resize(img, (512, 512), order=0, mode='constant')
+    img = resize(img, cfg.montage_target_shape, order=0, mode='constant')
     return img
 
 

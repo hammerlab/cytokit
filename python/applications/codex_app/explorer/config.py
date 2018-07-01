@@ -1,5 +1,6 @@
 import os
 import os.path as osp
+import numpy as np
 from codex import data as codex_data
 from codex import config as codex_config
 
@@ -33,6 +34,25 @@ class AppConfig(object):
         if not self._exp_config:
             self._exp_config = codex_config.load(self.exp_config_path)
         return self._exp_config
+
+    @property
+    def montage_target_shape(self):
+        return 512, 512
+
+    @property
+    def montage_shape(self):
+        rh = self._exp_config.region_height * self._exp_config.tile_height
+        rw = self._exp_config.region_width * self._exp_config.tile_width
+        return rh, rw
+
+    @property
+    def montage_target_scale_factors(self):
+        """Montage scaling factors as (scale_y, scale_x)"""
+        return tuple(np.array(self.montage_target_shape) / np.array(self.montage_shape))
+
+    @property
+    def tile_shape(self):
+        return self._exp_config.tile_height, self._exp_config.tile_width
 
     @property
     def exp_name(self):

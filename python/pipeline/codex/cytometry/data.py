@@ -31,7 +31,7 @@ def aggregate(config, output_dir):
         df.append(pd.read_csv(path))
     df = pd.concat(df)
 
-    # Start inserting before 'id' in order rcid, rcx, rcy
+    # Start inserting before 'id' to get order rid, rx, ry (so they have to be inserted in reverse order)
     id_idx = df.columns.tolist().index('id')
 
     # Determine region coords for tile coordinate / point coordinate pairs
@@ -42,11 +42,11 @@ def aggregate(config, output_dir):
     reg_coords = df[['tile_x', 'tile_y', 'x', 'y']].apply(get_region_point_coords, axis=1)
 
     # Add region / global coordinates as separate fields
-    df.insert(id_idx, 'rcy', [c[1] for c in reg_coords])
-    df.insert(id_idx, 'rcx', [c[0] for c in reg_coords])
+    df.insert(id_idx, 'ry', [c[1] for c in reg_coords])
+    df.insert(id_idx, 'rx', [c[0] for c in reg_coords])
 
     # Insert global id for cells (i.e. across region)
-    df.insert(id_idx, 'rcid', np.arange(len(df)))
+    df.insert(id_idx, 'rid', np.arange(len(df)))
 
     return df
 

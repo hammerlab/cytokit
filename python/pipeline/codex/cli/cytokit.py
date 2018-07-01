@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import fire
 from codex.cli import analysis, operator, processor
 

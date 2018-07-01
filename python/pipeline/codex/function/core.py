@@ -55,10 +55,10 @@ def aggregate_cytometry_statistics(output_dir, config, mode='all', export_csv=Tr
             raise ValueError(
                 'Failed to find best z plane settings for at least one tile;\n'
                 'The following region/tile combinations have no z-planes: {}'
-                    .format(ex.values)
+                .format(ex.values)
             )
-        # Filter result to where z plane equals best z
-        res = merge_data[merge_data['best_z'] == merge_data['z']]
+        # Filter result to where z plane equals best z and drop best_z field
+        res = merge_data[merge_data['best_z'] == merge_data['z']].drop('best_z', axis=1)
 
     # If configured, select only data for z planes associated with the most
     # cells (only makes sense w/ 2D segmentation)

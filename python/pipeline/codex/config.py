@@ -75,11 +75,60 @@ class Config(object):
         if tile_index >= self.n_tiles_per_region:
             raise ValueError(
                 'Cannot get coordinates for tile with 0-based index {} when only {} '
-                'iles are expected (region width = {}, height = {})'
-                    .format(tile_index, self.n_tiles_per_region, self.region_width, self.region_height)
+                'tiles are expected (region width = {}, height = {})'
+                .format(tile_index, self.n_tiles_per_region, self.region_width, self.region_height)
             )
         tiler = tiling.get_tiling_by_name(self.tiling_mode)
         return tiler.coordinates_from_index(tile_index, w=self.region_width, h=self.region_height)
+
+    def get_region_point_coordinates(self, tile_coord, tile_point):
+        """Convert x/y coordinates within a tile to coordinates within a region
+        Args:
+            tile_coord: 2-tuple x/y coordinates (0-based) of tile within region grid
+            tile_point: 2-tuple x/y coordinates (0-based) of point within tile
+        Returns:
+            (x, y) locations of coordinates within region having sub-pixel resolution (i.e. float)
+        """
+        tx, ty = tile_coord
+        px, py = tile_point
+        tw, th = self.tile_width, self.tile_height
+        rx, ry = tx * tw + px, ty * th + py
+
+        # Validate bounds noting that for 0-based subpixels, the x/y coords should not exceed the maximum
+        # width/height EXACTLY.  For example, if width is 100 and rx is 99.99 this would round down to 99
+        # which is still a valid index while index 100 would be out of bounds
+        reg_bound = (self.region_width * self.tile_width, self.region_height * self.tile_height)
+        if rx >= reg_bound[0] or ry >= reg_bound[1] or rx < 0 or ry < 0:
+            raise AssertionError(
+                'Region coordinate {} exceeds region bounds {} (input coord = {}, point = {})'
+                .format((rx, ry), reg_bound, tile_coord, tile_point)
+            )
+        return rx, ry
+
+    def get_tile_point_coordinates(self, region_coord):
+        """Convert x/y coordinates within a region to x/y coordinates within a tile
+        Args:
+            region_coord: 2-tuple x/y coordinates (0-based) of a point within a region
+        Returns:
+            (tile_coord, tile_point) where tile_coord is a 2-tuple x/y coordinate (0-based) of tile within region grid
+                at pixel resolution (i.e. integer) and tile_point is a 2-tuple x/y coordinate (0-based) of point
+                within tile at sub-pixel resolution (i.e. float)
+        """
+        rx, ry = region_coord
+        tw, th = self.tile_width, self.tile_height
+        tx, ty = int(rx // self.tile_width), int(ry // self.tile_height)
+        px, py = rx - tx * tw, ry - ty * th
+
+        # Validate bounds noting that for 0-based sub-pixels, the x/y coords should not exceed the maximum
+        # width/height EXACTLY.  For example, if tile width is 100 and px is 99.99 this would round down to 99
+        # which is still a valid index within the tile while index 100 would be out of bounds
+        tile_bound = (self.tile_width, self.tile_height)
+        if px >= tile_bound[0] or py >= tile_bound[1] or px < 0 or py < 0:
+            raise AssertionError(
+                'Tile point {} exceeds tile bounds {} (input coord = {})'
+                .format((px, py), tile_bound, region_coord)
+            )
+        return (tx, ty), (px, py)
 
     def get_channel_coordinates(self, channel_name):
         """Get 0-based cycle and per-cycle-channel index coordinates for a channel name

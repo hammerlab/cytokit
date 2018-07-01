@@ -55,16 +55,11 @@ def set_config_default_filename(filename):
 # File Format Versions #
 # #################### #
 
-FF_V01 = 'v0.1'
-FF_V02 = 'v0.2'
-FF_V03 = 'v0.3'
-FF_V04 = 'v0.4'
-FF_V05 = 'v0.5'
-FF_VERSIONS = [FF_V01, FF_V02, FF_V03, FF_V04, FF_V05]
+FF_DEFAULT = 'keyence_multi_cycle_v01'
 
 
 def get_path_formats():
-    return os.getenv(ENV_PATH_FORMATS, FF_V01)
+    return os.getenv(ENV_PATH_FORMATS, FF_DEFAULT)
 
 
 def set_path_formats(formats):

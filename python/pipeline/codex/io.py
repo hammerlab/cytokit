@@ -3,6 +3,7 @@ import codex
 import warnings
 import os.path as osp
 import numpy as np
+from skimage import io as sk_io
 from skimage.external.tifffile import imread, imsave, TiffFile
 
 # Define the default layout for cytokit results on disk
@@ -32,6 +33,7 @@ def _get_def_path_formats(raw_image_format):
 
 PATH_FORMATS = dict(
     keyence_single_cycle_v01=_get_def_path_formats('1_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
+    keyence_single_cycle_v02=_get_def_path_formats('1_{tile:05d}_Z{z:03d}_CH{channel:d}.jpg'),
     keyence_multi_cycle_v01=_get_def_path_formats(
         'Cyc{cycle:d}_reg{region:d}/{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif')
 )
@@ -63,9 +65,10 @@ def save_csv(file, df, **kwargs):
 
 def read_image(file):
     # Ignore tiff metadata warnings from skimage
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        return imread(file)
+    # with warnings.catch_warnings():
+    #     warnings.simplefilter("ignore")
+    #     return sk_io.imread(file)
+    return sk_io.imread(file)
 
 
 def read_tile(file, config=None):
@@ -195,6 +198,27 @@ def read_raw_microscope_image(path, file_type):
                 .format(file_type, path, img.shape)
             )
         img = _collapse_keyence_rgb(path, img)
+    elif file_type == codex.FT_KEYENCE_REPEAT:
+        img = read_image(path)
+        if img.ndim != 3:
+            raise ValueError(
+                'With {} file types enabled, raw image at path "{}" should have 3 dims (shape = {})'
+                .format(file_type, path, img.shape)
+            )
+        if not np.all(img[..., 0] == img[..., 0]) or not np.all(img[..., 0] == img[..., 2]):
+            raise ValueError(
+                'With {} file types enabled, all 3 channels are expected to be equal but they are not '
+                'for image at "{}" (shape = {})'.format(file_type, path, img.shape)
+            )
+        img = img[..., 0]
+
+        # TODO: REMOVE THIS!
+        from skimage import transform
+        from skimage import exposure
+        img = transform.rescale(img, 4, mode='constant', multichannel=False, anti_aliasing=True)
+        img = exposure.rescale_intensity(img, in_range=(0, 1), out_range='uint8').astype(np.uint8)
+        assert img.shape == (1440, 1920)
+
     elif file_type == codex.FT_KEYENCE_MIXED:
         img = read_image(path)
         if img.ndim not in [2, 3]:

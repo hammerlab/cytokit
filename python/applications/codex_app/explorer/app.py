@@ -5,28 +5,26 @@ from dash.dependencies import Input, Output, State
 import dash_core_components as dcc
 import dash_html_components as html
 from codex_app.explorer import data as data
+from codex_app.explorer.data import cache as ac
 from codex_app.explorer import lib as lib
 from codex_app.explorer.config import cfg
 import pandas as pd
 import logging
 from skimage import io as sk_io
 from skimage.transform import resize
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 data.initialize()
 
-layouts = {}
+# processors = {}
 app = dash.Dash()
 app.css.append_css({'external_url': 'https://codepen.io/chriddyp/pen/dZVMbK.css'})
 
 
 def get_graph_channels():
     return 'ch:CD4', 'ch:CD8'
-
-
-def get_tile_coords():
-    """Current tile coordinates as (x, y)"""
-    return 0, 0
 
 
 def get_graph_data():
@@ -64,19 +62,41 @@ def get_graph():
 TILE_IMAGE_STYLE = dict(height='750px')
 MONTAGE_IMAGE_STYLE = None
 
-layouts['montage'] = lib.get_interactive_image_layout(data.get_montage_image())
-layouts['tile'] = lib.get_interactive_image_layout(data.get_tile_image())
+
+def get_montage_image():
+    return ac['processor']['montage'].run(data.get_montage_image())
 
 
-def get_channel_settings_layout(id, class_name):
-    return html.Div(
-        dcc.RangeSlider(
-            id=id,
-            min=0,
-            max=20,
-            step=0.5,
-            value=[5, 15]
-        ),
+def get_tile_image():
+    return ac['processor']['tile'].run(data.get_tile_image(*ac['selection']['tile']['coords']))
+
+
+ac['shape']['montage'] = data.get_montage_image().shape
+ac['processor']['montage'] = lib.ImageProcessor(ac['shape']['montage'][0])
+ac['layouts']['montage'] = lib.get_interactive_image_layout(get_montage_image())
+
+ac['shape']['tile'] = data.get_tile_image().shape
+ac['processor']['tile'] = lib.ImageProcessor(ac['shape']['tile'][0])
+ac['selection']['tile']['coords'] = (0, 0)
+ac['layouts']['tile'] = lib.get_interactive_image_layout(get_tile_image())
+
+
+def get_image_settings_layout(id_format, channel_names, class_name):
+    return html.Div([
+            html.Div([
+                html.Div(channel_names[i]),
+                dcc.RangeSlider(
+                    id=id_format.format(i),
+                    min=0,
+                    max=255,
+                    step=1,
+                    value=[0, 255],
+                    allowCross=False
+                    #marks={0: 'Cells'}
+                )
+            ])
+            for i in range(len(channel_names))
+        ],
         className=class_name
     )
 
@@ -87,10 +107,10 @@ app.layout = html.Div([
             children=[
                 html.Div(get_graph(), className='five columns'),
                 html.Div(
-                    lib.get_interactive_image('montage', layouts['montage'], style=MONTAGE_IMAGE_STYLE),
+                    lib.get_interactive_image('montage', ac['layouts']['montage'], style=MONTAGE_IMAGE_STYLE),
                     className='five columns'
                 ),
-                get_channel_settings_layout('tile-channels', 'two columns')
+                get_image_settings_layout('montage-ch-{}', cfg.montage_channels, 'two columns')
             ],
         ),
         # html.Pre(id='console', className='four columns'),
@@ -98,10 +118,10 @@ app.layout = html.Div([
             className='row',
             children=[
                 html.Div(
-                    lib.get_interactive_image('tile', layouts['tile'], style=TILE_IMAGE_STYLE),
+                    lib.get_interactive_image('tile', ac['layouts']['tile'], style=TILE_IMAGE_STYLE),
                     className='ten columns'
                 ),
-                get_channel_settings_layout('tile-channels', 'two columns')
+                get_image_settings_layout('tile-ch-{}', cfg.montage_channels, 'two columns')
             ]
         )
     ]
@@ -155,13 +175,11 @@ def update_montage(selected_data, relayout_data):
             'marker': {'opacity': .5},
             'type': 'scattergl'
         }]
-    figure = dict(data=d, layout=layouts['montage'])
+    figure = dict(data=d, layout=ac['layouts']['montage'])
     return _relayout(figure, relayout_data)
 
 
-# @app.callback(Output('tile', 'figure'), [Input('image', 'clickData')])
-@app.callback(Output('tile', 'figure'), [Input('graph', 'selectedData')], [State('tile', 'relayoutData')])
-def update_tile(selected_data, relayout_data):
+def _get_tile_figure(selected_data, relayout_data):
     if selected_data is None:
         d = [{'x': [], 'y': [], 'mode': 'markers', 'type': 'scattergl'}]
     else:
@@ -169,9 +187,9 @@ def update_tile(selected_data, relayout_data):
 
         # Fetch points in cyto data matching channel values in graph also
         # filtered to current tile
-        tile_coords = get_tile_coords()
+        tx, ty = ac['selection']['tile']['coords']
         df = df.set_index(['tile_x', 'tile_y', 'c1', 'c2']).loc[[
-            tile_coords + (p['x'], p['y'])
+            (tx, ty) + (p['x'], p['y'])
             for p in selected_data['points']
         ]]
 
@@ -182,9 +200,36 @@ def update_tile(selected_data, relayout_data):
             'marker': {'opacity': .5},
             'type': 'scattergl'
         }]
-    figure = dict(data=d, layout=layouts['tile'])
+    figure = dict(data=d, layout=ac['layouts']['tile'])
     return _relayout(figure, relayout_data)
 
 
+# @app.callback(Output('tile', 'figure'), [Input('image', 'clickData')])
+@app.callback(
+    Output('tile', 'figure'), [
+        Input('graph', 'selectedData'),
+        Input('montage', 'clickData')] +
+        [Input('tile-ch-{}'.format(i), 'value') for i in range(cfg.extract_nchannels)
+    ],[
+        State('tile', 'relayoutData')
+    ])
+def update_tile(*args):
+    # montage click data:
+    # {'points': [{'x': 114.73916, 'curveNumber': 0, 'pointNumber': 421, 'y': 306.4889, 'pointIndex': 421}]}
+    selected_data, montage_data, relayout_data = args[0], args[1], args[-1]
+    channel_ranges = args[2:-1]
+
+    if montage_data:
+        sy, sx = cfg.montage_target_shape
+        ry, rx = cfg.region_shape
+        py, px = montage_data['points'][0]['y'], montage_data['points'][0]['x']
+        ac['selection']['tile']['coords'] = (int(px // (sx / rx)), ry - int(py // (sy / ry)) - 1)
+    print('Channel ranges: ', channel_ranges)
+    print('New tile coords: ', ac['selection']['tile']['coords'])
+    ac['processor']['tile'].ranges = channel_ranges
+    ac['layouts']['tile'] = lib.get_interactive_image_layout(get_tile_image())
+    return _get_tile_figure(selected_data, relayout_data)
+
+
 if __name__ == '__main__':
-    app.run_server(debug=True, port=cfg.app_port, host=cfg.app_host_ip)
+    app.run_server(debug=False, port=cfg.app_port, host=cfg.app_host_ip)

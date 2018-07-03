@@ -54,6 +54,7 @@ RUN cd $SIM_DIR && \
 RUN mkdir -p $(python -m site --user-site) && \
     echo "$CODEX_REPO_DIR/python/pipeline" > $(python -m site --user-site)/local.pth && \
     echo "$CODEX_REPO_DIR/python/notebooks/src" >> $(python -m site --user-site)/local.pth && \
+    echo "$CODEX_REPO_DIR/python/applications" >> $(python -m site --user-site)/local.pth && \
     echo "$CVUTILS_REPO_DIR/python" >> $(python -m site --user-site)/local.pth
 
 WORKDIR "/lab"

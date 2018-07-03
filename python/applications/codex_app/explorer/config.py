@@ -13,7 +13,7 @@ ENV_APP_REGION_INDEX = 'APP_REGION_INDEX'
 ENV_APP_EXTRACT_NAME = 'APP_EXTRACT_NAME'
 ENV_APP_MONTAGE_NAME = 'APP_MONTAGE_NAME'
 ENV_MONTAGE_CHANNELS = 'APP_MONTAGE_CHANNELS'
-ENV_TILE_CHANNELS = 'APP_TILE_CHANNELS'
+ENV_EXTRACT_CHANNELS = 'APP_EXTRACT_CHANNELS'
 
 DEFAULT_APP_DATA_PATH = osp.join(codex_data.get_cache_dir(), 'app', 'explorer')
 DEFAULT_APP_HOST_IP = '0.0.0.0'
@@ -44,6 +44,10 @@ class AppConfig(object):
         rh = self._exp_config.region_height * self._exp_config.tile_height
         rw = self._exp_config.region_width * self._exp_config.tile_width
         return rh, rw
+
+    @property
+    def region_shape(self):
+        return self._exp_config.region_height, self._exp_config.region_width
 
     @property
     def montage_target_scale_factors(self):
@@ -91,11 +95,19 @@ class AppConfig(object):
 
     @property
     def montage_channels(self):
-        return [int(v) for v in os.getenv(ENV_MONTAGE_CHANNELS, '0').split(',')]
+        return os.environ[ENV_EXTRACT_CHANNELS].split(',')
 
     @property
-    def tile_channels(self):
-        return [int(v) for v in os.getenv(ENV_TILE_CHANNELS, '0').split(',')]
+    def montage_nchannels(self):
+        return len(self.montage_channels)
+
+    @property
+    def extract_channels(self):
+        return os.environ[ENV_EXTRACT_CHANNELS].split(',')
+
+    @property
+    def extract_nchannels(self):
+        return len(self.extract_channels)
 
 
 cfg = AppConfig()

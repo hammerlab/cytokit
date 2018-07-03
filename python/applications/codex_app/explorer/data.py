@@ -3,14 +3,18 @@ from codex import io as codex_io
 from codex import config as codex_config
 from codex import data as codex_data
 from codex_app.explorer.config import cfg
+from collections import defaultdict
 import os
 import os.path as osp
 import pandas as pd
+import numpy as np
 import logging
 
 logger = logging.getLogger(__name__)
 
 db = None
+ddict = lambda: defaultdict(ddict)
+cache = ddict()
 
 
 class Datastore(object):
@@ -75,6 +79,8 @@ class DictDatastore(Datastore):
 def get_montage_image():
     return db.get('images', 'montage')
 
+#def get_montage_image():
+
 
 def get_cytometry_stats():
     return db.get('stats', 'cytometry')
@@ -88,38 +94,42 @@ def _get_cytometry_data():
 def _get_montage_image():
     from skimage.transform import resize
 
-    ch = cfg.montage_channels
-    if len(ch) != 1:
-        raise NotImplementedError(
-            'Multi-channel montages not yet supported (must select only one channel (channels configured = {}))'
-            .format(ch)
-        )
-    ch = ch[0]
-
     path = codex_io.get_montage_image_path(cfg.region_index, cfg.montage_name)
-    img = codex_io.read_image(osp.join(cfg.exp_data_dir, path))
+    path = osp.join(cfg.exp_data_dir, path)
+    img = codex_io.read_image(path)
     logger.info('Loaded montage image with shape = %s, dtype = %s', img.shape, img.dtype)
-    img = img[ch]
-    assert img.ndim == 2, 'Expecting 2 dims, image shape = {}'.format(img.shape)
+    if img.dtype != np.uint8 and img.dtype != np.uint16:
+        raise ValueError('Only 8 or 16 bit images are supported (image type = {})'.format(img.dtype))
+    if img.shape[0] != cfg.montage_nchannels:
+        raise ValueError(
+            'Expecting montage from extraction to have {} channels ("{}") but loaded image at {} has shape {}'
+            .format(cfg.montage_nchannels, cfg.montage_channels, path, img.shape)
+        )
 
-    # Resize the montage image to something much smaller
-    img = resize(img, cfg.montage_target_shape, order=0, mode='constant')
+    # Resize the montage image to something much smaller (resize function expects channels last
+    # and preserves them if not specified in target shape)
+    img = np.moveaxis(img, 0, -1)
+    img = resize(
+        img, cfg.montage_target_shape, order=0, mode='constant',
+        anti_aliasing=True, preserve_range=True).astype(img.dtype)
+    img = np.moveaxis(img, -1, 0)
+    # Image is now (C, H, W)
     return img
 
 
 def get_tile_image(tx=0, ty=0):
-    ch = cfg.tile_channels
-    if len(ch) != 1:
-        raise NotImplementedError(
-            'Multi-channel tiles not yet supported (must select only one channel (channels configured = {}))'
-            .format(ch)
-        )
-    ch = ch[0]
     path = codex_io.get_extract_image_path(cfg.region_index, tx, ty, cfg.extract_name)
-    img = codex_io.read_image(osp.join(cfg.exp_data_dir, path))
+    path = osp.join(cfg.exp_data_dir, path)
+    img = codex_io.read_image(path)
     logger.info('Loaded tile image for tile x = %s, tile y = %s, shape = %s, dtype = %s', tx, ty, img.shape, img.dtype)
-    img = img[ch]
-    assert img.ndim == 2, 'Expecting 2 dims, image shape = {}'.format(img.shape)
+    if img.dtype != np.uint8 and img.dtype != np.uint16:
+        raise ValueError('Only 8 or 16 bit images are supported (image type = {})'.format(img.dtype))
+
+    if img.shape[0] != cfg.extract_nchannels:
+        raise ValueError(
+            'Expecting tile images from extraction to have {} channels ("{}") but loaded image at {} has shape {}'
+            .format(cfg.extract_nchannels, cfg.extract_channels, path, img.shape)
+        )
     return img
 
 

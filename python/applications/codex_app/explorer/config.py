@@ -95,7 +95,7 @@ class AppConfig(object):
 
     @property
     def montage_channels(self):
-        return os.environ[ENV_EXTRACT_CHANNELS].split(',')
+        return sorted(os.environ[ENV_MONTAGE_CHANNELS].split(','))
 
     @property
     def montage_nchannels(self):
@@ -103,7 +103,7 @@ class AppConfig(object):
 
     @property
     def extract_channels(self):
-        return os.environ[ENV_EXTRACT_CHANNELS].split(',')
+        return sorted(os.environ[ENV_EXTRACT_CHANNELS].split(','))
 
     @property
     def extract_nchannels(self):

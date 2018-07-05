@@ -31,10 +31,10 @@ class Datastore(object):
     def get(self, group, key, default=None):
         raise NotImplementedError()
 
-    def open(self):
+    def restore(self):
         raise NotImplementedError()
 
-    def close(self):
+    def save(self):
         raise NotImplementedError()
 
     def sput(self, group, key, value):
@@ -60,26 +60,29 @@ class DictDatastore(Datastore):
     def exists(self, group, key):
         return group in self.data and key in self.data[group]
 
-    def open(self):
+    def restore(self):
         import pickle
         path = osp.join(self.data_dir, 'data.pkl')
         if osp.exists(path):
-            with open(path, 'r') as fd:
+            with open(path, 'rb') as fd:
                 self.data = pickle.load(fd)
         return self
 
-    def close(self):
+    def save(self):
         import pickle
+        if not osp.exists(self.data_dir):
+            os.makedirs(self.data_dir, exist_ok=True)
         path = osp.join(self.data_dir, 'data.pkl')
-        with open(path, 'w') as fd:
-            pickle.dump(self.data, fd)
-        return self
+
+        # Choose groups to save data for (at TOW only app level data is saved)
+        dbs = {k: v for k, v in self.data.items() if k in ['app']}
+        with open(path, 'wb') as fd:
+            pickle.dump(dbs, fd)
+        return path
 
 
 def get_montage_image():
     return db.get('images', 'montage')
-
-#def get_montage_image():
 
 
 def get_cytometry_stats():
@@ -111,7 +114,7 @@ def _get_montage_image():
     img = np.moveaxis(img, 0, -1)
     img = resize(
         img, cfg.montage_target_shape, order=0, mode='constant',
-        anti_aliasing=True, preserve_range=True).astype(img.dtype)
+        anti_aliasing=False, preserve_range=True).astype(img.dtype)
     img = np.moveaxis(img, -1, 0)
     # Image is now (C, H, W)
     return img
@@ -135,7 +138,7 @@ def get_tile_image(tx=0, ty=0):
 
 def initialize():
     global db
-    db = DictDatastore(cfg.app_data_dir)
+    db = DictDatastore(cfg.app_data_dir).restore()
 
     # Load the montage only if not present (often takes several seconds otherwise)
     if not db.exists('images', 'montage'):
@@ -145,5 +148,4 @@ def initialize():
 
     # Reload this and ignore prior existence since it's fast
     db.put('stats', 'cytometry', _get_cytometry_data())
-
 

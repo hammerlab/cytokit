@@ -135,6 +135,10 @@ class Operator(cli.DataCLI):
         for i, loc in enumerate(tile_locations):
             logging.info('Extracting tile {} of {}'.format(i+1, len(tile_locations)))
             extract_tile = []
+
+            # Create function used to crop out z-slices from extracted volumes
+            z_slice = z_slice_fn(loc.region_index, loc.tile_x, loc.tile_y)
+
             for src in channel_sources:
                 generator = tile_generator.CodexTileGenerator(
                     self.config, self.data_dir, loc.region_index, loc.tile_index,
@@ -147,8 +151,9 @@ class Operator(cli.DataCLI):
                 if src == CH_SRC_RAW:
                     tile = tile_crop.CodexTileCrop(self.config).run(tile)
 
-                for _, r in channel_map.get_group(src).iterrows():
-                    z_slice = z_slice_fn(loc.region_index, loc.tile_x, loc.tile_y)
+                # Sort channels by name to make extract channel order deterministic
+                for _, r in channel_map.get_group(src).sort_values('channel_name').iterrows():
+
                     # Extract (z, h, w) subtile
                     sub_tile = tile[r['cycle_index'], z_slice, r['channel_index']]
                     logging.debug(

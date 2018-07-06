@@ -1,6 +1,7 @@
 import dash
 import json
 import fire
+import plotly.graph_objs as go
 from dash.dependencies import Input, Output, State
 import dash_core_components as dcc
 import dash_html_components as html
@@ -10,10 +11,12 @@ from codex_app.explorer import lib as lib
 from codex_app.explorer.config import cfg
 from codex_app.explorer import color
 import pandas as pd
+import numpy as np
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 data.initialize()
 
@@ -45,51 +48,205 @@ ac['selection']['tile']['coords'] = (0, 0)
 ac['layouts']['tile'] = lib.get_interactive_image_layout(get_tile_image())
 
 
-def get_graph_channels():
-    return 'ch:CD4', 'ch:CD8'
+def get_graph_axis_selections():
+    return dict(
+        xvar=data.db.get('app', 'axis_x_var'),
+        xscale=data.db.get('app', 'axis_x_scale') or 'linear',
+        yvar=data.db.get('app', 'axis_y_var'),
+        yscale=data.db.get('app', 'axis_y_scale') or 'linear'
+    )
 
 
-def get_graph_data():
-    c1, c2 = get_graph_channels()
+def get_base_data():
+    # Pull cell expression data frame and downsample if necessary
     df = data.get_cytometry_stats()
-    df = df[['region_index', 'tile_x', 'tile_y', 'id', 'rid', 'rx', 'ry', 'x', 'y', c1, c2]].copy()
-    df = df.rename(columns={c1: 'c1', c2: 'c2'})
+    if len(df) > cfg.max_cells:
+        logger.info('Sampling expression data for %s cells down to %s records', len(df), cfg.max_cells)
+        df = df.sample(n=cfg.max_cells, random_state=cfg.random_state)
     return df
 
 
-def get_graph():
-    d = get_graph_data()
-    data = [
-        dict(
-            x=d['c1'],
-            y=d['c2'],
-            mode='markers',
-            marker={'opacity': .1},
-            type='scattergl'
-        )
+def get_graph_data():
+    selections = get_graph_axis_selections()
+
+    # Create list of fields to extract that are always necessary
+    cols = [
+        'cell_diameter', 'nucleus_diameter', 'cell_size', 'nucleus_size', 'nucleus_solidity',
+        'region_index', 'tile_x', 'tile_y', 'id', 'rid', 'rx', 'ry', 'x', 'y'
     ]
-    layout = {
-        #'margin': dict(l=0, t=25, r=0, b=0, pad=0),
-        'title': '',
-        'titlefont': {'size': 12}
+    # cols = [
+    #     'cell_size', 'nucleus_size', 'nucleus_solidity',
+    #     'region_index', 'tile_x', 'tile_y', 'id', 'rid', 'rx', 'ry', 'x', 'y'
+    # ]
+    if selections['xvar'] is None:
+        return None
+
+    # Map to contain keys '[x|y]var' to the name of the field to duplicate
+    # as that new column in the data frame
+    vars = {}
+    if selections['xvar']:
+        vars['xvar'] = selections['xvar']
+        if selections['xvar'] not in cols:
+            cols += [selections['xvar']]
+    if selections['yvar']:
+        vars['yvar'] = selections['yvar']
+        if selections['yvar'] not in cols:
+            cols += [selections['yvar']]
+
+    # Graphable data should only include fields directly referable by name, which
+    # means they should all be lower case with no prefix or grouping modifiers
+    df = get_base_data().copy()
+    df = strip_field_modifiers(df)
+    df = normalize_field_names(df)
+    df = df[cols]
+    for k, v in vars.items():
+        df[k] = df[v]
+
+    if 'xvar' in df and selections['xscale'] == 'log':
+        df['xvar'] = np.log10(df['xvar'])
+    if 'yvar' in df and selections['yscale'] == 'log':
+        df['yvar'] = np.log10(df['yvar'])
+
+    return df
+
+
+def strip_field_modifiers(df):
+    return df.rename(columns=lambda c: c.replace('ch:', ''))
+
+
+def normalize_field_name(field):
+    return field.lower().replace(' ', '_')
+
+
+def normalize_field_names(df):
+    return df.rename(columns=normalize_field_name)
+
+
+def normalize_channel_name(ch):
+    """Convert channel names like 'proc_DAPI 1' to 'dapi_1'"""
+    return ' '.join(ch.split('_')[1:]).replace(' ', '_').lower()
+
+
+def _get_box_data(df):
+
+    if len(df) > cfg.max_boxplot_records:
+        logger.info('Sampling boxplot data for %s cells down to %s records', len(df), cfg.max_boxplot_records)
+        df = df.sample(n=cfg.max_boxplot_records, random_state=cfg.random_state)
+
+    vals = []
+    labels = []
+    for c in df:
+        vals.extend(list(df[c].values))
+        labels.extend([c] * len(df))
+    return vals, labels
+
+
+def get_distribution_figure(selected_points=None):
+    # Extract expression stats only
+    d = get_base_data().filter(regex='ch:')
+
+    # Convert all names to snake case
+    d = normalize_field_names(strip_field_modifiers(d))
+
+    # Select only the expression fields present in the extract
+    d = d.filter(items=[normalize_channel_name(c) for c in cfg.extract_channels])
+
+    fig_data = []
+
+    vals, labels = _get_box_data(d)
+    fig_data.append(dict(
+        x=vals,
+        y=labels,
+        name='Overall',
+        orientation='h',
+        boxpoints=False,
+        type='box'
+    ))
+
+    if selected_points is not None:
+        ds = d.iloc[selected_points]
+        vals, labels = _get_box_data(ds)
+        fig_data.append(dict(
+            x=vals,
+            y=labels,
+            name='Selected',
+            orientation='h',
+            boxpoints=False,
+            type='box'
+        ))
+
+    fig_layout = {
+        'boxmode': 'group',
+        'title': 'Expression Distribution',
+        'margin': dict(b=0, t=50)
     }
-    fig = dict(data=data, layout=layout)
+    fig = dict(data=fig_data, layout=fig_layout)
+    return fig
+
+
+def get_graph_figure():
+    d = get_graph_data()
+
+    x = d['xvar'] if d is not None and 'xvar' in d else []
+    y = d['yvar'] if d is not None and 'yvar' in d else []
+
+    if len(y) > 0:
+        fig_data = [
+            dict(
+                x=x,
+                y=y,
+                mode='markers',
+                marker={'opacity': .3},
+                type='scattergl'
+            )
+        ]
+    else:
+        fig_data = [
+            dict(x=x, type='histogram')
+        ]
+
+    selections = get_graph_axis_selections()
+    fig_layout = {
+        'margin': dict(t=25),
+        'title': '',
+        'titlefont': {'size': 12},
+        'xaxis': {'title': (selections['xvar'] or '').upper(), 'autorange': True},
+        'yaxis': {'title': (selections['yvar'] or '').upper(), 'autorange': True},
+    }
+    fig = dict(data=fig_data, layout=fig_layout)
+    return fig
+
+
+def get_graph():
     return dcc.Graph(
         id='graph',
-        figure=fig,
-        animate=True
+        figure=get_graph_figure(),
+        animate=False
     )
+
+
+def get_distribution():
+    return dcc.Graph(
+        id='distribution',
+        figure=get_distribution_figure(),
+        animate=False
+    )
+
+
+def _ch_disp_name(ch):
+    """Convert channel names like 'cyto_nucleus_boundary' to 'nucleus boundary'"""
+    return ' '.join(ch.split('_')[1:]).lower()
 
 
 def get_image_settings_layout(id_format, channel_names, class_name, type='tile'):
 
-    # Convert channel names like "cyto_nucleus_boundary" to "nucleus boundary"
-    def ch_disp_name(ch):
-        return ' '.join(ch.split('_')[1:]).title()
-
     ranges = data.db.get('app', type + '_channel_ranges')
     if ranges is None or len(ranges) != len(channel_names):
-        ranges = [[0, 255]] * len(channel_names)
+        channel_dtype = data.get_channel_dtype_map()
+        assert len(channel_dtype) == len(channel_names), \
+            'Channel data type map "{}" does not match length of channel list "{}"'\
+            .format(channel_dtype, channel_names)
+        ranges = [[0, np.iinfo(t).max] for t in channel_dtype.values()]
 
     colors = data.db.get('app', type + '_channel_colors')
     if colors is None or len(colors) != len(channel_names):
@@ -97,7 +254,7 @@ def get_image_settings_layout(id_format, channel_names, class_name, type='tile')
 
     return html.Div([
             html.Div([
-                html.Div(ch_disp_name(channel_names[i]), style={'width': '50%', 'display': 'inline-block'}),
+                html.Div(_ch_disp_name(channel_names[i]), style={'width': '50%', 'display': 'inline-block'}),
                 html.Div(dcc.Dropdown(
                     id=id_format.format(str(i) + '-color'),
                     options=[{'label': c.title(), 'value': c} for c in color.get_all_color_names()],
@@ -108,11 +265,10 @@ def get_image_settings_layout(id_format, channel_names, class_name, type='tile')
                 dcc.RangeSlider(
                     id=id_format.format(str(i) + '-range'),
                     min=0,
-                    max=255,
+                    max=ranges[i][1],
                     step=1,
                     value=ranges[i],
                     allowCross=False
-                    #marks={0: 'Cells'}
                 )
             ])
             for i in range(len(channel_names))
@@ -121,31 +277,69 @@ def get_image_settings_layout(id_format, channel_names, class_name, type='tile')
     )
 
 
+def get_axis_settings_layout(axis):
+    selections = get_graph_axis_selections()
+    var = selections[axis + 'var']
+    scale = selections[axis + 'scale']
+
+    # Get list of possible field values based on "base" dataset, which may
+    # include spatial coordinates, raw expression levels, and projections
+    field_names = strip_field_modifiers(get_base_data().filter(regex='ch:')).columns.tolist()
+    field_names += [
+        'Nucleus Diameter', 'Nucleus Size', 'Nucleus Solidity',
+        'Cell Diameter', 'Cell Size', 'Cell Solidity',
+        'RX', 'RY', 'X', 'Y', 'Z'
+    ]
+
+    return html.Div([
+            html.Div(axis.upper(), style={'width': '5%', 'display': 'inline-block'}),
+            html.Div(
+                dcc.Dropdown(
+                    id='axis_' + axis + '_var',
+                    options=[
+                        # Note that the "value" should always be lower case since this
+                        # is what is passed around for referring to fields
+                        {'label': f, 'value': normalize_field_name(f)}
+                        for f in field_names
+                    ],
+                    value=var
+                ),
+                style={'width': '45%', 'display': 'inline-block'}
+            ),
+            html.Div(dcc.Dropdown(
+                id='axis_' + axis + '_scale',
+                options=[
+                    {'label': 'Log', 'value': 'log'},
+                    {'label': 'Linear', 'value': 'linear'}
+                ],
+                value=scale,
+                searchable=False,
+                clearable=False
+            ), style={'width': '45%', 'display': 'inline-block'}),
+
+        ]
+    )
+
+
 app.layout = html.Div([
         html.Div(
             className='row',
             children=[
                 html.Div([
-                        dcc.Dropdown(
-                            id='data-dropdown',
-                            options=[
-                                {'label': 'Selection', 'value': 'selection'},
-                                {'label': 'Expression', 'value': 'expression'}
-                            ],
-                            value='selection'
-                        ),
-                        html.Div(
-                            get_graph(),
-                            id='data-output'
-                        )
+                        get_axis_settings_layout('x'),
+                        get_axis_settings_layout('y'),
+                        get_graph()
                     ],
                     className='five columns'
                 ),
                 html.Div(
                     lib.get_interactive_image('montage', ac['layouts']['montage'], style=MONTAGE_IMAGE_STYLE),
-                    className='five columns'
+                    className='four columns'
                 ),
-                get_image_settings_layout('montage-ch-{}', cfg.montage_channels, 'two columns')
+                html.Div(
+                    get_distribution(),
+                    className='three columns'
+                )
             ],
         ),
         # html.Pre(id='console', className='four columns'),
@@ -156,7 +350,7 @@ app.layout = html.Div([
                     lib.get_interactive_image('tile', ac['layouts']['tile'], style=TILE_IMAGE_STYLE),
                     className='ten columns'
                 ),
-                get_image_settings_layout('tile-ch-{}', cfg.montage_channels, 'two columns')
+                get_image_settings_layout('tile-ch-{}', cfg.extract_channels, 'two columns')
             ]
         ),
         html.Div([
@@ -167,13 +361,20 @@ app.layout = html.Div([
 )
 
 
-@app.callback(Output('data-output', 'children'), [Input('data-dropdown', 'value')])
-def update_output(value):
-    if value == 'selection':
-        return get_graph()
-    elif value == 'expression':
-        return html.Div('Expression')
-    return None
+@app.callback(
+    Output('graph', 'figure'), [
+        Input('axis_x_var', 'value'),
+        Input('axis_x_scale', 'value'),
+        Input('axis_y_var', 'value'),
+        Input('axis_y_scale', 'value')
+    ])
+def update_graph(xvar, xscale, yvar, yscale):
+    data.db.put('app', 'axis_x_var', xvar)
+    data.db.put('app', 'axis_x_scale', xscale)
+    data.db.put('app', 'axis_y_var', yvar)
+    data.db.put('app', 'axis_y_scale', yscale)
+    fig = get_graph_figure()
+    return fig
 
 
 @app.callback(Output('message', 'children'), [Input('save-button', 'n_clicks')])
@@ -184,12 +385,6 @@ def save_state(n_clicks):
     return 'Application state saved to "{}"'.format(path)
 
 
-# display the event data for debugging
-# @app.callback(Output('console', 'children'), [Input('graph', 'selectedData')])
-# def display_selected_data(selectedData):
-#     return json.dumps(selectedData if selectedData else {}, indent=4)
-
-
 def _rescale_montage_coords(x, y):
     sy, sx = cfg.montage_target_scale_factors
     return x * sx, y * sy
@@ -197,7 +392,6 @@ def _rescale_montage_coords(x, y):
 
 def _relayout(figure, relayout_data):
     if relayout_data:
-        print(relayout_data)
         if 'xaxis.range[0]' in relayout_data:
             figure['layout']['xaxis']['range'] = [
                 relayout_data['xaxis.range[0]'],
@@ -211,17 +405,26 @@ def _relayout(figure, relayout_data):
     return figure
 
 
+@app.callback(Output('distribution', 'figure'), [Input('graph', 'selectedData')])
+def update_distribution(selected_data):
+    selected_points = None
+    if selected_data is not None:
+        selected_points = [p['pointIndex'] for p in selected_data['points']]
+    return get_distribution_figure(selected_points)
+
+
 @app.callback(Output('montage', 'figure'), [Input('graph', 'selectedData')], [State('montage', 'relayoutData')])
 def update_montage(selected_data, relayout_data):
-    # print(type(selectedData))
     if selected_data is None:
         d = [{'x': [], 'y': [], 'mode': 'markers', 'type': 'scattergl'}]
     else:
         # Fetch data corresponding to selected points
-        df = get_graph_data().set_index(['c1', 'c2']).loc[[
-            (p['x'], p['y'])
-            for p in selected_data['points']
-        ]]
+        df = get_graph_data().iloc[[p['pointIndex'] for p in selected_data['points']]]
+
+        # Sample if necessary
+        if len(df) > cfg.max_montage_points:
+            logger.info('Sampling montage data for %s cells down to %s records', len(df), cfg.max_montage_points)
+            df = df.sample(n=cfg.max_montage_points, random_state=cfg.random_state)
 
         # Update montage points using region x/y of cells
         x, y = _rescale_montage_coords(df['rx'], df['ry'])
@@ -236,28 +439,36 @@ def update_montage(selected_data, relayout_data):
     return _relayout(figure, relayout_data)
 
 
+def _get_tile_hover_text(r):
+    fields = ['Nucleus Diameter', 'Nucleus Solidity', 'Cell Diameter', 'Cell Size']
+    return '<br>'.join(
+        '{}: {:.2f}'.format(f, r[normalize_field_name(f)])
+        for f in fields
+        if normalize_field_name(f) in r
+    )
+
 def _get_tile_figure(selected_data, relayout_data):
-    if selected_data is None:
-        d = [{'x': [], 'y': [], 'mode': 'markers', 'type': 'scattergl'}]
-    else:
+    fig_data = [{'x': [], 'y': [], 'mode': 'markers', 'type': 'scattergl'}]
+    if selected_data is not None:
         df = get_graph_data()
 
-        # Fetch points in cyto data matching channel values in graph also
-        # filtered to current tile
-        tx, ty = ac['selection']['tile']['coords']
-        df = df.set_index(['tile_x', 'tile_y', 'c1', 'c2']).loc[[
-            (tx, ty) + (p['x'], p['y'])
-            for p in selected_data['points']
-        ]]
+        # Fetch only cells/rows corresponding to selected data in graph (and index by tile loc)
+        df = df.iloc[[p['pointIndex'] for p in selected_data['points']]] \
+            .set_index(['tile_x', 'tile_y']).sort_index()
 
-        d = [{
-            'x': df['x'],
-            'y': cfg.tile_shape[0] - df['y'],
-            'mode': 'markers',
-            'marker': {'opacity': 1., 'color': 'white'},
-            'type': 'scattergl'
-        }]
-    figure = dict(data=d, layout=ac['layouts']['tile'])
+        # Further restrict to only the selected tile
+        tx, ty = ac['selection']['tile']['coords']
+        if (tx, ty) in df.index:
+            df = df.loc[(tx, ty)]
+            fig_data = [{
+                'x': df['x'],
+                'y': cfg.tile_shape[0] - df['y'],
+                'mode': 'markers',
+                'text': df.apply(_get_tile_hover_text, axis=1),
+                'marker': {'opacity': 1., 'color': 'white'},
+                'type': 'scattergl'
+            }]
+    figure = dict(data=fig_data, layout=ac['layouts']['tile'])
     return _relayout(figure, relayout_data)
 
 
@@ -286,9 +497,6 @@ def update_tile(*args):
         py, px = montage_data['points'][0]['y'], montage_data['points'][0]['x']
         ac['selection']['tile']['coords'] = (int(px // (sx / rx)), ry - int(py // (sy / ry)) - 1)
 
-    print('Channel ranges: ', channel_ranges)
-    print('Channel colors: ', channel_colors)
-    print('New tile coords: ', ac['selection']['tile']['coords'])
     ac['processor']['tile'].ranges = channel_ranges
     ac['processor']['tile'].colors = [color.map(c) for c in channel_colors]
 

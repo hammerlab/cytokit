@@ -4,6 +4,7 @@ from codex import config as codex_config
 from codex import data as codex_data
 from codex_app.explorer.config import cfg
 from collections import defaultdict
+from collections import OrderedDict
 import os
 import os.path as osp
 import pandas as pd
@@ -118,6 +119,22 @@ def _get_montage_image():
     img = np.moveaxis(img, -1, 0)
     # Image is now (C, H, W)
     return img
+
+
+def get_channel_dtype_map():
+    """Infer the bit depth of each channel by using an arbitrary tile"""
+    img = get_tile_image()
+
+    # Get pre-sorted list of channel names (which match to order in tile)
+    channels = cfg.extract_channels
+
+    map = OrderedDict()
+    for i, ch in enumerate(channels):
+        if img[i].max() <= 255:
+            map[ch] = np.uint8
+        else:
+            map[ch] = np.uint16
+    return map
 
 
 def get_tile_image(tx=0, ty=0):

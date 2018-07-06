@@ -9,14 +9,17 @@ ENV_APP_EXP_DATA_DIR = 'APP_EXP_DATA_DIR'
 ENV_APP_DATA_DIR = 'APP_DATA_DIR'
 ENV_APP_PORT = 'APP_PORT'
 ENV_APP_HOST_IP = 'APP_HOST_IP'
+ENV_APP_MAX_CELLS = 'APP_MAX_CELLS'
 ENV_APP_REGION_INDEX = 'APP_REGION_INDEX'
 ENV_APP_EXTRACT_NAME = 'APP_EXTRACT_NAME'
 ENV_APP_MONTAGE_NAME = 'APP_MONTAGE_NAME'
 ENV_MONTAGE_CHANNELS = 'APP_MONTAGE_CHANNELS'
 ENV_EXTRACT_CHANNELS = 'APP_EXTRACT_CHANNELS'
+ENV_APP_EXTRACT_BIT_DEPTH = 'APP_EXTRACT_BIT_DEPTH'
 
 DEFAULT_APP_DATA_PATH = osp.join(codex_data.get_cache_dir(), 'app', 'explorer')
 DEFAULT_APP_HOST_IP = '0.0.0.0'
+DEFAULT_MAX_CELLS = 1000000
 
 
 class AppConfig(object):
@@ -109,5 +112,20 @@ class AppConfig(object):
     def extract_nchannels(self):
         return len(self.extract_channels)
 
+    @property
+    def max_cells(self):
+        return int(os.getenv(ENV_APP_MAX_CELLS, DEFAULT_MAX_CELLS))
+
+    @property
+    def max_boxplot_records(self):
+        return 50000
+
+    @property
+    def max_montage_points(self):
+        return 10000
+
+    @property
+    def random_state(self):
+        return 1
 
 cfg = AppConfig()

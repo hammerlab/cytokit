@@ -2,13 +2,13 @@ from codex.ops import op as codex_op
 from codex.cytometry import cytometer
 from codex import io as codex_io
 from codex import math as codex_math
+from codex import data as codex_data
 import os
 import os.path as osp
 import codex
 import logging
 import numpy as np
 logger = logging.getLogger(__name__)
-
 
 VOLUME_CYCLE = 0
 BOUNDARY_CYCLE = 1
@@ -32,11 +32,14 @@ def get_channel_coordinates(channel):
     return CHANNEL_COORDINATES[channel]
 
 
+def _default_model_path():
+    return osp.join(codex_data.get_cache_dir(), 'cytometry', 'model', 'nuclei_2d_model.h5')
+
+
 def get_model_path():
-    return os.getenv(
-        codex.ENV_CYTOMETRY_2D_MODEL_PATH,
-        osp.join(os.environ['CODEX_DATA_DIR'], 'modeling', 'cytopy', 'models', 'nuclei', 'v0.3', 'nuclei_model.h5')
-    )
+    path = os.getenv(codex.ENV_CYTOMETRY_2D_MODEL_PATH, _default_model_path())
+    url = os.getenv(codex.ENV_CYTOMETRY_2D_MODEL_URL, codex.DEFAULT_CYTOMETRY_2D_MODEL_URL)
+    return codex_data.download(url, path)
 
 
 def set_keras_session(op):

@@ -4,14 +4,18 @@ from os import path as osp
 import logging
 logger = logging.getLogger(__name__)
 
-DEFAULT_CACHE_DIR = '~/.codex/cache'
 ENV_CACHE_DIR = 'CODEX_CACHE_DIR'
+ENV_DATA_DIR = 'CODEX_DATA_DIR'
 
 BEST_FOCUS_MODEL = "https://storage.googleapis.com/microscope-image-quality/static/model/model.ckpt-1000042"
 
 
+def get_data_dir():
+    return os.environ[ENV_DATA_DIR]
+
+
 def get_cache_dir():
-    return os.getenv(ENV_CACHE_DIR, osp.expanduser(DEFAULT_CACHE_DIR))
+    return os.getenv(ENV_CACHE_DIR, osp.join(get_data_dir(), '.codex', 'cache'))
 
 
 def _resolve_cache_path(path):

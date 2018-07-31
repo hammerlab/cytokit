@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import pandas as pd
+import os.path as osp
 from skimage import segmentation
 from skimage import morphology
 from skimage import measure
@@ -8,50 +9,32 @@ from skimage import filters
 from skimage import exposure
 from scipy import ndimage
 from codex import math as codex_math
+from codex import data as codex_data
 
-DEFAULT_BATCH_SIZE = 8
+DEFAULT_BATCH_SIZE = 1
 CELL_CHANNEL = 0
 NUCLEUS_CHANNEL = 1
 
 
 class Cytometer(object):
 
-    def __init__(self, input_shape, model_path):
+    def __init__(self, input_shape, weights_path=None):
         self.input_shape = input_shape
-        self.model_path = model_path
+        self.weights_path = weights_path
         self.initialized = False
         self.model = None
 
     def initialize(self):
         self.model = self._get_model(self.input_shape)
-        self.model.load_weights(self.model_path)
+        self.model.load_weights(self.weights_path or self._get_weights_path())
         self.initialized = True
         return self
 
+    def _get_model(self, input_shape):
+        raise NotImplementedError()
 
-def _get_unet_v1_model(input_shape):
-    from codex.cytometry.models import unet_v1
-    import keras  # Load this as late as possible
-    # conv_activation = lambda l: keras.layers.LeakyReLU(alpha=.3)(l)
-    conv_activation = lambda l: keras.layers.Activation('elu')(l)
-    return unet_v1.get_model(3, input_shape, 'sigmoid', conv_activation=conv_activation)
-
-
-def _get_flat_ball(size):
-    struct = morphology.ball(size)
-
-    # Ball structs should always be of odd size and double given radius pluse one
-    assert struct.shape[0] == size * 2 + 1
-    assert struct.shape[0] % 2 == 1
-
-    # Get middle index (i.e. position 2 (0-index 1) for struct of size 3)
-    mid = ((struct.shape[0] + 1) // 2) - 1
-
-    # Flatten the ball so there is no connectivity in the z-direction
-    struct[(mid + 1):] = 0
-    struct[:(mid)] = 0
-
-    return struct
+    def _get_weights_path(self):
+        raise NotImplementedError()
 
 
 def _to_uint8(img, name):
@@ -68,12 +51,15 @@ def _to_uint8(img, name):
 class Cytometer2D(Cytometer):
 
     def _get_model(self, input_shape):
-        return _get_unet_v1_model(input_shape)
+        # Load this as late as possible to avoid premature keras backend initialization
+        from codex.cytometry.models import unet_v2 as unet_model
+        return unet_model.get_model(3, input_shape)
 
-    def prepocess(self, img, thresh, min_size):
-        img = img > thresh
-        # img = morphology.remove_small_objects(img, min_size=min_size)
-        return img
+    def _get_weights_path(self):
+        # Load this as late as possible to avoid premature keras backend initialization
+        from codex.cytometry.models import unet_v2 as unet_model
+        path = osp.join(codex_data.get_cache_dir(), 'cytometry', 'unet_v2_weights.h5')
+        return codex_data.download_file_from_google_drive(unet_model.WEIGHTS_FILE_ID, path, name='UNet Weights')
 
     def get_segmentation_mask(self, img_bin_nuci, img_memb=None, dilation_factor=0):
         if dilation_factor > 0:
@@ -84,39 +70,30 @@ class Cytometer2D(Cytometer):
         if img_memb is None:
             return img_bin_nuci
 
-        # Construct mask as thresholded membrane image OR binary nucleus mask
+        # Construct mask as threshold on membrane image OR binary nucleus mask
         img_bin_memb = img_memb > filters.threshold_otsu(img_memb)
         img_bin_memb = img_bin_memb | img_bin_nuci
         return morphology.remove_small_holes(img_bin_memb, 64)
 
-    def segment(self, img_nuc, img_memb=None, nucleus_dilation=4, proba_threshold=.9, min_size=12,
+    def segment(self, img_nuc, img_memb=None, nucleus_dilation=4, proba_threshold=None, min_size=12,
                 batch_size=DEFAULT_BATCH_SIZE, return_masks=False):
         if not self.initialized:
             self.initialize()
 
-        if not np.isscalar(proba_threshold) and len(proba_threshold) != 3:
-            raise ValueError(
-                'Probability threshold must be either scalar value in [0, 1] or 3 value list (given = {}'
-                .format(proba_threshold)
-            )
-        if np.isscalar(proba_threshold):
-            # Default to threshold interpreted as marker threshold
-            proba_threshold = [.5, proba_threshold, .5]
-
-        # Convert images to segment or otherwise analyze to 8-bit since this is typically
-        # what any trained networks will expect
+        # Convert images to segment or otherwise analyze to 8-bit
         img_nuc = _to_uint8(img_nuc, 'nucleus')
         if img_memb is not None:
             img_memb = _to_uint8(img_memb, 'membrane')
 
         # Add batch dimension if not present
         if img_nuc.ndim == 2:
-            img = np.expand_dims(img_nuc, 0)
+            img_nuc = np.expand_dims(img_nuc, 0)
         if img_nuc.ndim != 3:
-            raise ValueError('Must provide image as NHW or HW (image shape w/ batch dimension = {})'.format(img_nuc.shape))
+            raise ValueError('Must provide image as ZHW or HW (image shape given = {})'.format(img_nuc.shape))
 
-        # Make predictions for each image in batch
-        img_pred = self.model.predict(np.expand_dims(img_nuc, -1) / 255., batch_size=batch_size)
+        # Make predictions for each image after converting to 0-1; Result has shape
+        # NHWC where C=3 and C1 = bg, C2 = interior, C3 = border
+        img_pred = self.model.predict(np.expand_dims(img_nuc / 255., -1), batch_size=batch_size)
         assert img_pred.shape[0] == img_nuc.shape[0], \
             'Expecting {} predictions (shape = {})'.format(img_nuc.shape[0], img_pred.shape)
         assert img_pred.shape[-1] == 3, \
@@ -125,36 +102,47 @@ class Cytometer2D(Cytometer):
         img_seg_list, img_bin_list = [], []
         nz = img_nuc.shape[0]
         for i in range(nz):
-            # Extract prediction channels
-            img_bin_nuci, img_bin_nucb, img_bin_nucm = [
-                self.prepocess(img_pred[i, ..., j], proba_threshold[j], min_size) for j in range(3)]
 
-            # Form watershed markers as marker class intersection with nuclei class, minus boundaries
-            img_bin_nucm = img_bin_nucm & img_bin_nuci & (~img_bin_nucb)
+            # Determine pixel-wise class predictions
+            img_class = np.argmax(img_pred[i], axis=-1)
+
+            # Extract binary prediction masks for nucleus interior and boundary
+            img_bin_nuci = img_class == 1
+            img_bin_nucb = img_class == 2
+
+            # Use nuclei interior mask as watershed markers if no threshold given
+            if proba_threshold is None:
+                img_bin_nucm = img_bin_nuci
+            # Otherwise, set markers as threshold on nuclei interior probability
+            else:
+                img_bin_nucm = img_pred[i, ..., 1] > proba_threshold
 
             # Remove markers (which determine number of cells) below the given size
             if min_size > 0:
                 img_bin_nucm = morphology.remove_small_objects(img_bin_nucm, min_size=min_size)
 
-            # Label the markers and create the basin to segment (+boundary, -nucleus interior)
+            # Label the markers and create the basin to segment over
             img_bin_nucm_label = morphology.label(img_bin_nucm)
-            img_bin_nuci_basin = ndimage.distance_transform_edt(img_bin_nuci)
-            img_basin = -1 * img_bin_nuci_basin
+            img_basin = -1 * ndimage.distance_transform_edt(img_bin_nuci)
 
-            # Determine the overall mask to segment across by dilating nuclei as an approximation for cytoplasm/membrane
+            # Determine the overall mask to segment across by dilating nuclei as an
+            # approximation for cytoplasm + membrane
             img_bin_mask = self.get_segmentation_mask(
-                img_bin_nuci, img_memb=img_memb[i] if img_memb is not None else None,
+                img_bin_nuci | img_bin_nucb, img_memb=img_memb[i] if img_memb is not None else None,
                 dilation_factor=nucleus_dilation)
 
             # Run cell segmentation and append to results
             img_cell_seg = segmentation.watershed(img_basin, img_bin_nucm_label, mask=img_bin_mask)
 
             # Generate nucleus segmentation based on cell segmentation and nucleus mask
-            # (with the same integer labels as in the cell segmentation)
             img_nuc_seg = (img_cell_seg > 0) & img_bin_nuci
-            # img_nuc_seg = morphology.remove_small_holes(img_nuc_seg, area_threshold=32)
-            img_nuc_seg = cv2.morphologyEx(
-                    img_nuc_seg.astype(np.uint8), cv2.MORPH_CLOSE, morphology.disk(2))
+
+            # Predictions of nuclei interior exclude boundaries, so add them back here
+            # as a slight dilation (note that the predicted boundary mask is often too
+            # thick so a small dilation actually seems to recover true boundaries better)
+            img_nuc_seg = cv2.dilate(img_nuc_seg.astype(np.uint8), morphology.disk(1))
+
+            # Relabel nuclei objections using corresponding cell labels
             img_nuc_seg = img_nuc_seg * img_cell_seg
 
             # Add labeled images to results
@@ -165,7 +153,7 @@ class Cytometer2D(Cytometer):
 
             # Add mask images to results
             if return_masks:
-                img_bin_list.append(np.stack([img_bin_nuci, img_bin_nucb, img_bin_nucm, img_bin_mask], axis=0))
+                img_bin_list.append(np.stack([img_bin_nuci, img_bin_nucm, img_bin_mask], axis=0))
 
         assert img_nuc.shape[0] == len(img_seg_list)
         if return_masks:
@@ -237,6 +225,22 @@ class Cytometer2D(Cytometer):
         ]
         return pd.DataFrame(res, columns=columns + channel_names)
 
+
+# def _get_flat_ball(size):
+#     struct = morphology.ball(size)
+#
+#     # Ball structs should always be of odd size and double given radius pluse one
+#     assert struct.shape[0] == size * 2 + 1
+#     assert struct.shape[0] % 2 == 1
+#
+#     # Get middle index (i.e. position 2 (0-index 1) for struct of size 3)
+#     mid = ((struct.shape[0] + 1) // 2) - 1
+#
+#     # Flatten the ball so there is no connectivity in the z-direction
+#     struct[(mid + 1):] = 0
+#     struct[:(mid)] = 0
+#
+#     return struct
 
 # class Cytometer3D(Cytometer):
 #

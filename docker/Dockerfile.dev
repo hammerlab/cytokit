@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git vim wget
 
 RUN pip --no-cache-dir install \
     jupyterlab \
-    scikit-image \
+    scikit-image==0.14.0 \
     matplotlib \
     pandas \
     requests \

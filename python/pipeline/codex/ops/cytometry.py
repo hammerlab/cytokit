@@ -77,10 +77,11 @@ class Cytometry(codex_op.CodexOp):
         # Set the Keras session to have the same TF configuration as other operations
         set_keras_session(self)
 
-        # Load the cytometry model from path to keras model weights
-        model_path = get_model_path()
-        logger.debug('Initializing cytometry model from path "{}" (input shape = {})'.format(model_path, self.input_shape))
-        self.cytometer = cytometer.Cytometer2D(self.input_shape, model_path).initialize()
+        # Use explicit override for weights for segmentation model (otherwise a default
+        # will be used based on cached weights files)
+        weights_path = os.getenv(codex.ENV_CYTOMETRY_2D_MODEL_PATH)
+        logger.debug('Initializing cytometry model for input shape = {}'.format(self.input_shape))
+        self.cytometer = cytometer.Cytometer2D(self.input_shape, weights_path=weights_path).initialize()
         return self
 
     def shutdown(self):

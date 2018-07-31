@@ -211,14 +211,6 @@ def read_raw_microscope_image(path, file_type):
                 'for image at "{}" (shape = {})'.format(file_type, path, img.shape)
             )
         img = img[..., 0]
-
-        # TODO: REMOVE THIS!
-        from skimage import transform
-        from skimage import exposure
-        img = transform.rescale(img, 4, mode='constant', multichannel=False, anti_aliasing=True)
-        img = exposure.rescale_intensity(img, in_range=(0, 1), out_range='uint8').astype(np.uint8)
-        assert img.shape == (1440, 1920)
-
     elif file_type == codex.FT_KEYENCE_MIXED:
         img = read_image(path)
         if img.ndim not in [2, 3]:

@@ -11,6 +11,10 @@ ENV_DATA_DIR = 'CODEX_DATA_DIR'
 BEST_FOCUS_MODEL = "https://storage.googleapis.com/microscope-image-quality/static/model/model.ckpt-1000042"
 
 
+def get_data_dir():
+    return os.environ[ENV_DATA_DIR]
+
+
 def get_cache_dir():
     # Use explicit cache location, if set
     if os.getenv(ENV_CACHE_DIR):

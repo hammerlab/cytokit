@@ -7,6 +7,7 @@ ENV_CONFIG_DEFAULT_FILENAME = 'CODEX_CONFIG_DEFAULT_FILENAME'
 ENV_CPU_ONLY_OPS = 'CODEX_CPU_ONLY_OPS'
 ENV_RAW_INDEX_SYMLINKS = 'CODEX_RAW_INDEX_SYMLINKS'
 ENV_CYTOMETRY_2D_MODEL_PATH = 'CODEX_CYTOMETRY_2D_MODEL_PATH'
+ENV_CYTOMETRY_2D_MODEL_URL = 'CODEX_CYTOMETRY_2D_MODEL_URL'
 ENV_CYTOMETRY_3D_MODEL_PATH = 'CODEX_CYTOMETRY_3D_MODEL_PATH'
 
 # Raw microscope files are a mixed bag in terms of format
@@ -50,6 +51,12 @@ def get_config_default_filename():
 def set_config_default_filename(filename):
     os.environ[ENV_CONFIG_DEFAULT_FILENAME] = filename
 
+
+# ################# #
+# Resource Defaults #
+# ################# #
+
+DEFAULT_CYTOMETRY_2D_MODEL_URL = 'https://storage.googleapis.com/musc-codex/models/r0.3/nuclei_model.h5'
 
 # #################### #
 # File Format Versions #

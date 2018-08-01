@@ -108,7 +108,7 @@ class Operator(cli.DataCLI):
                 EXP_DIR/output/extract/`name`
             channels: List of strings indicating channel names (case-insensitive)
             z: String or 1-based index selector for z indexes constructed as any of the following:
-                - "best": Indicates that z slices should be inferred based on focal quality
+                - "best": Indicates that z slices should be inferred based on focal quality (default option)
                 - "all": Indicates that a slice for all z-planes should be used
                 - str or int: A single value will be interpreted as a single index
                 - tuple: A 2-item or 3-item tuple forming the slice (start, stop[, step]); stop is inclusive
@@ -179,13 +179,11 @@ class Operator(cli.DataCLI):
             codex_io.save_tile(extract_path, extract_tile)
 
         logging.info('Extraction complete (results saved to %s)', osp.dirname(extract_path) if extract_path else None)
-        return self
 
     def montage(self, name, extract_name, region_indexes=None):
         logging.info('Creating montage "%s" from extraction "%s"', name, extract_name)
         region_indexes = cli.resolve_index_list_arg(region_indexes, zero_based=True)
         core.create_montage(self.data_dir, self.config, extract_name, name, region_indexes)
-        return self
 
 
 if __name__ == '__main__':

@@ -1,8 +1,9 @@
 from codex import io as codex_io
-import warnings
 import os.path as osp
 import pandas as pd
 import numpy as np
+import logging
+logger = logging.getLogger(__name__)
 
 
 def aggregate(config, output_dir):
@@ -22,10 +23,9 @@ def aggregate(config, output_dir):
         path = codex_io.get_cytometry_stats_path(idx.region_index, idx.tile_x, idx.tile_y)
         path = osp.join(output_dir, path)
         if not osp.exists(path):
-            warnings.warn(
-                'Expected cytometry data file at "{}" does not exist.  '
-                'It will be ignored but this is worth investigating'
-                .format(path)
+            logger.warning(
+                'Expected cytometry data file at "%s" does not exist.  '
+                'It will be ignored but this may be worth investigating', path
             )
             continue
         df.append(pd.read_csv(path))

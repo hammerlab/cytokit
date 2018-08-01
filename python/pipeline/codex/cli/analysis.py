@@ -21,7 +21,6 @@ class Analysis(cli.DataCLI):
         nb_params = {'processor_data_path': processor_data_path}
         core.run_nb(nb_name, nb_output_path, nb_params)
         logging.info('Processor data summary complete; view results with `jupyter notebook %s`', nb_output_path)
-        return self
 
     def aggregate_cytometry_statistics(self, mode='all', export_csv=True, export_fcs=True):
         logging.info('Running cytometry statistics aggregation')

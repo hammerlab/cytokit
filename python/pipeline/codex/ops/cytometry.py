@@ -56,11 +56,13 @@ def close_keras_session():
 
 class Cytometry(codex_op.CodexOp):
 
-    def __init__(self, config, mode='2D', segmentation_params=None, quantification_params=None):
+    def __init__(self, config, mode='2D', best_z_only=False,
+                 segmentation_params=None, quantification_params=None):
         super(Cytometry, self).__init__(config)
 
         params = config.cytometry_params
         self.mode = params.get('mode', mode)
+        self.best_z_only = params.get('best_z_only', best_z_only)
         self.segmentation_params = params.get('segmentation_params', segmentation_params or {})
 
         self.quantification_params = params.get('quantification_params', quantification_params or {})
@@ -91,19 +93,52 @@ class Cytometry(codex_op.CodexOp):
         close_keras_session()
         return self
 
-    def _run_2d(self, tile):
-        # Tile should have shape (cycles, z, channel, height, width)
+    def _get_best_z(self, params):
+        if not self.best_z_only:
+            return None
+
+        if not 'best_focus_data' in params:
+            logger.warning(
+                'Z-plane focus scores not present for short-circuit segmentation optimization '
+                '(this will not affect results but it will slow calculations down)'
+            )
+            return None
+
+        return params['best_focus_data'][1]
+
+    def _run_2d(self, tile, **kwargs):
+
+        # Determine coordinates of nucleus channel
         nuc_cycle = self.nuc_channel_coords[0]
         nuc_channel = self.nuc_channel_coords[1]
-        img_nuc = tile[nuc_cycle, :, nuc_channel]
 
+        # Determine z-slicing used as performance optimization (this is not
+        # necessary but can significantly improve computation times)
+        best_z = self._get_best_z(kwargs)
+        z_slice = slice(None) if best_z is None else slice(best_z, best_z + 1)
+
+        # Tile shape = (cycles, z, channel, height, width)
+        img_nuc = tile[nuc_cycle, z_slice, nuc_channel]
+
+        # If configured to do so, also extract cell membrane channel to make
+        # more precise cell segmentations
         img_memb = None
         if self.mem_channel_coords is not None:
             memb_cycle = self.mem_channel_coords[0]
             memb_channel = self.mem_channel_coords[1]
-            img_memb = tile[memb_cycle, :, memb_channel]
+            img_memb = tile[memb_cycle, z_slice, memb_channel]
 
-        img_seg, img_pred, _ = self.cytometer.segment(img_nuc, img_memb=img_memb, **self.segmentation_params)
+        # Fetch segmentation volume as ZCHW where C = 2 and C1 = cell and C2 = nucleus
+        img_seg = self.cytometer.segment(img_nuc, img_memb=img_memb, **self.segmentation_params)[0]
+
+        # If using the "best z" optimization, conform segmented volume to typical tile
+        # shape by adding empty z-planes
+        if best_z is not None:
+            shape = list(img_seg.shape)
+            shape[0] = tile.shape[1]
+            img_seg_tmp = np.zeros(shape, dtype=img_seg.dtype)
+            img_seg_tmp[best_z] = img_seg
+            img_seg = img_seg_tmp
 
         # Ensure segmentation image is of integer type and >= 0
         assert np.issubdtype(img_seg.dtype, np.integer), \
@@ -118,6 +153,7 @@ class Cytometry(codex_op.CodexOp):
                 'Segmentation resulted in {} cells, a number which is both suspiciously high '
                 'and too large to store as the assumed 16-bit format'.format(img_seg.max()))
 
+        # Run cell cytometry calculations (results given as data frame)
         stats = self.cytometer.quantify(tile, img_seg, **self.quantification_params)
 
         # Convert size measurements to more meaningful scales and add diameter
@@ -141,7 +177,7 @@ class Cytometry(codex_op.CodexOp):
         return img_label, stats
 
     def _run(self, tile, **kwargs):
-        return self._run_2d(tile)
+        return self._run_2d(tile, **kwargs)
 
     def save(self, tile_indices, output_dir, data):
         region_index, tile_index, tx, ty = tile_indices

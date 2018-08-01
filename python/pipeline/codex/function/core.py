@@ -54,7 +54,7 @@ def aggregate_cytometry_statistics(output_dir, config, mode='all', export_csv=Tr
             ex = merge_data[merge_data['best_z'].isnull()][['region_index', 'tile_x', 'tile_y']]
             raise ValueError(
                 'Failed to find best z plane settings for at least one tile;\n'
-                'The following region/tile combinations have no z-planes: {}'
+                'The following (region, tile_x, tile_y) combinations have no known best z-planes: {}'
                 .format(ex.values)
             )
         # Filter result to where z plane equals best z and drop best_z field
@@ -147,7 +147,7 @@ def create_montage(output_dir, config, extract, name, region_indexes):
         reg_img_montage = montage(tiles, config)
         path = osp.join(output_dir, codex_io.get_montage_image_path(ireg, name))
         logger.info('Saving montage to file "%s"', path)
-        codex_io.save_image(path, reg_img_montage)
+        codex_io.save_tile(path, reg_img_montage)
     logger.info('Montage generation complete; results saved to "%s"', None if path is None else osp.dirname(path))
 
 

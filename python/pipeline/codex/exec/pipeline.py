@@ -184,6 +184,7 @@ def process_tile(tile, tile_indices, ops, log_fn, output_dir):
         log_fn('Skipping deconvolution')
 
     # Best Focal Plane Selection
+    best_focus_data = None
     if ops.focus_op:
         # Used the cropped, but un-deconvolved tile for focal plane selection
         best_focus_data = ops.focus_op.run(crop_tile)
@@ -195,20 +196,31 @@ def process_tile(tile, tile_indices, ops, log_fn, output_dir):
     # From this point on, no further modifications to the raw tile should occur
     res_tile = decon_tile
 
+    # Cytometry (segmentation + quantification)
+    if ops.cytometry_op:
+        cyto_data = ops.cytometry_op.run(res_tile, best_focus_data=best_focus_data)
+
+        if ops.illumination_op:
+            if not ops.cytometry_op:
+                raise ValueError(
+                    'Illumination correction is only possible when also running cytometry '
+                    '(corrections are made using inferred cell features)'
+                )
+            # Compute illumination image
+            # Apply illumination correction to tile
+            # Recalculate cytometry data
+
+        paths = ops.cytometry_op.save(tile_indices, output_dir, cyto_data)
+        log_fn('Tile cytometry complete; Statistics saved to "{}"'.format(paths[-1]), cyto_data[0])
+    else:
+        log_fn('Skipping tile cytometry')
+
     # Tile summary statistic operations
     if ops.summary_op:
         ops.summary_op.run(res_tile)
         log_fn('Tile statistic summary complete')
     else:
         log_fn('Skipping tile statistic summary')
-
-    # Cytometry (segmentation + quantification)
-    if ops.cytometry_op:
-        cyto_data = ops.cytometry_op.run(res_tile)
-        paths = ops.cytometry_op.save(tile_indices, output_dir, cyto_data)
-        log_fn('Tile cytometry complete; Statistics saved to "{}"'.format(paths[-1]), cyto_data[0])
-    else:
-        log_fn('Skipping tile cytometry')
 
     return res_tile
 
@@ -338,8 +350,14 @@ def run(pl_conf, logging_init_fn=None):
         stop = timer()
         logger.info('Pipeline execution completed in %.0f seconds', stop - start)
     finally:
-        client.close()
-        cluster.close()
+        # Ignore any issues on shutdown and log a warning instead
+        # (shtudown errors are rarely important at TOW)
+        try:
+            client.close()
+            cluster.close()
+        except:
+            logger.exception("message")
+            logger.warning('An error occurred shutting down dask cluster/client')
 
     # Merge monitoring data across pipeline tasks and return result
     return concat(res)

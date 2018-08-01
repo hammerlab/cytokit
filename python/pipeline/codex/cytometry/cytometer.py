@@ -75,7 +75,7 @@ class Cytometer2D(Cytometer):
         img_bin_memb = img_bin_memb | img_bin_nuci
         return morphology.remove_small_holes(img_bin_memb, 64)
 
-    def segment(self, img_nuc, img_memb=None, nucleus_dilation=4, proba_threshold=None, min_size=12,
+    def segment(self, img_nuc, img_memb=None, nucleus_dilation=4, min_size=12,
                 batch_size=DEFAULT_BATCH_SIZE, return_masks=False):
         if not self.initialized:
             self.initialize()
@@ -103,46 +103,34 @@ class Cytometer2D(Cytometer):
         nz = img_nuc.shape[0]
         for i in range(nz):
 
-            # Determine pixel-wise class predictions
-            img_class = np.argmax(img_pred[i], axis=-1)
-
-            # Extract binary prediction masks for nucleus interior and boundary
-            img_bin_nuci = img_class == 1
-            img_bin_nucb = img_class == 2
-
-            # Use nuclei interior mask as watershed markers if no threshold given
-            if proba_threshold is None:
-                img_bin_nucm = img_bin_nuci
-            # Otherwise, set markers as threshold on nuclei interior probability
-            else:
-                img_bin_nucm = img_pred[i, ..., 1] > proba_threshold
+            # Use nuclei interior mask as watershed markers
+            img_bin_nucm = np.argmax(img_pred[i], axis=-1) == 1
 
             # Remove markers (which determine number of cells) below the given size
             if min_size > 0:
                 img_bin_nucm = morphology.remove_small_objects(img_bin_nucm, min_size=min_size)
 
+            # Define the entire nucleus interior as a slight dilation of the markers noting that this
+            # actually works better than using the union of predicted interiors and predicted boundaries
+            # (which are often too thick)
+            img_bin_nuci = cv2.dilate(img_bin_nucm.astype(np.uint8), morphology.disk(1)).astype(np.bool)
+
             # Label the markers and create the basin to segment over
             img_bin_nucm_label = morphology.label(img_bin_nucm)
-            img_basin = -1 * ndimage.distance_transform_edt(img_bin_nuci)
+            img_basin = -1 * ndimage.distance_transform_edt(img_bin_nucm)
 
-            # Determine the overall mask to segment across by dilating nuclei as an
-            # approximation for cytoplasm + membrane
+            # Determine the overall mask to segment across by dilating nuclei by some fixed amount
+            # or if possible, using the given cell membrane image
             img_bin_mask = self.get_segmentation_mask(
-                img_bin_nuci | img_bin_nucb, img_memb=img_memb[i] if img_memb is not None else None,
+                img_bin_nuci, img_memb=img_memb[i] if img_memb is not None else None,
                 dilation_factor=nucleus_dilation)
 
-            # Run cell segmentation and append to results
+            # Run watershed using markers and expanded nuclei / cell mask
             img_cell_seg = segmentation.watershed(img_basin, img_bin_nucm_label, mask=img_bin_mask)
 
             # Generate nucleus segmentation based on cell segmentation and nucleus mask
+            # and relabel nuclei objections using corresponding cell labels
             img_nuc_seg = (img_cell_seg > 0) & img_bin_nuci
-
-            # Predictions of nuclei interior exclude boundaries, so add them back here
-            # as a slight dilation (note that the predicted boundary mask is often too
-            # thick so a small dilation actually seems to recover true boundaries better)
-            img_nuc_seg = cv2.dilate(img_nuc_seg.astype(np.uint8), morphology.disk(1))
-
-            # Relabel nuclei objections using corresponding cell labels
             img_nuc_seg = img_nuc_seg * img_cell_seg
 
             # Add labeled images to results
@@ -151,7 +139,7 @@ class Cytometer2D(Cytometer):
                 .format(img_cell_seg.dtype, img_nuc_seg.dtype)
             img_seg_list.append(np.stack([img_cell_seg, img_nuc_seg], axis=0))
 
-            # Add mask images to results
+            # Add mask images to results, if requested
             if return_masks:
                 img_bin_list.append(np.stack([img_bin_nuci, img_bin_nucm, img_bin_mask], axis=0))
 
@@ -186,7 +174,7 @@ class Cytometer2D(Cytometer):
             raise ValueError(
                 'Data tile contains {} channels but channel names list contains only {} items '
                 '(names given = {}, tile shape = {})'
-                    .format(nch, len(channel_names), channel_names, tile.shape))
+                .format(nch, len(channel_names), channel_names, tile.shape))
 
         res = []
         for iz in range(nz):

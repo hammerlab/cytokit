@@ -78,7 +78,7 @@ def rescale_stack(tile, stack, scale_factor):
 class CodexDeconvolution(CodexOp):
 
     def __init__(self, config, n_iter=25, scale_factor=.5):
-        super(CodexDeconvolution, self).__init__(config)
+        super().__init__(config)
 
         params = config.deconvolution_params
         self.n_iter = params.get('n_iter', n_iter)

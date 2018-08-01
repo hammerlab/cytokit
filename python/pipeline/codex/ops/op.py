@@ -110,7 +110,7 @@ class TensorFlowOp(object):
 
     def initialize(self):
         graph = tf.Graph()
-        with graph.as_default():
+        with graph.as_default():  # pylint: disable=not-context-manager
             inputs, outputs = self._build_graph()
         self.graph = OpGraph(graph, inputs, outputs)
         return self

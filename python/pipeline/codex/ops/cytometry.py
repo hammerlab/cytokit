@@ -54,15 +54,31 @@ def close_keras_session():
     KTF.get_session().close()
 
 
-class Cytometry(codex_op.CodexOp):
+def _validate_z_plane(z_plane):
+    if z_plane not in ['best', 'all'] and not isinstance(z_plane, int):
+        raise ValueError(
+            'Z plane for cytometry must be either "all", "best", or a 0-based integer index (given = {})'
+            .format(z_plane)
+        )
 
-    def __init__(self, config, mode='2D', best_z_only=False,
-                 segmentation_params=None, quantification_params=None):
-        super(Cytometry, self).__init__(config)
+
+def get_op(config):
+    mode = config.cytometry_params.get('mode', '2D')
+
+    if mode != '2D':
+        raise ValueError('Cytometry mode should be one of ["2D"] not {}'.format(self.mode))
+
+    return Cytometry2D(config)
+
+
+class Cytometry2D(codex_op.CodexOp):
+
+    def __init__(self, config, z_plane='best', segmentation_params=None, quantification_params=None):
+        super().__init__(config)
 
         params = config.cytometry_params
-        self.mode = params.get('mode', mode)
-        self.best_z_only = params.get('best_z_only', best_z_only)
+        self.z_plane = params.get('z_plane', z_plane)
+
         self.segmentation_params = params.get('segmentation_params', segmentation_params or {})
 
         self.quantification_params = params.get('quantification_params', quantification_params or {})
@@ -73,10 +89,10 @@ class Cytometry(codex_op.CodexOp):
         self.mem_channel_coords = None if 'membrane_channel_name' not in params else \
             config.get_channel_coordinates(params['membrane_channel_name'])
 
-        if self.mode != '2D':
-            raise ValueError('Cytometry mode should be one of ["2D"] not {}'.format(self.mode))
         self.input_shape = (config.tile_height, config.tile_width, 1)
         self.cytometer = None
+
+        _validate_z_plane(self.z_plane)
 
     def initialize(self):
         # Set the Keras session to have the same TF configuration as other operations
@@ -93,29 +109,27 @@ class Cytometry(codex_op.CodexOp):
         close_keras_session()
         return self
 
-    def _get_best_z(self, params):
-        if not self.best_z_only:
-            return None
+    def _resolve_z_plane(self, z_plane, best_focus_data):
+        if z_plane is None:
+            z_plane = self.z_plane
+        _validate_z_plane(z_plane)
 
-        if not 'best_focus_data' in params:
-            logger.warning(
-                'Z-plane focus scores not present for short-circuit segmentation optimization '
-                '(this will not affect results but it will slow calculations down)'
-            )
-            return None
+        if z_plane == 'best' and best_focus_data is None:
+            raise ValueError('Best focus data must be specified when running cytometry for best z planes')
 
-        return params['best_focus_data'][1]
+        if z_plane == 'best':
+            z_plane = best_focus_data[1]
 
-    def _run_2d(self, tile, **kwargs):
+        assert z_plane is not None, 'Z plane must be set'
+        return z_plane
+
+    def _run(self, tile, z_plane=None, best_focus_data=None):
+        z_plane = self._resolve_z_plane(z_plane, best_focus_data)
+        z_slice = slice(None) if z_plane == 'all' else slice(z_plane, z_plane + 1)
 
         # Determine coordinates of nucleus channel
         nuc_cycle = self.nuc_channel_coords[0]
         nuc_channel = self.nuc_channel_coords[1]
-
-        # Determine z-slicing used as performance optimization (this is not
-        # necessary but can significantly improve computation times)
-        best_z = self._get_best_z(kwargs)
-        z_slice = slice(None) if best_z is None else slice(best_z, best_z + 1)
 
         # Tile shape = (cycles, z, channel, height, width)
         img_nuc = tile[nuc_cycle, z_slice, nuc_channel]
@@ -131,13 +145,13 @@ class Cytometry(codex_op.CodexOp):
         # Fetch segmentation volume as ZCHW where C = 2 and C1 = cell and C2 = nucleus
         img_seg = self.cytometer.segment(img_nuc, img_memb=img_memb, **self.segmentation_params)[0]
 
-        # If using the "best z" optimization, conform segmented volume to typical tile
+        # If using a specific z-plane, conform segmented volume to typical tile
         # shape by adding empty z-planes
-        if best_z is not None:
+        if z_plane != 'all':
             shape = list(img_seg.shape)
             shape[0] = tile.shape[1]
             img_seg_tmp = np.zeros(shape, dtype=img_seg.dtype)
-            img_seg_tmp[best_z] = img_seg
+            img_seg_tmp[z_plane] = img_seg
             img_seg = img_seg_tmp
 
         # Ensure segmentation image is of integer type and >= 0
@@ -175,9 +189,6 @@ class Cytometry(codex_op.CodexOp):
         img_label = np.stack([img_seg, img_boundary], axis=0).astype(np.uint16)
 
         return img_label, stats
-
-    def _run(self, tile, **kwargs):
-        return self._run_2d(tile, **kwargs)
 
     def save(self, tile_indices, output_dir, data):
         region_index, tile_index, tx, ty = tile_indices

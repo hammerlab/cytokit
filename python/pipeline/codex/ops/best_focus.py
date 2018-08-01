@@ -26,7 +26,7 @@ class CodexFocalPlaneSelector(CodexOp):
     """
 
     def __init__(self, config, patch_size=84, n_classes=11, save_tile=False):
-        super(CodexFocalPlaneSelector, self).__init__(config)
+        super().__init__(config)
         self.mqiest = None
         self.graph = None
 

@@ -5,7 +5,7 @@ class CodexTileSummary(CodexOp):
 
     def __init__(self, config):
         """Operation to record summary statistics for each tile"""
-        super(CodexTileSummary, self).__init__(config)
+        super().__init__(config)
 
     def _run(self, tile, **kwargs):
         ncyc, nch, chnames = self.config.n_cycles, self.config.n_channels_per_cycle, self.config.channel_names

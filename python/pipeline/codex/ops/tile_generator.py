@@ -21,7 +21,7 @@ class CodexTileGenerator(CodexOp):
 
     def __init__(self, config, data_dir, region_index, tile_index, mode='raw',
                  raw_file_type=codex.FT_GRAYSCALE, path_fmt_name=codex_io.FMT_PROC_IMAGE):
-        super(CodexTileGenerator, self).__init__(config)
+        super().__init__(config)
         self.data_dir = data_dir
         self.mode = mode
         self.region_index = region_index

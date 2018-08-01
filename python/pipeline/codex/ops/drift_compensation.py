@@ -29,7 +29,7 @@ def coord_max(t):
 class TranslationCalculator(TensorFlowOp):
 
     def __init__(self, n_dims):
-        super(TranslationCalculator, self).__init__()
+        super().__init__()
         self.n_dims = n_dims
 
     def _build_graph(self):
@@ -57,7 +57,7 @@ class TranslationCalculator(TensorFlowOp):
 class TranslationApplier(TensorFlowOp):
 
     def __init__(self, n_dims):
-        super(TranslationApplier, self).__init__()
+        super().__init__()
         self.n_dims = n_dims
         if self.n_dims not in [2, 3, 4]:
             raise ValueError('Number of dimensions must be 2, 3 or 4 (given {})'.format(self.n_dims))

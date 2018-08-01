@@ -159,81 +159,83 @@ def initialize_task(task_config):
 
 def process_tile(tile, tile_indices, ops, log_fn, output_dir):
 
+    # Ensure there are no invalid combinations of enabled/disabled operations
+    if ops.illumination_op and (not ops.cytometry_op or not ops.focus_op):
+        raise ValueError(
+            'Illumination correction is only possible when also running '
+            'cytometry and best focus operations (corrections are made '
+            'using inferred cell features within best focal planes)'
+        )
+
     # Drift Compensation
     if ops.align_op:
-        align_tile = ops.align_op.run(tile)
-        log_fn('Drift compensation complete', align_tile)
+        tile = ops.align_op.run(tile)
+        log_fn('Drift compensation complete', tile)
     else:
-        align_tile = tile
-        log_fn('Skipping drift compensation')
+        log_fn('Skipping drift compensation', debug=True)
 
     # Crop off overlap in imaging process
     if ops.crop_op:
-        crop_tile = ops.crop_op.run(align_tile)
-        log_fn('Tile overlap crop complete', crop_tile)
+        tile = ops.crop_op.run(tile)
+        log_fn('Tile overlap crop complete', tile)
     else:
-        crop_tile = tile
-        log_fn('Skipping tile crop')
-
-    # Deconvolution
-    if ops.decon_op:
-        decon_tile = ops.decon_op.run(crop_tile)
-        log_fn('Deconvolution complete', decon_tile)
-    else:
-        decon_tile = crop_tile
-        log_fn('Skipping deconvolution')
+        log_fn('Skipping tile crop', debug=True)
 
     # Best Focal Plane Selection
     best_focus_data = None
     if ops.focus_op:
         # Used the cropped, but un-deconvolved tile for focal plane selection
-        best_focus_data = ops.focus_op.run(crop_tile)
+        best_focus_data = ops.focus_op.run(tile)
         ops.focus_op.save(tile_indices, output_dir, best_focus_data)
         log_fn('Focal plane selection complete', best_focus_data[0])
     else:
-        log_fn('Skipping focal plane selection')
+        log_fn('Skipping focal plane selection', debug=True)
 
-    # From this point on, no further modifications to the raw tile should occur
-    res_tile = decon_tile
+    # Deconvolution
+    if ops.decon_op:
+        tile = ops.decon_op.run(tile)
+        log_fn('Deconvolution complete', tile)
+    else:
+        log_fn('Skipping deconvolution', debug=True)
+
+    # Illumination Correction
+    if ops.illumination_op:
+        cyto_data = ops.cytometry_op.run(tile, z_plane='best', best_focus_data=best_focus_data)
+        illum_data = ops.illumination_op.run(tile, cyto_data=cyto_data)
+        path = ops.illumination_op.save(output_dir, illum_data)
+        tile = illum_data[0]
+        log_fn('Illumination correction complete; Illumination image saved to "{}"'.format(path), tile)
+    else:
+        log_fn('Skipping illumination correction', debug=True)
 
     # Cytometry (segmentation + quantification)
     if ops.cytometry_op:
-        cyto_data = ops.cytometry_op.run(res_tile, best_focus_data=best_focus_data)
-
-        if ops.illumination_op:
-            if not ops.cytometry_op:
-                raise ValueError(
-                    'Illumination correction is only possible when also running cytometry '
-                    '(corrections are made using inferred cell features)'
-                )
-            # Compute illumination image
-            # Apply illumination correction to tile
-            # Recalculate cytometry data
-
+        cyto_data = ops.cytometry_op.run(tile, best_focus_data=best_focus_data)
         paths = ops.cytometry_op.save(tile_indices, output_dir, cyto_data)
         log_fn('Tile cytometry complete; Statistics saved to "{}"'.format(paths[-1]), cyto_data[0])
     else:
-        log_fn('Skipping tile cytometry')
+        log_fn('Skipping tile cytometry', debug=True)
 
     # Tile summary statistic operations
     if ops.summary_op:
-        ops.summary_op.run(res_tile)
+        ops.summary_op.run(tile)
         log_fn('Tile statistic summary complete')
     else:
-        log_fn('Skipping tile statistic summary')
+        log_fn('Skipping tile statistic summary', debug=True)
 
-    return res_tile
+    return tile
 
 
 def get_log_fn(i, n_tiles, region_index, tx, ty):
-    def log_fn(msg, res=None):
+    def log_fn(msg, res=None, debug=False):
         details = [
             'tile {} of {} ({:.2f}%)'.format(i + 1, n_tiles, 100*(i+1)/n_tiles),
             'reg/x/y = {}/{}/{}'.format(region_index + 1, tx + 1, ty + 1)
         ]
         if res is not None:
             details.append('shape {} / dtype {}'.format(res.shape, res.dtype))
-        logger.info(msg + ' [' + ' | '.join(details) + ']')
+        lf = logger.debug if debug else logger.info
+        lf(msg + ' [' + ' | '.join(details) + ']')
     return log_fn
 
 
@@ -245,7 +247,7 @@ def get_op_set(task_config):
         decon_op=deconvolution.CodexDeconvolution(exp_config) if task_config.run_deconvolution else None,
         summary_op=tile_summary.CodexTileSummary(exp_config) if task_config.run_summary else None,
         crop_op=tile_crop.CodexTileCrop(exp_config) if task_config.run_crop else None,
-        cytometry_op=cytometry.Cytometry(exp_config) if task_config.run_cytometry else None
+        cytometry_op=cytometry.get_op(exp_config) if task_config.run_cytometry else None
     )
 
 

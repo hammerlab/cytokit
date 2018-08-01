@@ -29,7 +29,7 @@ def apply_slice(img, crop_slice):
 class CodexTileCrop(CodexOp):
 
     def __init__(self, config):
-        super(CodexTileCrop, self).__init__(config)
+        super().__init__(config)
 
     def _run(self, tile, **kwargs):
 

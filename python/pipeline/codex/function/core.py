@@ -8,80 +8,16 @@ logger = logging.getLogger(__name__)
 
 
 #########################
-# Aggregation Utilities #
+# Aggregation Functions #
 #########################
-
-CYTOMETRY_STATS_AGG_MODES = ['best_z_plane', 'most_cells', 'all']
-
-
-def aggregate(output_dir, config, params):
-    target = params.pop('target', None)
-    if target is None:
-        raise ValueError(
-            'Must specify "target" property for aggregation operation (params given = {})'.format(params))
-    if target != 'cytometry_statistics':
-        raise ValueError('Only "cytometry_statistics" target currently supported (given = {})'.format(target))
-    return aggregate_cytometry_statistics(output_dir, config, **params)
 
 
 def aggregate_cytometry_statistics(output_dir, config, mode='all', export_csv=True, export_fcs=True, variant=None):
     import pandas as pd
-    from codex.cytometry import data as cytometry_data
     from codex.function import data as function_data
 
-    if mode not in CYTOMETRY_STATS_AGG_MODES:
-        raise ValueError(
-            'Cytometry stats aggregation mode must be one of {} not "{}"'
-            .format(CYTOMETRY_STATS_AGG_MODES, mode)
-        )
-
     # Aggregate all cytometry csv data (across tiles)
-    cyto_data = cytometry_data.aggregate(config, output_dir)
-
-    # If configured, select only data associated with "best" z planes
-    if mode == 'best_z_plane':
-        # Extract best focal plane selections from precomputed processor data
-        focus_data = function_data.get_best_focus_data(output_dir)
-
-        # Merge to cytometry data on region / tile index (this will add a single column, "best_z")
-        merge_data = pd.merge(
-            cyto_data, focus_data[['region_index', 'tile_index', 'best_z']],
-            on=['region_index', 'tile_index'],
-            how='left'
-        )
-        if merge_data['best_z'].isnull().any():
-            # Create list of regions / tiles with null z planes
-            ex = merge_data[merge_data['best_z'].isnull()][['region_index', 'tile_x', 'tile_y']]
-            raise ValueError(
-                'Failed to find best z plane settings for at least one tile;\n'
-                'The following (region, tile_x, tile_y) combinations have no known best z-planes: {}'
-                .format(ex.values)
-            )
-        # Filter result to where z plane equals best z and drop best_z field
-        res = merge_data[merge_data['best_z'] == merge_data['z']].drop('best_z', axis=1)
-
-    # If configured, select only data for z planes associated with the most
-    # cells (only makes sense w/ 2D segmentation)
-    elif mode == 'most_cells':
-        # Count number of cells per tile / z
-        cts = cyto_data.groupby(['region_index', 'tile_index', 'z']).size().rename('count').reset_index()
-
-        # Determine z plane with highest cell count
-        cts = cts.groupby(['region_index', 'tile_index']) \
-            .apply(lambda g: g.sort_values('count').iloc[-1]['z']).rename('z').reset_index()
-
-        # Restrict data to only the z planes with the most cells
-        res = pd.merge(
-            cyto_data, cts,
-            on=['region_index', 'tile_index', 'z'],
-            how='inner'
-        )
-        assert len(res) == len(cts), \
-            'Before/after merge sizes not equal (before = {}, after = {})'.format(len(cts), len(res))
-
-    # Otherwise, do nothing
-    else:
-        res = cyto_data
+    res = function_data.get_cytometry_data(output_dir, config, mode=mode)
 
     # Get file extension, possibly with user-defined "variant" name to be included in all
     # resulting file names
@@ -111,7 +47,7 @@ def aggregate_cytometry_statistics(output_dir, config, mode='all', export_csv=Tr
 
 
 ######################
-# Notebook Utilities #
+# Notebook Functions #
 ######################
 
 
@@ -126,7 +62,7 @@ def run_nb(nb_name, nb_output_path, nb_params):
 
 
 #####################
-# Montage Utilities #
+# Montage Functions #
 #####################
 
 def create_montage(output_dir, config, extract, name, region_indexes):

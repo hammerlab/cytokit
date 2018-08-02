@@ -14,6 +14,7 @@ from codex import data as codex_data
 DEFAULT_BATCH_SIZE = 1
 CELL_CHANNEL = 0
 NUCLEUS_CHANNEL = 1
+DEFAULT_CHANNEL_PREFIX = 'ch:'
 
 
 class Cytometer(object):
@@ -155,7 +156,7 @@ class Cytometer2D(Cytometer):
         # Return (in this order) labeled volumes, prediction volumes, mask volumes
         return img_seg, img_pred, img_bin
 
-    def quantify(self, tile, img_seg, channel_names=None, channel_name_prefix='ch:'):
+    def quantify(self, tile, img_seg, channel_names=None, channel_name_prefix=DEFAULT_CHANNEL_PREFIX):
         ncyc, nz, _, nh, nw = tile.shape
 
         # Move cycles and channels to last axes (in that order)

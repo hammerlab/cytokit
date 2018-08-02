@@ -3,13 +3,16 @@
 This is not intended to be run directly but rather used by mutliple external
 interfaces to implement the core process that comprises CODEX processing.
 """
-import os, logging, itertools, queue
+import os, logging, itertools, queue, sys
 import numpy as np
+import pandas as pd
 from os import path as osp
 from threading import Thread
 from timeit import default_timer as timer
 from codex import io as codex_io
 from codex import config as codex_config
+from codex import exec
+from codex.function import data as function_data
 from codex.ops import op
 from codex.ops import tile_generator
 from codex.ops import cytometry
@@ -18,6 +21,7 @@ from codex.ops import drift_compensation
 from codex.ops import best_focus
 from codex.ops import deconvolution
 from codex.ops import tile_summary
+from codex.ops import illumination_correction
 from dask.distributed import Client, LocalCluster
 logger = logging.getLogger(__name__)
 
@@ -29,7 +33,8 @@ class TaskConfig(object):
 
     def __init__(self, pipeline_config, region_indexes, tile_indexes, gpu, tile_prefetch_capacity=2, 
             run_best_focus=True, run_drift_comp=True, run_summary=True,
-            run_tile_generator=True, run_crop=True, run_deconvolution=True, run_cytometry=True):
+            run_tile_generator=True, run_crop=True, run_deconvolution=True,
+            run_cytometry=True, run_illumination_correction=True):
         self.region_indexes = region_indexes
         self.tile_indexes = tile_indexes
         self.data_dir = pipeline_config.data_dir
@@ -43,6 +48,7 @@ class TaskConfig(object):
         self.run_best_focus = run_best_focus
         self.run_summary = run_summary
         self.run_cytometry = run_cytometry
+        self.run_illumination_correction = run_illumination_correction
         self.exp_config = pipeline_config.exp_config
 
         if len(self.region_indexes) != len(self.tile_indexes):
@@ -51,9 +57,15 @@ class TaskConfig(object):
                 .format(self.region_indexes, self.tile_indexes)
             )
 
+
     @property
     def n_tiles(self):
         return len(self.tile_indexes)
+
+    @property
+    def postprocessing_enabled(self):
+        # Currently, illumination correction is the only post processing operation
+        return self.run_illumination_correction
 
     def __str__(self):
         return str({k: v for k, v in self.__dict__.items() if k != 'exp_config'})
@@ -157,15 +169,8 @@ def initialize_task(task_config):
     init_dirs(task_config.output_dir)
 
 
-def process_tile(tile, tile_indices, ops, log_fn, output_dir):
-
-    # Ensure there are no invalid combinations of enabled/disabled operations
-    if ops.illumination_op and (not ops.cytometry_op or not ops.focus_op):
-        raise ValueError(
-            'Illumination correction is only possible when also running '
-            'cytometry and best focus operations (corrections are made '
-            'using inferred cell features within best focal planes)'
-        )
+def preprocess_tile(tile, tile_indices, ops, log_fn, task_config):
+    output_dir = task_config.output_dir
 
     # Drift Compensation
     if ops.align_op:
@@ -198,19 +203,10 @@ def process_tile(tile, tile_indices, ops, log_fn, output_dir):
     else:
         log_fn('Skipping deconvolution', debug=True)
 
-    # Illumination Correction
-    if ops.illumination_op:
-        cyto_data = ops.cytometry_op.run(tile, z_plane='best', best_focus_data=best_focus_data)
-        illum_data = ops.illumination_op.run(tile, cyto_data=cyto_data)
-        path = ops.illumination_op.save(output_dir, illum_data)
-        tile = illum_data[0]
-        log_fn('Illumination correction complete; Illumination image saved to "{}"'.format(path), tile)
-    else:
-        log_fn('Skipping illumination correction', debug=True)
-
     # Cytometry (segmentation + quantification)
     if ops.cytometry_op:
-        cyto_data = ops.cytometry_op.run(tile, best_focus_data=best_focus_data)
+        best_focus_z_plane = best_focus_data[1] if best_focus_data else None
+        cyto_data = ops.cytometry_op.run(tile, best_focus_z_plane=best_focus_z_plane)
         paths = ops.cytometry_op.save(tile_indices, output_dir, cyto_data)
         log_fn('Tile cytometry complete; Statistics saved to "{}"'.format(paths[-1]), cyto_data[0])
     else:
@@ -223,7 +219,45 @@ def process_tile(tile, tile_indices, ops, log_fn, output_dir):
     else:
         log_fn('Skipping tile statistic summary', debug=True)
 
-    return tile
+    # Save the output tile if tile generation/assembly was enabled
+    if task_config.run_tile_generator:
+        path = codex_io.get_processor_img_path(tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)
+        codex_io.save_tile(osp.join(output_dir, path), tile)
+        log_fn('Saved preprocessed tile to path "{}"'.format(path), tile)
+
+
+def postprocess_tile(tile, tile_indices, ops, log_fn, task_config):
+    output_dir = task_config.output_dir
+
+    # Illumination Correction
+    if ops.illumination_op:
+
+        # Prepare and save illumination images, if not already done
+        ops.illumination_op.prepare_region_data(output_dir)
+        path = ops.illumination_op.save_region_data(output_dir)
+        if path is not None:
+            log_fn('Region illumination images saved to "{}"'.format(path))
+
+        # Run correction for tile
+        illum_data = ops.illumination_op.run(tile, tile_indices)
+        path = ops.illumination_op.save(tile_indices, output_dir, illum_data)
+        tile = illum_data[0]
+        log_fn('Illumination correction complete; Corrected tile saved to "{}"'.format(path), tile)
+
+        # Get best focus data
+        # TODO Prevent needing to re-read the processor data file each time
+        best_focus_data = function_data.get_best_focus_coord_map(output_dir)
+        best_focus_z_plane = best_focus_data[(tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)]
+
+        # Rerun cytometry based on corrected tile
+        cyto_data = ops.cytometry_op.run(tile, best_focus_z_plane=best_focus_z_plane)
+        paths = ops.cytometry_op.save(tile_indices, output_dir, cyto_data)
+        log_fn(
+            'Illumination-corrected tile cytometry complete; Statistics saved to "{}"'
+            .format(paths[-1]), cyto_data[0]
+        )
+    else:
+        log_fn('Skipping illumination correction', debug=True)
 
 
 def get_log_fn(i, n_tiles, region_index, tx, ty):
@@ -239,7 +273,7 @@ def get_log_fn(i, n_tiles, region_index, tx, ty):
     return log_fn
 
 
-def get_op_set(task_config):
+def get_preprocess_op_set(task_config):
     exp_config = task_config.exp_config
     return op.CodexOpSet(
         align_op=drift_compensation.CodexDriftCompensator(exp_config) if task_config.run_drift_comp else None,
@@ -248,6 +282,16 @@ def get_op_set(task_config):
         summary_op=tile_summary.CodexTileSummary(exp_config) if task_config.run_summary else None,
         crop_op=tile_crop.CodexTileCrop(exp_config) if task_config.run_crop else None,
         cytometry_op=cytometry.get_op(exp_config) if task_config.run_cytometry else None
+    )
+
+
+def get_postprocess_op_set(task_config):
+    exp_config = task_config.exp_config
+    return op.CodexOpSet(
+        illumination_op=illumination_correction.IlluminationCorrection(exp_config)
+        if task_config.run_illumination_correction else None,
+        cytometry_op=cytometry.get_op(exp_config)
+        if task_config.run_illumination_correction else None
     )
 
 
@@ -260,16 +304,14 @@ def concat(datasets):
     return res
 
 
-def run_pipeline_task(task_config):
+def run_task(task_config, ops, process_fn):
     initialize_task(task_config)
 
     tile_queue = queue.Queue(maxsize=task_config.tile_prefetch_capacity)
     load_thread = Thread(target=load_tiles, args=(tile_queue, task_config))
     load_thread.start()
 
-    ops = get_op_set(task_config)
-
-    monitor_data = {}
+    measure_data = {}
     with ops:
         n_tiles = task_config.n_tiles
         for i in range(n_tiles):
@@ -285,21 +327,24 @@ def run_pipeline_task(task_config):
             log_fn = get_log_fn(i, n_tiles, region_index, tx, ty)
 
             with op.new_monitor(context) as monitor:
-                res_tile = process_tile(tile, tile_indices, ops, log_fn, task_config.output_dir)
-
-                # Save the output tile if tile generation/assembly was enabled
-                if task_config.run_tile_generator:
-                    # Save the tile resulting from pipeline execution
-                    res_path = codex_io.get_processor_img_path(region_index, tx, ty)
-                    codex_io.save_tile(osp.join(task_config.output_dir, res_path), res_tile)
-                    log_fn('Saved assembled tile to path "{}"'.format(res_path), res_tile)
+                process_fn(tile, tile_indices, ops, log_fn, task_config)
 
                 # Accumulate monitor data across tiles
-                monitor_data = concat([monitor_data, monitor.data])
+                measure_data = concat([measure_data, monitor.data])
 
                 log_fn('Processing complete')
                 
-    return monitor_data
+    return measure_data
+
+
+def run_preprocess_task(task_config):
+    ops = get_preprocess_op_set(task_config)
+    return run_task(task_config, ops, preprocess_tile)
+
+
+def run_postprocess_task(task_config):
+    ops = get_postprocess_op_set(task_config)
+    return run_task(task_config, ops, postprocess_tile)
 
 
 def run(pl_conf, logging_init_fn=None):
@@ -314,6 +359,11 @@ def run(pl_conf, logging_init_fn=None):
         ip='0.0.0.0'
     )
     client = Client(cluster)
+
+
+    ##########################
+    # Preprocessing Pipeline #
+    ##########################
 
     # Split total region + tile indexes to process into separate lists for each worker 
     # (by indexes of those index combinations)
@@ -345,24 +395,41 @@ def run(pl_conf, logging_init_fn=None):
             worker.auto_restart = False
 
         # Pass tasks to each worker to execute in parallel
-        res = client.map(run_pipeline_task, tasks)
+        res = client.map(run_preprocess_task, tasks)
         res = [r.result() for r in res]
         if len(res) != len(tasks):
             raise ValueError('Parallel execution returned {} results but {} were expected'.format(len(res), len(tasks)))
-        stop = timer()
-        logger.info('Pipeline execution completed in %.0f seconds', stop - start)
     finally:
-        # Ignore any issues on shutdown and log a warning instead
-        # (shtudown errors are rarely important at TOW)
-        try:
-            client.close()
-            cluster.close()
-        except:
-            logger.exception("message")
-            logger.warning('An error occurred shutting down dask cluster/client')
+        # Note that this often produces a non-critical error due to: https://github.com/dask/distributed/issues/1969
+        # but that closing these resources is necessary to avoid GPU oom in post-processing
+        client.close()
+        cluster.close()
 
-    # Merge monitoring data across pipeline tasks and return result
-    return concat(res)
+    # Save measurement data prior to postprocessing
+    measure_data = concat(res)
+    path = exec.record_processor_data(measure_data, pl_conf.output_dir)
+    logging.info('Preprocessing complete; Measurement data saved to "%s"', path)
+
+    ##########################
+    # Postprocessing Pipeline #
+    ##########################
+
+    # Create postprocessing task configuration to load all tiles for all regions
+    task = pl_conf.get_task_config(region_indexes=tiles[:, 0], tile_indexes=tiles[:, 1], gpu=None)
+
+    # Configure the task to use an input directory equal to preprocessing output and to source
+    # preprocessed tiles instead of raw files
+    task.data_dir = task.output_dir
+    task.run_tile_generator = False
+
+    # Run post-processing if necessary
+    if task.postprocessing_enabled:
+        logging.info('Starting postprocessing pipeline')
+        run_postprocess_task(task)
+        logging.info('Postprocessing complete')
+
+    stop = timer()
+    logger.info('Pipeline execution completed in %.0f seconds', stop - start)
 
 
 

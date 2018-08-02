@@ -175,17 +175,9 @@ class CodexOp(MonitorMixin):
     def run(self, *args, **kwargs):
         # Reset monitor record list
         self._records = []
-
-        # Time all operations executed by underlying implementations
-        start = timer()
         res = self._run(*args, **kwargs)
-        stop = timer()
-
-        # Merge execution time with other contextual data before recording
-        self._records.append({'execution_time': stop - start})
         for monitor_record in self._records:
             self.add_monitor_data(monitor_record)
-
         return res
 
     def initialize(self):

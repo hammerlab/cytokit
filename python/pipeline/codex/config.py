@@ -260,6 +260,10 @@ class CodexConfigV10(Config):
         return self._processor_params('cytometry')
 
     @property
+    def illumination_correction_params(self):
+        return self._processor_params('illumination_correction')
+
+    @property
     def analysis_params(self):
         return self._conf.get('analysis', [])
 

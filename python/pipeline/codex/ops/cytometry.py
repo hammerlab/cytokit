@@ -64,10 +64,8 @@ def _validate_z_plane(z_plane):
 
 def get_op(config):
     mode = config.cytometry_params.get('mode', '2D')
-
     if mode != '2D':
-        raise ValueError('Cytometry mode should be one of ["2D"] not {}'.format(self.mode))
-
+        raise ValueError('Cytometry mode should be one of ["2D"] not {}'.format(mode))
     return Cytometry2D(config)
 
 
@@ -109,22 +107,22 @@ class Cytometry2D(codex_op.CodexOp):
         close_keras_session()
         return self
 
-    def _resolve_z_plane(self, z_plane, best_focus_data):
+    def _resolve_z_plane(self, z_plane, best_focus_z_plane):
         if z_plane is None:
             z_plane = self.z_plane
         _validate_z_plane(z_plane)
 
-        if z_plane == 'best' and best_focus_data is None:
-            raise ValueError('Best focus data must be specified when running cytometry for best z planes')
+        if z_plane == 'best' and best_focus_z_plane is None:
+            raise ValueError('Best focus plane must be specified when running cytometry for best z planes')
 
         if z_plane == 'best':
-            z_plane = best_focus_data[1]
+            z_plane = best_focus_z_plane
 
         assert z_plane is not None, 'Z plane must be set'
         return z_plane
 
-    def _run(self, tile, z_plane=None, best_focus_data=None):
-        z_plane = self._resolve_z_plane(z_plane, best_focus_data)
+    def _run(self, tile, z_plane=None, best_focus_z_plane=None):
+        z_plane = self._resolve_z_plane(z_plane, best_focus_z_plane)
         z_slice = slice(None) if z_plane == 'all' else slice(z_plane, z_plane + 1)
 
         # Determine coordinates of nucleus channel

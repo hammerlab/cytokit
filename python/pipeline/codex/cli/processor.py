@@ -29,10 +29,10 @@ class Processor(cli.DataCLI):
             run_drift_comp=True,
             run_summary=True,
             run_cytometry=True,
+            run_illumination_correction=True,
 
             # Bookkeeping
-            record_execution=True,
-            record_data=True):
+            record_execution=True):
         """Run processing and cytometry pipeline
 
         This application can execute the following operations on either raw or already processed data:
@@ -76,6 +76,8 @@ class Processor(cli.DataCLI):
             run_drift_comp: Flag indicating that drift compensation should be executed
             run_summary: Flag indicating that tile summary statistics should be computed (eg mean, max, min, etc)
             run_cytometry: Flag indicating whether or not image tiles should be segmented and quantified
+            run_illumination_correction: Flag indicating whether or not image tiles and cytometry data should be
+                adjusted according to global illumination patterns across entire regions
             record_execution: Flag indicating whether or not to store arguments and environment in
                 a file within the output directory; defaults to True
             record_data: Flag indicating whether or not summary information from each operation
@@ -96,7 +98,7 @@ class Processor(cli.DataCLI):
             # Default to 1 worker given no knowledge of available gpus 
             n_workers = len(gpus) if gpus is not None else 1
 
-        # Execute pipeline on localhost
+        # Execute pipeline
         pl_config = pipeline.PipelineConfig(
             self.config, region_indexes, tile_indexes, self.data_dir, output_dir,
             n_workers, gpus, memory_limit,
@@ -107,13 +109,10 @@ class Processor(cli.DataCLI):
             run_drift_comp=run_drift_comp,
             run_summary=run_summary,
             run_tile_generator=run_tile_generator,
-            run_cytometry=run_cytometry
+            run_cytometry=run_cytometry,
+            run_illumination_correction=run_illumination_correction
         )
-        data = pipeline.run(pl_config, logging_init_fn=self._logging_init_fn)
-
-        if record_data:
-            path = cli.record_processor_data(data, output_dir)
-            logging.info('Operation summary data saved to "%s"', path)
+        pipeline.run(pl_config, logging_init_fn=self._logging_init_fn)
 
     def _get_function_configs(self):
         raise NotImplementedError()

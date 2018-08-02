@@ -239,9 +239,8 @@ def postprocess_tile(tile, tile_indices, ops, log_fn, task_config):
             log_fn('Region illumination images saved to "{}"'.format(path))
 
         # Run correction for tile
-        illum_data = ops.illumination_op.run(tile, tile_indices)
-        path = ops.illumination_op.save(tile_indices, output_dir, illum_data)
-        tile = illum_data[0]
+        tile = ops.illumination_op.run(tile, tile_indices)
+        path = ops.illumination_op.save(tile_indices, output_dir, tile)
         log_fn('Illumination correction complete; Corrected tile saved to "{}"'.format(path), tile)
 
         # Get best focus data

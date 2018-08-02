@@ -8,3 +8,4 @@ papermill
 keras
 fcswrite
 opencv-python
+scikit-learn

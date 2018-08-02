@@ -115,7 +115,7 @@ class IlluminationCorrection(codex_op.CodexOp):
                 raise ValueError(
                     'Average {} channel intensity for region {} (across {} cells) is ~0, '
                     'making illumination correction impossible'
-                    .format(region_index, source_channel, len(df))
+                    .format(region_index, channel, len(df))
                 )
             y = y / y.mean()
 

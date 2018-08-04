@@ -18,7 +18,8 @@ SEED = 5512
 class IlluminationCorrection(codex_op.CodexOp):
 
     def __init__(self, config, max_cells=100000, n_estimators=25,
-                 filter_range=DEFAULT_FILTER_RANGE, filter_features=DEFAULT_FILTER_FEATURES):
+                 filter_range=DEFAULT_FILTER_RANGE, filter_features=DEFAULT_FILTER_FEATURES,
+                 overwrite_tile=False):
         super().__init__(config)
 
         params = config.illumination_correction_params
@@ -30,6 +31,7 @@ class IlluminationCorrection(codex_op.CodexOp):
         self.max_cells = params.get('max_cells', max_cells)
         self.n_estimators = params.get('n_estimators', n_estimators)
         self.filter_features = params.get('filter_features', filter_features)
+        self.overwrite_tile = params.get('overwrite_tile', overwrite_tile)
 
         if self.filter_range is None or len(self.filter_range) != 2:
             raise ValueError(
@@ -120,7 +122,7 @@ class IlluminationCorrection(codex_op.CodexOp):
             y = y / y.mean()
 
             # Fit regression model used to represent illumination surface
-            est = GradientBoostingRegressor(n_estimators=self.n_estimators)
+            est = GradientBoostingRegressor(n_estimators=self.n_estimators, random_state=SEED)
             ests[channel] = est.fit(X, y)
         return ests
 
@@ -162,7 +164,7 @@ class IlluminationCorrection(codex_op.CodexOp):
             # Stack 2D images on first axis to give 3D array
             img = np.stack(list(imgs.values()), 0)
             assert img.ndim == 3, 'Expecting 3D array, got shape {}'.format(img.shape)
-            path = osp.join(output_dir, codex_io.get_illumination_image_path(region_index))
+            path = osp.join(output_dir, codex_io.get_illumination_function_path(region_index))
             codex_io.save_image(path, img)
 
         self.data_saved = True
@@ -205,8 +207,15 @@ class IlluminationCorrection(codex_op.CodexOp):
         return tile
 
     def save(self, tile_indices, output_dir, tile):
-        # Overwrite the original preprocessed tile
-        path = codex_io.get_processor_img_path(tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)
-        codex_io.save_tile(osp.join(output_dir, path), tile)
+        if self.overwrite_tile:
+            # Overwrite the original preprocessed tile with corrected version
+            path = codex_io.get_processor_img_path(
+                tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)
+            codex_io.save_tile(osp.join(output_dir, path), tile)
+        else:
+            # Save corrected tile in separate location
+            path = codex_io.get_illumination_image_path(
+                tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)
+            codex_io.save_tile(osp.join(output_dir, path), tile)
         return path
 

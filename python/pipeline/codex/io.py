@@ -13,7 +13,8 @@ DEFAULT_FORMATS = dict(
     cyto_agg='cytometry/data.{extension}',
     cyto_image='cytometry/tile/R{region:03d}_X{x:03d}_Y{y:03d}.tif',
     cyto_stats='cytometry/statistics/R{region:03d}_X{x:03d}_Y{y:03d}.csv',
-    illum_image='illumination/R{region:03d}.tif',
+    illum_func='illumination/function/R{region:03d}.tif',
+    illum_image='illumination/tile/R{region:03d}_X{x:03d}_Y{y:03d}.tif',
     proc_data='processor/data.json',
     proc_exec='processor/execution/{date}.json',
     proc_image='processor/tile/R{region:03d}_X{x:03d}_Y{y:03d}.tif',
@@ -134,6 +135,7 @@ FMT_PROC_DATA = 'proc_data'
 FMT_PROC_EXEC = 'proc_exec'
 FMT_FOCUS_IMAGE = 'best_focus_image'
 FMT_MONTAGE_IMAGE = 'montage_image'
+FMT_ILLUM_FUNC = 'illum_func'
 FMT_ILLUM_IMAGE = 'illum_image'
 FMT_CYTO_IMAGE = 'cyto_image'
 FMT_CYTO_AGG = 'cyto_agg'
@@ -173,8 +175,12 @@ def get_montage_image_path(ireg, name):
     return _formats()[FMT_MONTAGE_IMAGE].format(region=ireg + 1, name=name)
 
 
-def get_illumination_image_path(ireg):
-    return _formats()[FMT_ILLUM_IMAGE].format(region=ireg + 1)
+def get_illumination_function_path(ireg):
+    return _formats()[FMT_ILLUM_FUNC].format(region=ireg + 1)
+
+
+def get_illumination_image_path(ireg, tx, ty):
+    return get_img_path(FMT_ILLUM_IMAGE, ireg, tx, ty)
 
 
 def get_processor_data_path():

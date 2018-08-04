@@ -7,6 +7,7 @@ from skimage import morphology
 from skimage import measure
 from skimage import filters
 from skimage import exposure
+from skimage import transform
 from scipy import ndimage
 from codex import math as codex_math
 from codex import data as codex_data
@@ -17,19 +18,114 @@ NUCLEUS_CHANNEL = 1
 DEFAULT_CHANNEL_PREFIX = 'ch:'
 
 
-class Cytometer(object):
+class KerasCytometer2D(object):
 
-    def __init__(self, input_shape, weights_path=None):
+    def __init__(self, input_shape, target_shape=None, weights_path=None):
+        """Cytometer Initialization
+
+        Args:
+            input_shape: Shape of input images as HWC tuple
+            target_shape: Shape of resized images to use for prediction as HW tuple; if None (default),
+                then the images will not be resized
+            weights_path: Path to model weights; if None (default), a default path will be used
+        """
         self.input_shape = input_shape
+        self.target_shape = target_shape
         self.weights_path = weights_path
         self.initialized = False
         self.model = None
 
+        if len(input_shape) != 3:
+            raise ValueError('Input shape must be HWC 3 tuple (given {})'.format(input_shape))
+        if target_shape is not None and len(target_shape) != 2:
+            raise ValueError('Target shape must be HW 2 tuple (given {})'.format(target_shape))
+
+        # Set resize indicator to true only if target HW dimensions differ from original
+        self.resize = target_shape is not None and target_shape != input_shape[:2]
+
     def initialize(self):
-        self.model = self._get_model(self.input_shape)
+        # Choose input shape for model based on whether or not resizing is being used
+        if self.resize:
+            # Set as HWC where HW comes from target shape
+            input_shape = tuple(self.target_shape) + (self.input_shape[-1],)
+        else:
+            input_shape = self.input_shape
+        self.model = self._get_model(input_shape)
         self.model.load_weights(self.weights_path or self._get_weights_path())
         self.initialized = True
         return self
+
+    def _resize(self, img, shape):
+        """Resize NHWC image to target shape
+
+        Args:
+            img: Image array with shape NHWC
+            shape: Shape to resize to (HW tuple)
+        Return:
+            Image array with shape NHWC where H and W are equal to sizes in `shape`
+        """
+        if img.ndim != 4:
+            raise ValueError('Expecting 4D NHWC image to resize (given shape = {})'.format(img.shape))
+        if len(shape) != 2:
+            raise ValueError('Expecting 2 tuple for target shape (given {})'.format(shape))
+
+        # Resize expects images as HW first and then trailing dimensions will be ignored if
+        # explicitly set to resize them to the same values
+        input_shape = img.shape
+        output_shape = tuple(shape) + (input_shape[-1], input_shape[0])
+        img = np.moveaxis(img, 0, -1)  # NHWC -> HWCN
+        img = transform.resize(img, output_shape=output_shape, mode='constant', anti_aliasing=True, preserve_range=True)
+        img = np.moveaxis(img, -1, 0)  # HWCN -> NHWC
+
+        # Ensure result agrees with original in N and C dimensions
+        assert img.shape[0] == input_shape[0] and img.shape[-1] == input_shape[-1], \
+            'Resized image does not have expected batch and channel dim values (input shape = {}, result shape = {}' \
+            .format(input_shape, img.shape)
+        return img
+
+    def predict(self, img, batch_size):
+        """Run prediction for an image
+
+        Args:
+            img: Image array with shape NHWC
+            batch_size: Number of images to predict at one time
+        Return:
+            Predictions from model with shape NHWC where C can differ from input while all other dimensions are
+                the same (difference depends on prediction targets of model)
+        """
+        if img.ndim != 4:
+            raise ValueError('Expecting 4D NHWC image for prediction but got image with shape "{}"'.format(img.shape))
+        if img.shape[1:] != self.input_shape:
+            raise ValueError(
+                'Given image with shape {} does not match expected image shape {} in non-batch dimensions'
+                .format(img.shape[1:], self.input_shape)
+            )
+        if batch_size < 1:
+            raise ValueError('Batch size must be integer >= 1 (given {})'.format(batch_size))
+
+        shape = img.shape
+
+        # Resize input, if necessary
+        if self.resize:
+            img = self._resize(img, self.target_shape)
+
+        # Run predictions on NHWC0 image to give NHWC1 result where C0 possibly != C1
+        img = self.model.predict(img, batch_size=batch_size)
+
+        # Make sure results are NHWC
+        if img.ndim != 4:
+            raise AssertionError('Expecting 4D prediction image results but got image with shape {}'.format(img.shape))
+
+        # Convert HW dimensions of predictions back to original, if necessary
+        if self.resize:
+            img = self._resize(img, self.input_shape[:2])
+
+        # Ensure results agree with input in NHW dimensions
+        assert img.shape[:-1] == shape[:-1], \
+            'Prediction and input images do not have same NHW dimensions (input shape = {}, result shape = {})' \
+            .format(shape, img.shape)
+
+        return img
 
     def _get_model(self, input_shape):
         raise NotImplementedError()
@@ -49,7 +145,7 @@ def _to_uint8(img, name):
     return img
 
 
-class Cytometer2D(Cytometer):
+class Cytometer2D(KerasCytometer2D):
 
     def _get_model(self, input_shape):
         # Load this as late as possible to avoid premature keras backend initialization
@@ -86,17 +182,15 @@ class Cytometer2D(Cytometer):
         if img_memb is not None:
             img_memb = _to_uint8(img_memb, 'membrane')
 
-        # Add batch dimension if not present
+        # Add z dimension (equivalent to batch dim in this case) if not present
         if img_nuc.ndim == 2:
             img_nuc = np.expand_dims(img_nuc, 0)
         if img_nuc.ndim != 3:
             raise ValueError('Must provide image as ZHW or HW (image shape given = {})'.format(img_nuc.shape))
 
-        # Make predictions for each image after converting to 0-1; Result has shape
-        # NHWC where C=3 and C1 = bg, C2 = interior, C3 = border
-        img_pred = self.model.predict(np.expand_dims(img_nuc / 255., -1), batch_size=batch_size)
-        assert img_pred.shape[0] == img_nuc.shape[0], \
-            'Expecting {} predictions (shape = {})'.format(img_nuc.shape[0], img_pred.shape)
+        # Make predictions on image converted to 0-1 and with trailing channel dimension to give NHWC;
+        # Result has shape NHWC where C=3 and C1 = bg, C2 = interior, C3 = border
+        img_pred = self.predict(np.expand_dims(img_nuc / 255., -1), batch_size)
         assert img_pred.shape[-1] == 3, \
             'Expecting 3 outputs in predictions (shape = {})'.format(img_pred.shape)
 
@@ -144,9 +238,9 @@ class Cytometer2D(Cytometer):
             if return_masks:
                 img_bin_list.append(np.stack([img_bin_nuci, img_bin_nucm, img_bin_mask], axis=0))
 
-        assert img_nuc.shape[0] == len(img_seg_list)
+        assert nz == len(img_seg_list)
         if return_masks:
-            assert img_nuc.shape[0] == len(img_bin_list)
+            assert nz == len(img_bin_list)
 
         # Stack final segmentation image as (z, c, h, w)
         img_seg = np.stack(img_seg_list, axis=0)

@@ -29,18 +29,12 @@ logger = logging.getLogger(__name__)
 TIMEOUT = 1 * 60 * 60
 
 
-class TaskConfig(object):
+class OpFlags(object):
 
-    def __init__(self, pipeline_config, region_indexes, tile_indexes, gpu, tile_prefetch_capacity=2, 
+    def __init__(self,
             run_best_focus=True, run_drift_comp=True, run_summary=True,
             run_tile_generator=True, run_crop=True, run_deconvolution=True,
             run_cytometry=True, run_illumination_correction=True):
-        self.region_indexes = region_indexes
-        self.tile_indexes = tile_indexes
-        self.data_dir = pipeline_config.data_dir
-        self.output_dir = pipeline_config.output_dir
-        self.gpu = gpu
-        self.tile_prefetch_capacity = tile_prefetch_capacity
         self.run_tile_generator = run_tile_generator
         self.run_crop = run_crop
         self.run_deconvolution = run_deconvolution
@@ -49,6 +43,31 @@ class TaskConfig(object):
         self.run_summary = run_summary
         self.run_cytometry = run_cytometry
         self.run_illumination_correction = run_illumination_correction
+
+    def postprocessing_enabled(self):
+        # Currently, illumination correction is the only post processing operation
+        return self.run_illumination_correction
+
+    def preprocessing_enabled(self):
+        return self.run_tile_generator or \
+            self.run_crop or \
+            self.run_deconvolution or \
+            self.run_drift_comp or \
+            self.run_best_focus or \
+            self.run_summary or \
+            self.run_cytometry
+
+
+class TaskConfig(object):
+
+    def __init__(self, pipeline_config, region_indexes, tile_indexes, gpu, tile_prefetch_capacity=2):
+        self.region_indexes = region_indexes
+        self.tile_indexes = tile_indexes
+        self.data_dir = pipeline_config.data_dir
+        self.output_dir = pipeline_config.output_dir
+        self.gpu = gpu
+        self.op_flags = pipeline_config.op_flags
+        self.tile_prefetch_capacity = tile_prefetch_capacity
         self.exp_config = pipeline_config.exp_config
 
         if len(self.region_indexes) != len(self.tile_indexes):
@@ -57,15 +76,9 @@ class TaskConfig(object):
                 .format(self.region_indexes, self.tile_indexes)
             )
 
-
     @property
     def n_tiles(self):
         return len(self.tile_indexes)
-
-    @property
-    def postprocessing_enabled(self):
-        # Currently, illumination correction is the only post processing operation
-        return self.run_illumination_correction
 
     def __str__(self):
         return str({k: v for k, v in self.__dict__.items() if k != 'exp_config'})
@@ -76,7 +89,7 @@ class TaskConfig(object):
 class PipelineConfig(object):
 
     def __init__(self, exp_config, region_indexes, tile_indexes, data_dir, output_dir, n_workers,
-                 gpus, memory_limit, **task_kwargs):
+                 gpus, memory_limit, op_flags, **task_kwargs):
         self.exp_config = exp_config
         self.region_idx = region_indexes
         self.tile_idx = tile_indexes
@@ -85,6 +98,7 @@ class PipelineConfig(object):
         self.n_workers = n_workers
         self.gpus = gpus
         self.memory_limit = memory_limit
+        self.op_flags = op_flags
         self.task_kwargs = task_kwargs
 
         # Default region and tile index list to that in experiment configuration if not provided explicitly
@@ -135,7 +149,7 @@ class PipelineConfig(object):
 
 
 def load_tiles(q, task_config):
-    if task_config.run_tile_generator:
+    if task_config.op_flags.run_tile_generator:
         tile_gen_mode = tile_generator.TILE_GEN_MODE_RAW
     else:
         tile_gen_mode = tile_generator.TILE_GEN_MODE_STACK
@@ -220,7 +234,7 @@ def preprocess_tile(tile, tile_indices, ops, log_fn, task_config):
         log_fn('Skipping tile statistic summary', debug=True)
 
     # Save the output tile if tile generation/assembly was enabled
-    if task_config.run_tile_generator:
+    if task_config.op_flags.run_tile_generator:
         path = codex_io.get_processor_img_path(tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)
         codex_io.save_tile(osp.join(output_dir, path), tile)
         log_fn('Saved preprocessed tile to path "{}"'.format(path), tile)
@@ -275,12 +289,12 @@ def get_log_fn(i, n_tiles, region_index, tx, ty):
 def get_preprocess_op_set(task_config):
     exp_config = task_config.exp_config
     return op.CodexOpSet(
-        align_op=drift_compensation.CodexDriftCompensator(exp_config) if task_config.run_drift_comp else None,
-        focus_op=best_focus.CodexFocalPlaneSelector(exp_config) if task_config.run_best_focus else None,
-        decon_op=deconvolution.CodexDeconvolution(exp_config) if task_config.run_deconvolution else None,
-        summary_op=tile_summary.CodexTileSummary(exp_config) if task_config.run_summary else None,
-        crop_op=tile_crop.CodexTileCrop(exp_config) if task_config.run_crop else None,
-        cytometry_op=cytometry.get_op(exp_config) if task_config.run_cytometry else None
+        align_op=drift_compensation.CodexDriftCompensator(exp_config) if task_config.op_flags.run_drift_comp else None,
+        focus_op=best_focus.CodexFocalPlaneSelector(exp_config) if task_config.op_flags.run_best_focus else None,
+        decon_op=deconvolution.CodexDeconvolution(exp_config) if task_config.op_flags.run_deconvolution else None,
+        summary_op=tile_summary.CodexTileSummary(exp_config) if task_config.op_flags.run_summary else None,
+        crop_op=tile_crop.CodexTileCrop(exp_config) if task_config.op_flags.run_crop else None,
+        cytometry_op=cytometry.get_op(exp_config) if task_config.op_flags.run_cytometry else None
     )
 
 
@@ -288,9 +302,9 @@ def get_postprocess_op_set(task_config):
     exp_config = task_config.exp_config
     return op.CodexOpSet(
         illumination_op=illumination_correction.IlluminationCorrection(exp_config)
-        if task_config.run_illumination_correction else None,
+        if task_config.op_flags.run_illumination_correction else None,
         cytometry_op=cytometry.get_op(exp_config)
-        if task_config.run_illumination_correction else None
+        if task_config.op_flags.run_illumination_correction else None
     )
 
 
@@ -346,11 +360,9 @@ def run_postprocess_task(task_config):
     return run_task(task_config, ops, postprocess_tile)
 
 
-def run(pl_conf, logging_init_fn=None):
-    start = timer()
-
+def run_preprocessing(pl_conf, logging_init_fn):
     # Initialize local dask cluster
-    logger.info('Initializing pipeline tasks for %s workers', pl_conf.n_workers)
+    logger.info('Initializing tasks for %s workers', pl_conf.n_workers)
     logger.debug('Pipeline configuration: %s', pl_conf)
     cluster = LocalCluster(
         n_workers=pl_conf.n_workers, threads_per_worker=1,
@@ -359,12 +371,11 @@ def run(pl_conf, logging_init_fn=None):
     )
     client = Client(cluster)
 
-
     ##########################
     # Preprocessing Pipeline #
     ##########################
 
-    # Split total region + tile indexes to process into separate lists for each worker 
+    # Split total region + tile indexes to process into separate lists for each worker
     # (by indexes of those index combinations)
     tiles = pl_conf.region_tiles
     idx_batches = np.array_split(np.arange(len(tiles)), pl_conf.n_workers)
@@ -381,7 +392,7 @@ def run(pl_conf, logging_init_fn=None):
         for i, idx_batch in enumerate(idx_batches)
     ]
 
-    logger.info('Starting pipeline for %s tasks', len(tasks))
+    logger.info('Starting pre-processing pipeline for %s tasks', len(tasks))
     logger.debug('Task definitions:\n\t%s', '\n\t'.join([str(t) for t in tasks]))
     try:
         # Passing logging initialization operation, if given, to workers now
@@ -407,11 +418,11 @@ def run(pl_conf, logging_init_fn=None):
     # Save measurement data prior to postprocessing
     measure_data = concat(res)
     path = exec.record_processor_data(measure_data, pl_conf.output_dir)
-    logging.info('Preprocessing complete; Measurement data saved to "%s"', path)
+    logging.info('Pre-processing complete; Measurement data saved to "%s"', path)
 
-    ##########################
-    # Postprocessing Pipeline #
-    ##########################
+
+def run_postprocessing(pl_conf):
+    tiles = pl_conf.region_tiles
 
     # Create postprocessing task configuration to load all tiles for all regions
     task = pl_conf.get_task_config(region_indexes=tiles[:, 0], tile_indexes=tiles[:, 1], gpu=None)
@@ -419,13 +430,21 @@ def run(pl_conf, logging_init_fn=None):
     # Configure the task to use an input directory equal to preprocessing output and to source
     # preprocessed tiles instead of raw files
     task.data_dir = task.output_dir
-    task.run_tile_generator = False
+    task.op_flags.run_tile_generator = False
 
-    # Run post-processing if necessary
-    if task.postprocessing_enabled:
-        logging.info('Starting postprocessing pipeline')
-        run_postprocess_task(task)
-        logging.info('Postprocessing complete')
+    logging.info('Starting post-processing pipeline')
+    run_postprocess_task(task)
+    logging.info('Post-processing complete')
+
+
+def run(pl_conf, logging_init_fn=None):
+    start = timer()
+
+    if pl_conf.op_flags.preprocessing_enabled():
+        run_preprocessing(pl_conf, logging_init_fn)
+
+    if pl_conf.op_flags.postprocessing_enabled():
+        run_postprocessing(pl_conf)
 
     stop = timer()
     logger.info('Pipeline execution completed in %.0f seconds', stop - start)

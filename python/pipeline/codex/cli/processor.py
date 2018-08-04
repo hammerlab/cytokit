@@ -98,11 +98,8 @@ class Processor(cli.DataCLI):
             # Default to 1 worker given no knowledge of available gpus 
             n_workers = len(gpus) if gpus is not None else 1
 
-        # Execute pipeline
-        pl_config = pipeline.PipelineConfig(
-            self.config, region_indexes, tile_indexes, self.data_dir, output_dir,
-            n_workers, gpus, memory_limit,
-            tile_prefetch_capacity=tile_prefetch_capacity,
+        # Configure and run pipeline
+        op_flags = pipeline.OpFlags(
             run_crop=run_crop,
             run_deconvolution=run_deconvolution,
             run_best_focus=run_best_focus,
@@ -111,6 +108,11 @@ class Processor(cli.DataCLI):
             run_tile_generator=run_tile_generator,
             run_cytometry=run_cytometry,
             run_illumination_correction=run_illumination_correction
+        )
+        pl_config = pipeline.PipelineConfig(
+            self.config, region_indexes, tile_indexes, self.data_dir, output_dir,
+            n_workers, gpus, memory_limit, op_flags,
+            tile_prefetch_capacity=tile_prefetch_capacity
         )
         pipeline.run(pl_config, logging_init_fn=self._logging_init_fn)
 

@@ -71,11 +71,12 @@ def get_op(config):
 
 class Cytometry2D(codex_op.CodexOp):
 
-    def __init__(self, config, z_plane='best', segmentation_params=None, quantification_params=None):
+    def __init__(self, config, z_plane='best', target_shape=None, segmentation_params=None, quantification_params=None):
         super().__init__(config)
 
         params = config.cytometry_params
         self.z_plane = params.get('z_plane', z_plane)
+        self.target_shape = params.get('target_shape', target_shape)
 
         self.segmentation_params = params.get('segmentation_params', segmentation_params or {})
 
@@ -99,8 +100,13 @@ class Cytometry2D(codex_op.CodexOp):
         # Use explicit override for weights for segmentation model (otherwise a default
         # will be used based on cached weights files)
         weights_path = os.getenv(codex.ENV_CYTOMETRY_2D_MODEL_PATH)
-        logger.debug('Initializing cytometry model for input shape = {}'.format(self.input_shape))
-        self.cytometer = cytometer.Cytometer2D(self.input_shape, weights_path=weights_path).initialize()
+        logger.debug(
+            'Initializing cytometry model for input shape = %s (target shape = %s)',
+            self.input_shape, self.target_shape
+        )
+        self.cytometer = cytometer.Cytometer2D(
+            self.input_shape, target_shape=self.target_shape, weights_path=weights_path)
+        self.cytometer.initialize()
         return self
 
     def shutdown(self):

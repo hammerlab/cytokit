@@ -202,7 +202,7 @@ class Cytometry2D(codex_op.CodexOp):
         label_tile_path = None
         if img_label is not None:
             label_tile_path = codex_io.get_cytometry_image_path(region_index, tx, ty)
-            codex_io.save_tile(osp.join(output_dir, label_tile_path), img_label)
+            codex_io.save_tile(osp.join(output_dir, label_tile_path), img_label, config=self.config)
 
         # Append useful metadata to cytometry stats (align these names to those used in config.TileDims)
         # and export as csv

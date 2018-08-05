@@ -61,6 +61,6 @@ class CodexTileGenerator(CodexOp):
         else:
             tx, ty = self.config.get_tile_coordinates(self.tile_index)
             img_path = codex_io.get_img_path(self.path_fmt_name, self.region_index, tx, ty)
-            tile = codex_io.read_tile(osp.join(self.data_dir, img_path), self.config)
+            tile = codex_io.read_tile(osp.join(self.data_dir, img_path))
 
         return tile

@@ -236,7 +236,7 @@ def preprocess_tile(tile, tile_indices, ops, log_fn, task_config):
     # Save the output tile if tile generation/assembly was enabled
     if task_config.op_flags.run_tile_generator:
         path = codex_io.get_processor_img_path(tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)
-        codex_io.save_tile(osp.join(output_dir, path), tile)
+        codex_io.save_tile(osp.join(output_dir, path), tile, config=task_config.exp_config)
         log_fn('Saved preprocessed tile to path "{}"'.format(path), tile)
 
 

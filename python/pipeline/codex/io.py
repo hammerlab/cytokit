@@ -1,10 +1,24 @@
+"""
+IO and Path Utilities
+
+Note that most image IO assumes ImageJ metadata handling only and that currently, this is supported via the
+independent tifffile package and not the one bundled with scikit-image (which does not make the same
+metadata management possible)
+
+References:
+    - scikit-image tifffile: https://github.com/scikit-image/scikit-image/blob/master/skimage/external/tifffile/tifffile.py
+    - pypi tifffile: https://github.com/blink1073/tifffile/blob/master/tifffile/tifffile.py
+    - SO post 1 on metadata: https://stackoverflow.com/questions/50258287/how-to-specify-colormap-when-saving-tiff-stack
+    - SO post 2 on metadata: https://stackoverflow.com/questions/50948559/how-to-save-imagej-tiff-metadata-using-python?noredirect=1&lq=1
+"""
 import os
 import codex
 import warnings
 import os.path as osp
 import numpy as np
+from codex.utils import ij_utils
 from skimage import io as sk_io
-from skimage.external.tifffile import imread, imsave, TiffFile
+from tifffile import imread, imsave, TiffFile
 
 # Define the default layout for cytokit results on disk
 DEFAULT_FORMATS = dict(
@@ -53,11 +67,29 @@ def _formats():
     return eval(formats)
 
 
-def save_image(file, image, **kwargs):
-    """Save image array in ImageJ-compatible format"""
+def save_image(file, image, imagej=True, **kwargs):
+    """Save tif image (with default to ImageJ format)
+
+    Args:
+        file: File path to save to; will overwrite if exists and will also create directory if not present
+        image: Image array to save
+        kwargs: Anything compatible with tifffile.imsave (see
+            https://github.com/blink1073/tifffile/blob/master/tifffile/tifffile.py)
+    Examples:
+        - Setting channel names within a hyperstack image:
+            # Note that z and t are used to repeat names across Z and T axes
+            tags = ij_utils.get_channel_label_tags(['CH1', 'CH2', 'CH3'], z=1, t=1)
+            io.save_image('test.tif', image, extratags=tags)
+        - Setting XYZ resolution (from https://github.com/blink1073/tifffile/issues/15#issuecomment-224715191):
+            io.save_image(
+                'test.tif', image,
+                resolution=(0.373759, 0.373759),
+                metadata={'spacing': 3.947368, 'unit': 'um'}
+            )
+    """
     if not osp.exists(osp.dirname(file)):
         os.makedirs(osp.dirname(file), exist_ok=True)
-    imsave(file, image, imagej=True, **kwargs)
+    imsave(file, image, imagej=imagej, **kwargs)
 
 
 def save_csv(file, df, **kwargs):
@@ -75,7 +107,7 @@ def read_image(file):
     return sk_io.imread(file)
 
 
-def read_tile(file, config=None):
+def read_tile(file, return_metadata=False):
     """Read a codex-specific 5D image tile
 
     Technical Note: This is a fairly complex process as it is necessary to deal with the fact that files
@@ -83,14 +115,13 @@ def read_tile(file, config=None):
     is parsed here to ensure that missing dimensions are added back.
     """
 
-    # The "imagej_tags" attribute looks like this for a 5D image with no unit-length dimensions
+    # The "imagej_metadata" attribute looks like this for a 5D image with no unit-length dimensions
     # and original shape cycles=2, z=25, channels=2:
     # {'ImageJ': '1.11a', 'axes': 'TZCYX', 'channels': 2, 'frames': 2, 'hyperstack': True,
-    # 'images': 100, 'loop': False, 'mode': 'grayscale', 'slices': 25}
+    # 'images': 100, 'mode': 'grayscale', 'slices': 25}
     # However, if a unit-length dimension was dropped it simply does not show up in this dict
     with TiffFile(file) as tif:
-        page = tif.pages[0]
-        tags = page.imagej_tags
+        tags = dict(tif.imagej_metadata)
         if 'axes' not in tags:
             warnings.warn('ImageJ tags do not contain "axes" property (file = {}, tags = {})'.format(file, tags))
         else:
@@ -98,7 +129,7 @@ def read_tile(file, config=None):
                 warnings.warn(
                     'Image has tags indicating that it was not saved in TZCYX format.  '
                     'The file should have been saved with this property explicitly set and further '
-                    'processing of it may be unsave (file = {})'.format(file)
+                    'processing of it may be unsafe (file = {})'.format(file)
                 )
         slices = [
             slice(None) if 'frames' in tags else None,
@@ -107,19 +138,45 @@ def read_tile(file, config=None):
             slice(None),
             slice(None)
         ]
+        res = tif.asarray()[slices]
 
-        return tif.asarray()[slices]
-    # slices = [None if dim == 1 else slice(None) for dim in config.tile_dims]
-    # return imread(file)[slices]
+        if return_metadata:
+            # At TOW, labeling information is the only helpful metadata worth passing around,
+            # but this may expand in the future
+            metadata = dict(labels=tags.get('Labels'))
+            return res, metadata
+        else:
+            return res
 
 
-def save_tile(file, tile):
+def save_tile(file, tile, config=None, infer_labels=True, **kwargs):
     """Save a codex-specific 5D image"""
     if tile.ndim != 5:
         raise ValueError('Expecting tile with 5 dimensions but got tile with shape {}'.format(tile.shape))
-    # Save using Imagej format, otherwise channels, cycles, and z planes are 
+    # Save with explicit axes settings otherwise channels, cycles, and z planes are
     # all interpreted as individual slices instead of separate dimensions
-    save_image(file, tile, metadata={'axes': 'TZCYX'})
+    if 'metadata' not in kwargs:
+        kwargs['metadata'] = {}
+    if 'axes' in kwargs['metadata']:
+        raise ValueError('Axes should not be set explicitly in metadata when using `save_tile`')
+    kwargs['metadata']['axes'] = 'TZCYX'
+
+    # If configuration provided, add as much context as possible to saved file via metadata arguments
+    if config is not None:
+        # Add arguments for resolution
+        resolution, meta = ij_utils.get_config_resolution_args(config)
+        kwargs['resolution'] = resolution
+        kwargs['metadata'].update(meta)
+
+        # If enabled, attempt to infer and add slice names
+        if infer_labels:
+            tags = ij_utils.get_config_slice_label_args(config, tile.shape)
+            if tags is not None:
+                if 'extratags' not in kwargs:
+                    kwargs['extratags'] = []
+                kwargs['extratags'] += tags
+
+    save_image(file, tile, **kwargs)
 
 
 def get_raw_img_path(ireg, itile, icyc, ich, iz):

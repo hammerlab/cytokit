@@ -66,6 +66,8 @@ def run_nb(nb_name, nb_output_path, nb_params):
 #####################
 
 def create_montage(output_dir, config, extract, name, region_indexes):
+    from codex.utils import ij_utils
+
     # Loop through regions and generate a montage for each, skipping any (with a warning) that
     # do not have focal plane selection information
     if region_indexes is None:
@@ -75,15 +77,19 @@ def create_montage(output_dir, config, extract, name, region_indexes):
     for ireg in region_indexes:
         logger.info('Generating montage for region %d of %d', ireg + 1, len(region_indexes))
         tiles = []
+        labels = None
         for itile in range(config.n_tiles_per_region):
             tx, ty = config.get_tile_coordinates(itile)
             path = codex_io.get_extract_image_path(ireg, tx, ty, extract)
-            tile = codex_io.read_tile(osp.join(output_dir, path))
+            tile, meta = codex_io.read_tile(osp.join(output_dir, path), return_metadata=True)
+            if labels is None:
+                labels = meta['labels']
             tiles.append(tile)
         reg_img_montage = montage(tiles, config)
         path = osp.join(output_dir, codex_io.get_montage_image_path(ireg, name))
         logger.info('Saving montage to file "%s"', path)
-        codex_io.save_tile(path, reg_img_montage)
+        tags = [] if labels is None else ij_utils.get_slice_label_tags(labels)
+        codex_io.save_tile(path, reg_img_montage, config=config, infer_labels=False, extratags=tags)
     logger.info('Montage generation complete; results saved to "%s"', None if path is None else osp.dirname(path))
 
 

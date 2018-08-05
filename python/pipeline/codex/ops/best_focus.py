@@ -82,5 +82,5 @@ class CodexFocalPlaneSelector(CodexOp):
         best_focus_tile, best_z, scores = data
         path = codex_io.get_best_focus_img_path(region_index, tx, ty, best_z)
         if self.save_tile:
-            codex_io.save_tile(osp.join(output_dir, path), best_focus_tile)
+            codex_io.save_tile(osp.join(output_dir, path), best_focus_tile, config=self.config)
         return [path]

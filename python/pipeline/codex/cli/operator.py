@@ -7,6 +7,7 @@ from codex import config as codex_config
 from codex.ops import cytometry
 from codex.ops import tile_generator
 from codex.ops import tile_crop
+from codex.utils import ij_utils
 from codex import io as codex_io
 from codex import cli
 from codex.function import core
@@ -17,7 +18,7 @@ CH_SRC_RAW = 'raw'
 CH_SRC_PROC = 'proc'
 CH_SRC_CYTO = 'cyto'
 CH_SRC_ILLC = 'illc'
-CH_SOURCES = [CH_SRC_RAW, CH_SRC_PROC, CH_SRC_CYTO]
+CH_SOURCES = [CH_SRC_RAW, CH_SRC_PROC, CH_SRC_CYTO, CH_SRC_ILLC]
 
 PATH_FMT_MAP = {
     CH_SRC_RAW: None,
@@ -143,6 +144,7 @@ class Operator(cli.DataCLI):
         tile_locations = _get_tile_locations(self.config, region_indexes, tile_indexes)
 
         extract_path = None
+        slice_labels = []
         for i, loc in enumerate(tile_locations):
             logging.info('Extracting tile {} of {}'.format(i+1, len(tile_locations)))
             extract_tile = []
@@ -182,6 +184,7 @@ class Operator(cli.DataCLI):
                     )
                     assert sub_tile.ndim == 3, \
                         'Expecting sub_tile to have 3 dimensions but got shape {}'.format(sub_tile.shape)
+                    slice_labels.append('{} ({})'.format(r['channel_name'], src))
                     extract_tile.append(sub_tile)
 
             # Stack the subtiles to give array with shape (z, channels, h, w) and then reshape to 5D
@@ -196,7 +199,13 @@ class Operator(cli.DataCLI):
                 'Saving tile with shape %s (dtype = %s) to "%s"',
                 extract_tile.shape, extract_tile.dtype, extract_path
             )
-            codex_io.save_tile(extract_path, extract_tile)
+
+            # Construct slice labels as repeats across z-dimension (there is only one time/cycle dimension)
+            slice_label_tags = ij_utils.get_channel_label_tags(slice_labels, z=extract_tile.shape[1], t=1)
+            codex_io.save_tile(
+                extract_path, extract_tile, config=self.config,
+                infer_labels=False, extratags=slice_label_tags
+            )
 
         logging.info('Extraction complete (results saved to %s)', osp.dirname(extract_path) if extract_path else None)
 

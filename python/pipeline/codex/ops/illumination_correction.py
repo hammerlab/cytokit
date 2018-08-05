@@ -6,18 +6,21 @@ from codex.ops import op as codex_op
 from codex import io as codex_io
 from codex.cytometry.cytometer import DEFAULT_CHANNEL_PREFIX
 from codex.function import data as function_data
+from sklearn.neighbors import KNeighborsRegressor
 from sklearn.ensemble import GradientBoostingRegressor
+from skimage import transform
 import logging
 logger = logging.getLogger(__name__)
 
-DEFAULT_FILTER_RANGE = [.1, .9]
+DEFAULT_FILTER_RANGE = [.01, .99]
 DEFAULT_FILTER_FEATURES = ['cell_diameter']
+DEFAULT_MODEL_PARAMS = {'type': 'gbr', 'n_estimators': 100}
 SEED = 5512
 
 
 class IlluminationCorrection(codex_op.CodexOp):
 
-    def __init__(self, config, max_cells=100000, n_estimators=25,
+    def __init__(self, config, max_cells=250000, step_size=10, model_params=DEFAULT_MODEL_PARAMS,
                  filter_range=DEFAULT_FILTER_RANGE, filter_features=DEFAULT_FILTER_FEATURES,
                  overwrite_tile=False):
         super().__init__(config)
@@ -29,7 +32,8 @@ class IlluminationCorrection(codex_op.CodexOp):
 
         self.filter_range = params.get('filter_range', filter_range)
         self.max_cells = params.get('max_cells', max_cells)
-        self.n_estimators = params.get('n_estimators', n_estimators)
+        self.step_size = params.get('step_size', step_size)
+        self.model_params = params.get('model_params', model_params)
         self.filter_features = params.get('filter_features', filter_features)
         self.overwrite_tile = params.get('overwrite_tile', overwrite_tile)
 
@@ -44,6 +48,10 @@ class IlluminationCorrection(codex_op.CodexOp):
                     'Filter range percentile values must be in [0, 1] (given = {})'
                     .format(self.filter_range)
                 )
+        if self.step_size < 1:
+            raise ValueError('Prediction step size must be > 1 (given = {})'.format(self.step_size))
+        if self.model_params['type'] not in ['gbr', 'knn']:
+            raise ValueError('Model type must be one of "gbr" or "knn", not "{}"'.format(self.model_params['type']))
 
         self.data = None
         self.data_saved = False
@@ -86,6 +94,26 @@ class IlluminationCorrection(codex_op.CodexOp):
             imgs = self.get_illumination_images(ests)
             self.data[region_index] = (imgs, ests)
 
+    def _estimate_model(self, X, y):
+        # Fit regression model used to represent illumination surface
+        if self.model_params['type'] == 'knn':
+            weights = 'uniform'
+            if self.model_params.get('max_distance', None):
+                max_distance = self.model_params['max_distance']
+                weights = lambda d: np.where(d > max_distance, 0., 1.)
+            est = KNeighborsRegressor(
+                n_neighbors=self.model_params.get('n_neighbors', 100),
+                weights=weights
+            )
+        elif self.model_params['type'] == 'gbr':
+            est = GradientBoostingRegressor(
+                n_estimators=self.model_params.get('n_estimators', 100),
+                random_state=SEED
+            )
+        else:
+            raise ValueError('Model type "{}" invalid'.format(self.model_params['type']))
+        return est.fit(X, y)
+
     def get_illumination_models(self, region_index, df):
         n = len(df)
         ests = OrderedDict()
@@ -122,9 +150,32 @@ class IlluminationCorrection(codex_op.CodexOp):
             y = y / y.mean()
 
             # Fit regression model used to represent illumination surface
-            est = GradientBoostingRegressor(n_estimators=self.n_estimators, random_state=SEED)
-            ests[channel] = est.fit(X, y)
+            ests[channel] = self._estimate_model(X, y)
         return ests
+
+    def _estimate_image(self, est, shape):
+        step_size = self.step_size or 1
+        r, c = shape
+        ri, ci = np.arange(0, r, step_size), np.arange(0, c, step_size)
+
+        # Produce 2D array with 2 cols, ry and rx
+        X = np.transpose([np.repeat(ri, len(ci)), np.tile(ci, len(ri))])
+
+        y = est.predict(X)
+
+        # Some models may intentionally produce nans for pixels too far away from foreground
+        # objects so set those values to 1 as this will lead to no change in correction
+        y = np.where(np.isnan(y), 1., y)
+
+        # Reshape to image shape
+        y = y.reshape((len(ri), len(ci)))
+
+        # Upsample if necessary
+        if step_size > 1:
+            y = transform.resize(y, shape, mode='constant', order=1, anti_aliasing=False, preserve_range=False)
+
+        assert y.shape == shape, 'Expecting result with shape {} but was {}'.format(shape, y.shape)
+        return y.astype(np.float32)
 
     def get_illumination_images(self, ests):
         """Get an illumination image by predicting the intensity at each pixel across a region
@@ -140,13 +191,10 @@ class IlluminationCorrection(codex_op.CodexOp):
             self.config.region_height * self.config.tile_height,
             self.config.region_width * self.config.tile_width
         )
-        ii = np.transpose([np.repeat(np.arange(r), c), np.tile(np.arange(c), r)])
-        X = pd.DataFrame(ii, columns=['ry', 'rx'])
 
         imgs = OrderedDict()
         for channel, est in ests.items():
-            img = est.predict(X).reshape((r, c)).astype(np.float32)
-            imgs[channel] = img
+            imgs[channel] = self._estimate_image(est, (r, c))
 
         if len(imgs) > 0:
             img = list(imgs.values())[0]
@@ -211,11 +259,11 @@ class IlluminationCorrection(codex_op.CodexOp):
             # Overwrite the original preprocessed tile with corrected version
             path = codex_io.get_processor_img_path(
                 tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)
-            codex_io.save_tile(osp.join(output_dir, path), tile)
+            codex_io.save_tile(osp.join(output_dir, path), tile, config=self.config)
         else:
             # Save corrected tile in separate location
             path = codex_io.get_illumination_image_path(
                 tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)
-            codex_io.save_tile(osp.join(output_dir, path), tile)
+            codex_io.save_tile(osp.join(output_dir, path), tile, config=self.config)
         return path
 

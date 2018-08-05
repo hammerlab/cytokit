@@ -9,3 +9,4 @@ keras
 fcswrite
 opencv-python
 scikit-learn
+tifffile

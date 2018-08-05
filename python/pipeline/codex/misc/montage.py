@@ -49,7 +49,7 @@ def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0,
             if not osp.exists(path) and allow_missing:
                 tile = np.zeros((th, tw))
             else:
-                tile = codex_io.read_tile(path, config)
+                tile = codex_io.read_tile(path)
             tile = tile[icyc, iz, ich, :, :]
         # Otherwise, assume raw acquisition files are to be loaded and then cropped before being added
         else:

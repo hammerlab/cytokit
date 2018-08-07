@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 def aggregate_cytometry_statistics(output_dir, config, mode='all', export_csv=True, export_fcs=True, variant=None):
-    import pandas as pd
     from codex.function import data as function_data
 
     # Aggregate all cytometry csv data (across tiles)

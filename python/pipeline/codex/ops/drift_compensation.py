@@ -123,8 +123,10 @@ class CodexDriftCompensator(CodexOp):
         # Compute translations that need to be applied
         translations = []
         for icyc in target_cycles:
-            logger.debug('Calculating drift translation for reference cycle {}, comparison cycle {}'
-                            .format(self.drift_cycle, icyc))
+            logger.debug(
+                'Calculating drift translation for reference cycle {}, comparison cycle {}'
+                .format(self.drift_cycle, icyc)
+            )
             offset_image = tile[icyc, :, self.drift_channel, :, :]
             res = self.calculator.run(reference_image, offset_image)
             # Extract dy, dx translation from translation as dz, dy, dx

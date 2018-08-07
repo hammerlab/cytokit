@@ -6,23 +6,65 @@ from codex.ops import op as codex_op
 from codex import io as codex_io
 from codex.cytometry.cytometer import DEFAULT_CHANNEL_PREFIX
 from codex.function import data as function_data
+from sklearn.linear_model import HuberRegressor, Ridge, LinearRegression
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.ensemble import GradientBoostingRegressor
 from skimage import transform
 import logging
 logger = logging.getLogger(__name__)
 
-DEFAULT_FILTER_RANGE = [.01, .99]
-DEFAULT_FILTER_FEATURES = ['cell_diameter']
-DEFAULT_MODEL_PARAMS = {'type': 'gbr', 'n_estimators': 100}
+# filter_params:
+# percentile_range: [.01, .99]
+# features: [DAPI, cell_size]
+# max_cells: 250000
+# feature_params: {tile: {degree: 2}, region: {degree: 2}}
+
+DEFAULT_FILTER_PARAMS = dict(percentile_range=[.01, .99], features=['cell_size'], max_cells=250000)
+DEFAULT_FEATURE_PARAMS = dict(tile=dict(degree=2), region=dict(degree=2))
+DEFAULT_MODEL_PARAMS = dict(type='ls')
+DEFAULT_PREDICTION_PARAMS = dict(step_size=10)
+MODELS = {
+    'ls': {'factory': lambda args: LinearRegression(**args)},
+    'huber': {'factory': lambda args: HuberRegressor(**args)},
+    'ridge': {'factory': lambda args: Ridge(**args)},
+    'gbr': {'factory': lambda args: GradientBoostingRegressor(random_state=SEED, **args)},
+    'knn': {'factory': lambda args: KNeighborsRegressor(**args)}
+}
 SEED = 5512
 
 
+# max_cells=250000
+# step_size = 10
+
+def _get_params(key, params, defaults):
+    # Copy default values
+    res = dict(defaults)
+    # If params present, overwrite default values
+    if key in params:
+        res.update(params[key])
+    return res
+
+
+def get_prediction_features(tile_shape, region_shape, step=1):
+    step_size = self.prediction_params['step_size']
+    r, c = shape
+    ri, ci = np.arange(0, r, step_size), np.arange(0, c, step_size)
+
+    # Produce 2D array with 2 cols, ry and rx
+    X_region = np.transpose([np.repeat(ri, len(ci)), np.tile(ci, len(ri))])
+    X_tile = np.mod()
+
+    pass
+
 class IlluminationCorrection(codex_op.CodexOp):
 
-    def __init__(self, config, max_cells=250000, step_size=10, model_params=DEFAULT_MODEL_PARAMS,
-                 filter_range=DEFAULT_FILTER_RANGE, filter_features=DEFAULT_FILTER_FEATURES,
-                 overwrite_tile=False):
+    def __init__(
+            self, config,
+            filter_params=DEFAULT_FILTER_PARAMS,
+            feature_params=DEFAULT_FEATURE_PARAMS,
+            model_params=DEFAULT_MODEL_PARAMS,
+            prediction_params=DEFAULT_PREDICTION_PARAMS,
+            overwrite_tile=False):
         super().__init__(config)
 
         params = config.illumination_correction_params
@@ -30,33 +72,46 @@ class IlluminationCorrection(codex_op.CodexOp):
         # Get mapping of source to target channel names, and sort by source channel
         self.channel_mapping = pd.Series(params['channel_mapping']).sort_index()
 
-        self.filter_range = params.get('filter_range', filter_range)
-        self.max_cells = params.get('max_cells', max_cells)
-        self.step_size = params.get('step_size', step_size)
-        self.model_params = params.get('model_params', model_params)
-        self.filter_features = params.get('filter_features', filter_features)
+        # Extra parameters relevant to each step
+        self.filter_params = _get_params('filter_params', filter_params)
+        self.feature_params = _get_params('feature_params', feature_params)
+        self.model_params = _get_params('model_params', model_params)
+        self.prediction_params = _get_params('prediction_params', prediction_params)
+
+        # Extract flag indicating whether or not to overwrite original tiles with corrected results
         self.overwrite_tile = params.get('overwrite_tile', overwrite_tile)
 
-        if self.filter_range is None or len(self.filter_range) != 2:
+        ############################
+        # Configuration Validation #
+        ############################
+
+        if len(self.filter_params['percentile_range']) != 2:
             raise ValueError(
-                'Must provide filter range as 2 item list (given = {})'
-                .format(self.filter_range)
+                '`percentile_range` in filter_params must be 2 item list (given = {})'
+                .format(self.filter_params['percentile_range'])
             )
-        for v in self.filter_range:
+        for v in self.filter_params['percentile_range']:
             if not 0 <= v <= 1:
                 raise ValueError(
-                    'Filter range percentile values must be in [0, 1] (given = {})'
-                    .format(self.filter_range)
+                    '`percentile_range` value in filter_params values must be in [0, 1] (given = {})'
+                    .format(v)
                 )
-        if self.step_size < 1:
-            raise ValueError('Prediction step size must be > 1 (given = {})'.format(self.step_size))
-        if self.model_params['type'] not in ['gbr', 'knn']:
-            raise ValueError('Model type must be one of "gbr" or "knn", not "{}"'.format(self.model_params['type']))
+
+        if self.prediction_params['step_size'] < 1:
+            raise ValueError(
+                '`step_size` in prediction_params must be > 1 (given = {})'
+                .format(self.prediction_params['step_size'])
+            )
+        if self.model_params['type'] not in MODELS:
+            raise ValueError(
+                '`type` in model_params type must be one of [] (given = "{}")'
+                .format(self.model_params['type'], list(MODELS.keys()))
+            )
 
         self.data = None
         self.data_saved = False
 
-    def get_filter_masks(self, df, features):
+    def _get_filter_masks(self, df, features):
         """Get masks for each filtered feature
 
         Args:
@@ -70,7 +125,7 @@ class IlluminationCorrection(codex_op.CodexOp):
         #     feat_1 feat_2
         # p_lo    .1     10
         # p_hi   5.3    100
-        ranges = df[features].quantile(q=self.filter_range)
+        ranges = df[features].quantile(q=self.filter_params['percentile_range'])
 
         # Stack masks horizontally as dataframe
         return pd.concat([
@@ -78,40 +133,40 @@ class IlluminationCorrection(codex_op.CodexOp):
             for c in ranges
         ], axis=1)
 
-    def prepare_region_data(self, output_dir):
-        if self.data is not None:
-            return
-        # Use whatever cytometry data was generated, whether it was for best
-        # z planes, all planes, or a specific one
-        df = function_data.get_cytometry_data(output_dir, self.config, mode='all')
-        n = len(df)
-        if df is None or n == 0:
-            raise ValueError('Cytometry data cannot be empty in order to use it for illumination correction')
+    def _get_filter_features(self, df):
+        feats = []
+        for feat in self.filter_params['features']:
+            # Test membership for feature as provided
+            if feat in df:
+                feats.append(feat)
+                continue
+            # Test membership when prefixed by channel markers
+            ch_feat = DEFAULT_CHANNEL_PREFIX + feat
+            if ch_feat in df:
+                feats.append(ch_feat)
+                continue
+            raise ValueError('Feature "{}" not present in cytometry data'.format(feat))
 
-        self.data = {}
-        for region_index, region_data in df.groupby('region_index'):
-            ests = self.get_illumination_models(region_index, region_data)
-            imgs = self.get_illumination_images(ests)
-            self.data[region_index] = (imgs, ests)
+
+    def _get_prediction_features(self):
+
+
+        step_size = self.prediction_params['step_size']
+        r, c = shape
+        ri, ci = np.arange(0, r, step_size), np.arange(0, c, step_size)
+
+        # Produce 2D array with 2 cols, ry and rx
+        X = np.transpose([np.repeat(ri, len(ci)), np.tile(ci, len(ri))])
+
+        pass
+
+    def _prepare_prediction_features(self, df):
+        pass
 
     def _estimate_model(self, X, y):
         # Fit regression model used to represent illumination surface
-        if self.model_params['type'] == 'knn':
-            weights = 'uniform'
-            if self.model_params.get('max_distance', None):
-                max_distance = self.model_params['max_distance']
-                weights = lambda d: np.where(d > max_distance, 0., 1.)
-            est = KNeighborsRegressor(
-                n_neighbors=self.model_params.get('n_neighbors', 100),
-                weights=weights
-            )
-        elif self.model_params['type'] == 'gbr':
-            est = GradientBoostingRegressor(
-                n_estimators=self.model_params.get('n_estimators', 100),
-                random_state=SEED
-            )
-        else:
-            raise ValueError('Model type "{}" invalid'.format(self.model_params['type']))
+        args = self.model_params.get('args', {})
+        est = MODELS[self.model_params['type']]['factory'](args)
         return est.fit(X, y)
 
     def get_illumination_models(self, region_index, df):
@@ -120,15 +175,14 @@ class IlluminationCorrection(codex_op.CodexOp):
         for channel in self.channel_mapping.index:
 
             # Set list of features to filter on
-            feature = DEFAULT_CHANNEL_PREFIX + channel
-            filter_features = [feature] + self.filter_features
+            features = self._get_filter_features(df)
 
             # Restrict cell data to only records matching the given filters
-            dfm = df[self.get_filter_masks(df, filter_features).all(axis=1).values].copy()
+            dfm = df[self._get_filter_masks(df, features).all(axis=1).values].copy()
 
             # If necessary, downsample modeling data to improve performance
-            if len(dfm) > self.max_cells:
-                dfm = dfm.sample(n=self.max_cells, random_state=SEED)
+            if len(dfm) > self.filter_params['max_cells']:
+                dfm = dfm.sample(n=self.filter_params['max_cells'], random_state=SEED)
 
             if len(dfm) == 0:
                 raise ValueError(
@@ -140,7 +194,7 @@ class IlluminationCorrection(codex_op.CodexOp):
             )
 
             # Extract spatial cell features and prediction target
-            X, y = dfm[['ry', 'rx']], dfm[feature]
+            X, y = dfm[['ry', 'rx']], dfm[DEFAULT_CHANNEL_PREFIX + channel]
             if np.isclose(y.mean(), 0):
                 raise ValueError(
                     'Average {} channel intensity for region {} (across {} cells) is ~0, '
@@ -154,7 +208,7 @@ class IlluminationCorrection(codex_op.CodexOp):
         return ests
 
     def _estimate_image(self, est, shape):
-        step_size = self.step_size or 1
+        step_size = self.prediction_params['step_size']
         r, c = shape
         ri, ci = np.arange(0, r, step_size), np.arange(0, c, step_size)
 
@@ -201,6 +255,22 @@ class IlluminationCorrection(codex_op.CodexOp):
             logger.debug('Resulting illumination image array shape = %s (dtype = %s)', img.shape, img.dtype)
 
         return imgs
+
+    def prepare_region_data(self, output_dir):
+        if self.data is not None:
+            return
+        # Use whatever cytometry data was generated, whether it was for best
+        # z planes, all planes, or a specific one
+        df = function_data.get_cytometry_data(output_dir, self.config, mode='all')
+        n = len(df)
+        if df is None or n == 0:
+            raise ValueError('Cytometry data cannot be empty in order to use it for illumination correction')
+
+        self.data = {}
+        for region_index, region_data in df.groupby('region_index'):
+            ests = self.get_illumination_models(region_index, region_data)
+            imgs = self.get_illumination_images(ests)
+            self.data[region_index] = (imgs, ests)
 
     def save_region_data(self, output_dir):
         if self.data is None:

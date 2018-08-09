@@ -4,9 +4,9 @@ import pandas as pd
 from collections import OrderedDict
 from codex.ops import op as codex_op
 from codex import io as codex_io
-from codex.cytometry.cytometer import DEFAULT_CHANNEL_PREFIX
+from codex.cytometry.cytometer import DEFAULT_CELL_INTENSITY_PREFIX
 from codex.function import data as function_data
-from sklearn.linear_model import HuberRegressor, Ridge, LinearRegression
+from sklearn.linear_model import HuberRegressor, Ridge, Lasso, LinearRegression
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.neural_network import MLPRegressor
@@ -67,7 +67,8 @@ class IlluminationCorrection(codex_op.CodexOp):
             feature_params=DEFAULT_FEATURE_PARAMS,
             model_params=DEFAULT_MODEL_PARAMS,
             prediction_params=DEFAULT_PREDICTION_PARAMS,
-            overwrite_tile=False):
+            overwrite_tile=False,
+            intensity_prefix=DEFAULT_CELL_INTENSITY_PREFIX):
         super().__init__(config)
 
         params = config.illumination_correction_params
@@ -83,6 +84,10 @@ class IlluminationCorrection(codex_op.CodexOp):
 
         # Extract flag indicating whether or not to overwrite original tiles with corrected results
         self.overwrite_tile = params.get('overwrite_tile', overwrite_tile)
+
+        # Extract prefix of intensity signals within cytometry data to be used for correction
+        # (these correspond to cell or nucleus intensities, though either prefix is configurable)
+        self.intensity_prefix = params.get('intensity_prefix', intensity_prefix)
 
         # Extra commonly used shape information from experiment configuration
         self.region_shape = (
@@ -151,7 +156,7 @@ class IlluminationCorrection(codex_op.CodexOp):
                 feats.append(feat)
                 continue
             # Test membership when prefixed by channel markers
-            ch_feat = DEFAULT_CHANNEL_PREFIX + feat
+            ch_feat = self.intensity_prefix + feat
             if ch_feat in df:
                 feats.append(ch_feat)
                 continue
@@ -208,7 +213,7 @@ class IlluminationCorrection(codex_op.CodexOp):
 
             # Extract spatial cell features and prediction target
             X = self._prepare_prediction_features(dfm[['ry', 'rx', 'y', 'x']])
-            y = dfm[DEFAULT_CHANNEL_PREFIX + channel]
+            y = dfm[self.intensity_prefix + channel]
 
             logger.debug(
                 'Building illumination model for region %s, channel "%s" using %s cells (%s originally) [feature '

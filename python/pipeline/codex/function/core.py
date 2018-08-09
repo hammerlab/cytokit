@@ -64,7 +64,7 @@ def run_nb(nb_name, nb_output_path, nb_params):
 # Montage Functions #
 #####################
 
-def create_montage(output_dir, config, extract, name, region_indexes):
+def create_montage(output_dir, config, extract, name, region_indexes, prep_fn=None):
     from codex.utils import ij_utils
 
     # Loop through regions and generate a montage for each, skipping any (with a warning) that
@@ -85,6 +85,8 @@ def create_montage(output_dir, config, extract, name, region_indexes):
                 labels = meta['labels']
             tiles.append(tile)
         reg_img_montage = montage(tiles, config)
+        if prep_fn is not None:
+            reg_img_montage = prep_fn(reg_img_montage)
         path = osp.join(output_dir, codex_io.get_montage_image_path(ireg, name))
         logger.info('Saving montage to file "%s"', path)
         tags = [] if labels is None else ij_utils.get_slice_label_tags(labels)

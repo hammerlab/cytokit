@@ -15,7 +15,8 @@ from codex import data as codex_data
 DEFAULT_BATCH_SIZE = 1
 CELL_CHANNEL = 0
 NUCLEUS_CHANNEL = 1
-DEFAULT_CHANNEL_PREFIX = 'ch:'
+DEFAULT_CELL_INTENSITY_PREFIX = 'ci:'
+DEFAULT_NUCL_INTENSITY_PREFIX = 'ni:'
 
 
 class KerasCytometer2D(object):
@@ -250,7 +251,11 @@ class Cytometer2D(KerasCytometer2D):
         # Return (in this order) labeled volumes, prediction volumes, mask volumes
         return img_seg, img_pred, img_bin
 
-    def quantify(self, tile, img_seg, channel_names=None, channel_name_prefix=DEFAULT_CHANNEL_PREFIX):
+    def quantify(self, tile, img_seg, channel_names=None,
+                 cell_intensity_prefix=DEFAULT_CELL_INTENSITY_PREFIX,
+                 nucleus_intensity_prefix=DEFAULT_NUCL_INTENSITY_PREFIX,
+                 include_cell_intensity=True,
+                 include_nucleus_intensity=False):
         ncyc, nz, _, nh, nw = tile.shape
 
         # Move cycles and channels to last axes (in that order)
@@ -262,14 +267,20 @@ class Cytometer2D(KerasCytometer2D):
         nch = tile.shape[-1]
 
         if channel_names is None:
-            channel_names = ['{}{:03d}'.format(channel_name_prefix, i) for i in range(nch)]
-        else:
-            channel_names = [channel_name_prefix + c for c in channel_names]
+            channel_names = ['{:03d}'.format(i) for i in range(nch)]
         if nch != len(channel_names):
             raise ValueError(
                 'Data tile contains {} channels but channel names list contains only {} items '
                 '(names given = {}, tile shape = {})'
                 .format(nch, len(channel_names), channel_names, tile.shape))
+
+        # Set final list of channel intensity labels (if any)
+        intensity_names = []
+        if include_cell_intensity:
+            intensity_names += [cell_intensity_prefix + c for c in channel_names]
+        if include_nucleus_intensity:
+            intensity_names += [nucleus_intensity_prefix + c for c in channel_names]
+        del channel_names
 
         res = []
         for iz in range(nz):
@@ -279,25 +290,38 @@ class Cytometer2D(KerasCytometer2D):
                 'Expecting cell and nucleus properties to have same length (nuc props = {}, cell props = {})'\
                 .format(len(nuc_props), len(cell_props))
 
+            # Function used to fetch channel intensities for a specific object (i.e. scikit image "property")
+            def _quantify_region(prop):
+                # Get a (n_pixels, n_channels) array of intensity values associated with
+                # this region and then average across n_pixels dimension
+                intensities = tile[iz][prop.coords[:, 0], prop.coords[:, 1]].mean(axis=0)
+                assert intensities.ndim == 1
+                assert len(intensities) == nch
+                return list(intensities)
+
+            # Loop through each detected cell and quantify signal intensities
             for i in range(len(cell_props)):
                 cell_prop, nuc_prop = cell_props[i], nuc_props[i]
                 assert cell_prop.label == nuc_prop.label, \
                     'Expecting equal labels for cell and nucleus (nuc label = {}, cell label = {})'\
                     .format(nuc_prop.label, cell_prop.label)
 
-                # Get a (n_pixels, n_channels) array of intensity values associated with
-                # this region and then average across n_pixels dimension
-                intensities = tile[iz][cell_prop.coords[:, 0], cell_prop.coords[:, 1]].mean(axis=0)
-                assert intensities.ndim == 1
-                assert len(intensities) == nch
+                # Compute cell/nucleus intensities (if either is configured for calculation)
+                intensities = []
+                if include_cell_intensity:
+                    intensities += _quantify_region(cell_prop)
+                if include_nucleus_intensity:
+                    intensities += _quantify_region(nuc_prop)
 
+                # Add compulsory properties
                 cell_area, nuc_area = cell_prop.area, nuc_prop.area
                 row = [
                     cell_prop.label, cell_prop.centroid[1], cell_prop.centroid[0], iz,
                     cell_area, codex_math.area_to_diameter(cell_area), cell_prop.solidity,
                     nuc_area, codex_math.area_to_diameter(nuc_area), nuc_prop.solidity
                 ]
-                row += list(intensities)
+                # Add intensities, if any
+                row += intensities
                 res.append(row)
 
         # Note: "size" is used here instead of "area" for compatibility between 2D and 3D
@@ -306,7 +330,7 @@ class Cytometer2D(KerasCytometer2D):
             'cell_size', 'cell_diameter', 'cell_solidity',
             'nucleus_size', 'nucleus_diameter', 'nucleus_solidity'
         ]
-        return pd.DataFrame(res, columns=columns + channel_names)
+        return pd.DataFrame(res, columns=columns + intensity_names)
 
 
 # def _get_flat_ball(size):

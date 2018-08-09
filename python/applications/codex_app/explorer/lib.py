@@ -46,11 +46,13 @@ def get_interactive_image_layout(img=None, shape=None):
         'xaxis': {
             'autorange': False,
             'showgrid': False,
+            'zeroline': False,
             'range': rngx,
         },
         'yaxis': {
             'autorange': False,
             'showgrid': False,
+            'zeroline': False,
             'range': rngy,
             'scaleanchor': 'x',
             'scaleratio': 1

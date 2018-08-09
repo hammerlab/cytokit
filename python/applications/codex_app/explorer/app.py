@@ -10,6 +10,8 @@ from codex_app.explorer.data import cache as ac
 from codex_app.explorer import lib as lib
 from codex_app.explorer.config import cfg
 from codex_app.explorer import color
+from codex.cytometry.cytometer import DEFAULT_CELL_INTENSITY_PREFIX, DEFAULT_NUCL_INTENSITY_PREFIX
+from collections import OrderedDict
 import pandas as pd
 import numpy as np
 import logging
@@ -38,6 +40,10 @@ def get_tile_image():
     return ac['processor']['tile'].run(data.get_tile_image(*ac['selection']['tile']['coords']))
 
 
+def get_tile_nchannels():
+    return len(data.get_tile_image_channels())
+
+
 ac['shape']['montage'] = data.get_montage_image().shape
 ac['processor']['montage'] = lib.ImageProcessor(ac['shape']['montage'][0])
 ac['layouts']['montage'] = lib.get_interactive_image_layout(get_montage_image())
@@ -46,6 +52,8 @@ ac['shape']['tile'] = data.get_tile_image().shape
 ac['processor']['tile'] = lib.ImageProcessor(ac['shape']['tile'][0])
 ac['selection']['tile']['coords'] = (0, 0)
 ac['layouts']['tile'] = lib.get_interactive_image_layout(get_tile_image())
+
+ac['operation']['code'] = None
 
 
 def get_graph_axis_selections():
@@ -60,26 +68,38 @@ def get_graph_axis_selections():
 def get_base_data():
     # Pull cell expression data frame and downsample if necessary
     df = data.get_cytometry_stats()
+
+    # Apply custom code if any has been passed in
+    if (ac['operation']['code'] or '').strip():
+        n = len(df)
+        logger.info('Applying custom code:\n%s', ac['operation']['code'])
+        local_vars = {'df': df}
+        exec(ac['operation']['code'], globals(), local_vars)
+        df = local_vars['df']
+        logger.info('Size of frame before custom operations = %s, after = %s', n, len(df))
+
     if len(df) > cfg.max_cells:
         logger.info('Sampling expression data for %s cells down to %s records', len(df), cfg.max_cells)
         df = df.sample(n=cfg.max_cells, random_state=cfg.random_state)
     return df
 
 
+def apply_log(v):
+    return np.log10(v)
+
+
+def invert_log(v):
+    return np.power(10, v)
+
+
 def get_graph_data():
     selections = get_graph_axis_selections()
 
-    # Create list of fields to extract that are always necessary
-    cols = [
-        'cell_diameter', 'nucleus_diameter', 'cell_size', 'nucleus_size', 'nucleus_solidity',
-        'region_index', 'tile_x', 'tile_y', 'id', 'rid', 'rx', 'ry', 'x', 'y'
-    ]
-    # cols = [
-    #     'cell_size', 'nucleus_size', 'nucleus_solidity',
-    #     'region_index', 'tile_x', 'tile_y', 'id', 'rid', 'rx', 'ry', 'x', 'y'
-    # ]
     if selections['xvar'] is None:
         return None
+
+    # Create list of fields to extract that are always necessary
+    cols = list(cfg.CYTO_FIELDS.keys())
 
     # Map to contain keys '[x|y]var' to the name of the field to duplicate
     # as that new column in the data frame
@@ -93,95 +113,16 @@ def get_graph_data():
         if selections['yvar'] not in cols:
             cols += [selections['yvar']]
 
-    # Graphable data should only include fields directly referable by name, which
-    # means they should all be lower case with no prefix or grouping modifiers
-    df = get_base_data().copy()
-    df = strip_field_modifiers(df)
-    df = normalize_field_names(df)
-    df = df[cols]
+    df = get_base_data().copy()[cols]
     for k, v in vars.items():
         df[k] = df[v]
 
     if 'xvar' in df and selections['xscale'] == 'log':
-        df['xvar'] = np.log10(df['xvar'])
+        df['xvar'] = apply_log(df['xvar'])
     if 'yvar' in df and selections['yscale'] == 'log':
-        df['yvar'] = np.log10(df['yvar'])
+        df['yvar'] = apply_log(df['yvar'])
 
     return df
-
-
-def strip_field_modifiers(df):
-    return df.rename(columns=lambda c: c.replace('ch:', ''))
-
-
-def normalize_field_name(field):
-    return field.lower().replace(' ', '_')
-
-
-def normalize_field_names(df):
-    return df.rename(columns=normalize_field_name)
-
-
-def normalize_channel_name(ch):
-    """Convert channel names like 'proc_DAPI 1' to 'dapi_1'"""
-    return ' '.join(ch.split('_')[1:]).replace(' ', '_').lower()
-
-
-def _get_box_data(df):
-
-    if len(df) > cfg.max_boxplot_records:
-        logger.info('Sampling boxplot data for %s cells down to %s records', len(df), cfg.max_boxplot_records)
-        df = df.sample(n=cfg.max_boxplot_records, random_state=cfg.random_state)
-
-    vals = []
-    labels = []
-    for c in df:
-        vals.extend(list(df[c].values))
-        labels.extend([c] * len(df))
-    return vals, labels
-
-
-def get_distribution_figure(selected_points=None):
-    # Extract expression stats only
-    d = get_base_data().filter(regex='ch:')
-
-    # Convert all names to snake case
-    d = normalize_field_names(strip_field_modifiers(d))
-
-    # Select only the expression fields present in the extract
-    d = d.filter(items=[normalize_channel_name(c) for c in cfg.extract_channels])
-
-    fig_data = []
-
-    vals, labels = _get_box_data(d)
-    fig_data.append(dict(
-        x=vals,
-        y=labels,
-        name='Overall',
-        orientation='h',
-        boxpoints=False,
-        type='box'
-    ))
-
-    if selected_points is not None:
-        ds = d.iloc[selected_points]
-        vals, labels = _get_box_data(ds)
-        fig_data.append(dict(
-            x=vals,
-            y=labels,
-            name='Selected',
-            orientation='h',
-            boxpoints=False,
-            type='box'
-        ))
-
-    fig_layout = {
-        'boxmode': 'group',
-        'title': 'Expression Distribution',
-        'margin': dict(b=0, t=50)
-    }
-    fig = dict(data=fig_data, layout=fig_layout)
-    return fig
 
 
 def get_graph_figure():
@@ -225,17 +166,9 @@ def get_graph():
     )
 
 
-def get_distribution():
-    return dcc.Graph(
-        id='distribution',
-        figure=get_distribution_figure(),
-        animate=False
-    )
-
-
 def _ch_disp_name(ch):
-    """Convert channel names like 'cyto_nucleus_boundary' to 'nucleus boundary'"""
-    return ' '.join(ch.split('_')[1:]).lower()
+    """Convert channel names like 'proc_Plasmid' to 'Plasmid'"""
+    return '_'.join(ch.split('_')[1:])
 
 
 def get_image_settings_layout(id_format, channel_names, class_name, type='tile'):
@@ -282,14 +215,14 @@ def get_axis_settings_layout(axis):
     var = selections[axis + 'var']
     scale = selections[axis + 'scale']
 
-    # Get list of possible field values based on "base" dataset, which may
-    # include spatial coordinates, raw expression levels, and projections
-    field_names = strip_field_modifiers(get_base_data().filter(regex='ch:')).columns.tolist()
-    field_names += [
-        'Nucleus Diameter', 'Nucleus Size', 'Nucleus Solidity',
-        'Cell Diameter', 'Cell Size', 'Cell Solidity',
-        'RX', 'RY', 'X', 'Y', 'Z'
-    ]
+    # Create field list starting with preconfigured set of always necessary fields
+    field_names = OrderedDict(cfg.CYTO_FIELDS)
+
+    # Add list of possible field values based on "base" dataset, which may
+    # include expression levels for different cell components
+    regex = DEFAULT_CELL_INTENSITY_PREFIX + '|' + DEFAULT_NUCL_INTENSITY_PREFIX
+    for c in get_base_data().filter(regex=regex).columns.tolist():
+        field_names[c] = c
 
     return html.Div([
             html.Div(axis.upper(), style={'width': '5%', 'display': 'inline-block'}),
@@ -297,10 +230,8 @@ def get_axis_settings_layout(axis):
                 dcc.Dropdown(
                     id='axis_' + axis + '_var',
                     options=[
-                        # Note that the "value" should always be lower case since this
-                        # is what is passed around for referring to fields
-                        {'label': f, 'value': normalize_field_name(f)}
-                        for f in field_names
+                        {'label': v, 'value': k}
+                        for k, v in field_names.items()
                     ],
                     value=var
                 ),
@@ -321,6 +252,22 @@ def get_axis_settings_layout(axis):
     )
 
 
+def get_operation_code_layout():
+    return [
+        html.Div('Custom Operations:', style={'width': '100%'}),
+        dcc.Textarea(
+            id='operation-code',
+            placeholder='Enter custom code',
+            value='',
+            style={'width': '90%', 'height': '100%'},
+            wrap=False,
+            rows=25
+        ),
+        html.Div('', id='code-message')
+        # html.Button('Apply', id='apply-button')
+    ]
+
+
 app.layout = html.Div([
         html.Div(
             className='row',
@@ -336,10 +283,7 @@ app.layout = html.Div([
                     lib.get_interactive_image('montage', ac['layouts']['montage'], style=MONTAGE_IMAGE_STYLE),
                     className='four columns'
                 ),
-                html.Div(
-                    get_distribution(),
-                    className='three columns'
-                )
+                html.Div(get_operation_code_layout(), className='three columns'),
             ],
         ),
         # html.Pre(id='console', className='four columns'),
@@ -350,7 +294,7 @@ app.layout = html.Div([
                     lib.get_interactive_image('tile', ac['layouts']['tile'], style=TILE_IMAGE_STYLE),
                     className='ten columns'
                 ),
-                get_image_settings_layout('tile-ch-{}', cfg.extract_channels, 'two columns')
+                get_image_settings_layout('tile-ch-{}', data.get_tile_image_channels(), 'two columns')
             ]
         ),
         html.Div([
@@ -359,6 +303,12 @@ app.layout = html.Div([
         ])
     ]
 )
+
+
+@app.callback(Output('code-message', 'children'), [Input('operation-code', 'value')])
+def update_operation_code(code):
+    ac['operation']['code'] = code
+    return ''
 
 
 @app.callback(
@@ -405,58 +355,72 @@ def _relayout(figure, relayout_data):
     return figure
 
 
-@app.callback(Output('distribution', 'figure'), [Input('graph', 'selectedData')])
-def update_distribution(selected_data):
-    selected_points = None
-    if selected_data is not None:
-        selected_points = [p['pointIndex'] for p in selected_data['points']]
-    return get_distribution_figure(selected_points)
+def selection_type(selected_data):
+    if selected_data is None:
+        return None
+    if 'range' in selected_data:
+        return 'range'
+    if 'points' in selected_data:
+        return 'lasso'
+    return None
+
+
+def get_graph_data_selection(selected_data):
+    type = selection_type(selected_data)
+    if type is None:
+        return None
+    if type == 'lasso':
+        # Fetch only cells/rows corresponding to selected data in graph (and index by tile loc)
+        df = get_graph_data().iloc[[p['pointIndex'] for p in selected_data['points']]]
+    elif type == 'range':
+        df = get_graph_data()
+        axis_selections = get_graph_axis_selections()
+        var_range = selected_data['range']['x']
+        if axis_selections['xscale'] == 'log':
+            var_range = list(invert_log(np.array(var_range)))
+        df = df[df[axis_selections['xvar']].between(*var_range)]
+    else:
+        raise ValueError('Selection type "{}" invalid'.format(type))
+
+    # Sample if necessary
+    if len(df) > cfg.max_montage_points:
+        logger.info('Sampling montage data for %s cells down to %s records', len(df), cfg.max_montage_points)
+        df = df.sample(n=cfg.max_montage_points, random_state=cfg.random_state)
+
+    return df
 
 
 @app.callback(Output('montage', 'figure'), [Input('graph', 'selectedData')], [State('montage', 'relayoutData')])
 def update_montage(selected_data, relayout_data):
-    if selected_data is None:
-        d = [{'x': [], 'y': [], 'mode': 'markers', 'type': 'scattergl'}]
-    else:
-        # Fetch data corresponding to selected points
-        df = get_graph_data().iloc[[p['pointIndex'] for p in selected_data['points']]]
-
-        # Sample if necessary
-        if len(df) > cfg.max_montage_points:
-            logger.info('Sampling montage data for %s cells down to %s records', len(df), cfg.max_montage_points)
-            df = df.sample(n=cfg.max_montage_points, random_state=cfg.random_state)
-
+    df = get_graph_data_selection(selected_data)
+    fig_data = [{'x': [], 'y': [], 'mode': 'markers', 'type': 'scattergl'}]
+    if df is not None:
         # Update montage points using region x/y of cells
         x, y = _rescale_montage_coords(df['rx'], df['ry'])
-        d = [{
+        fig_data = [{
             'x': x,
             'y': cfg.montage_target_shape[0] - y,
             'mode': 'markers',
             'marker': {'opacity': .5, 'color': 'white'},
             'type': 'scattergl'
         }]
-    figure = dict(data=d, layout=ac['layouts']['montage'])
+    figure = dict(data=fig_data, layout=ac['layouts']['montage'])
     return _relayout(figure, relayout_data)
 
 
 def _get_tile_hover_text(r):
-    fields = ['Nucleus Diameter', 'Nucleus Solidity', 'Cell Diameter', 'Cell Size']
     return '<br>'.join(
-        '{}: {:.2f}'.format(f, r[normalize_field_name(f)])
-        for f in fields
-        if normalize_field_name(f) in r
+        '{}: {:.2f}'.format(cfg.CYTO_FIELDS[f], r[f])
+        for f in cfg.CYTO_HOVER_FIELDS if f in r
     )
+
 
 def _get_tile_figure(selected_data, relayout_data):
     fig_data = [{'x': [], 'y': [], 'mode': 'markers', 'type': 'scattergl'}]
-    if selected_data is not None:
-        df = get_graph_data()
-
-        # Fetch only cells/rows corresponding to selected data in graph (and index by tile loc)
-        df = df.iloc[[p['pointIndex'] for p in selected_data['points']]] \
-            .set_index(['tile_x', 'tile_y']).sort_index()
-
+    df = get_graph_data_selection(selected_data)
+    if df is not None:
         # Further restrict to only the selected tile
+        df = df.set_index(['tile_x', 'tile_y']).sort_index()
         tx, ty = ac['selection']['tile']['coords']
         if (tx, ty) in df.index:
             df = df.loc[(tx, ty)]
@@ -476,8 +440,8 @@ def _get_tile_figure(selected_data, relayout_data):
 @app.callback(
     Output('tile', 'figure'),
     [Input('graph', 'selectedData'), Input('montage', 'clickData')] +
-    [Input('tile-ch-{}-range'.format(i), 'value') for i in range(cfg.extract_nchannels)] +
-    [Input('tile-ch-{}-color'.format(i), 'value') for i in range(cfg.extract_nchannels)]
+    [Input('tile-ch-{}-range'.format(i), 'value') for i in range(get_tile_nchannels())] +
+    [Input('tile-ch-{}-color'.format(i), 'value') for i in range(get_tile_nchannels())]
     ,[
         State('tile', 'relayoutData')
     ])
@@ -485,7 +449,7 @@ def update_tile(*args):
     # montage click data:
     # {'points': [{'x': 114.73916, 'curveNumber': 0, 'pointNumber': 421, 'y': 306.4889, 'pointIndex': 421}]}
     selected_data, montage_data, relayout_data = args[0], args[1], args[-1]
-    nch = cfg.extract_nchannels
+    nch = get_tile_nchannels()
     channel_ranges = args[2:(nch + 2)]
     channel_colors = args[(nch + 2):-1]
     data.db.put('app', 'tile_channel_ranges', channel_ranges)

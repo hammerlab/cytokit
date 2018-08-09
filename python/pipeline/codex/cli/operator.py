@@ -17,14 +17,12 @@ import logging
 CH_SRC_RAW = 'raw'
 CH_SRC_PROC = 'proc'
 CH_SRC_CYTO = 'cyto'
-CH_SRC_ILLC = 'illc'
-CH_SOURCES = [CH_SRC_RAW, CH_SRC_PROC, CH_SRC_CYTO, CH_SRC_ILLC]
+CH_SOURCES = [CH_SRC_RAW, CH_SRC_PROC, CH_SRC_CYTO]
 
 PATH_FMT_MAP = {
     CH_SRC_RAW: None,
     CH_SRC_PROC: codex_io.FMT_PROC_IMAGE,
-    CH_SRC_CYTO: codex_io.FMT_CYTO_IMAGE,
-    CH_SRC_ILLC: codex_io.FMT_ILLUM_IMAGE
+    CH_SRC_CYTO: codex_io.FMT_CYTO_IMAGE
 }
 
 
@@ -46,7 +44,7 @@ def _map_channels(config, channels):
                 .format(channel, [c + '_' for c in CH_SOURCES])
             )
         channel = '_'.join(channel.split('_')[1:])
-        if src == CH_SRC_RAW or src == CH_SRC_PROC or src == CH_SRC_ILLC:
+        if src == CH_SRC_RAW or src == CH_SRC_PROC:
             coords = config.get_channel_coordinates(channel)
             res.append([channel, src, coords[0], coords[1]])
         elif src == CH_SRC_CYTO:
@@ -110,10 +108,9 @@ class Operator(cli.DataCLI):
             name: Name of extraction to be created; This will be used to construct result path like
                 EXP_DIR/output/extract/`name`
             channels: List of strings indicating channel names (case-insensitive) prefixed by source for that
-                channel (e.g. proc_DAPI, raw_CD4, illc_DAPI, cyto_NUCLEUS_BOUNDARY); Available sources are:
+                channel (e.g. proc_DAPI, raw_CD4, cyto_NUCLEUS_BOUNDARY); Available sources are:
                 - "raw": Raw data images
                 - "proc": Data generated as a results of preprocessing
-                - "illc": Illumination corrected data
                 - "cyto": Cytometric object data (nuclei and cell boundaries)
             z: String or 1-based index selector for z indexes constructed as any of the following:
                 - "best": Indicates that z slices should be inferred based on focal quality (default option)
@@ -144,7 +141,6 @@ class Operator(cli.DataCLI):
         tile_locations = _get_tile_locations(self.config, region_indexes, tile_indexes)
 
         extract_path = None
-        slice_labels = []
         for i, loc in enumerate(tile_locations):
             logging.info('Extracting tile {} of {}'.format(i+1, len(tile_locations)))
             extract_tile = []
@@ -152,6 +148,7 @@ class Operator(cli.DataCLI):
             # Create function used to crop out z-slices from extracted volumes
             z_slice = z_slice_fn(loc.region_index, loc.tile_x, loc.tile_y)
 
+            slice_labels = []
             for src in channel_sources:
 
                 # Initialize tile generator for this data source (which are all the same except
@@ -184,7 +181,7 @@ class Operator(cli.DataCLI):
                     )
                     assert sub_tile.ndim == 3, \
                         'Expecting sub_tile to have 3 dimensions but got shape {}'.format(sub_tile.shape)
-                    slice_labels.append('{} ({})'.format(r['channel_name'], src))
+                    slice_labels.append('{}_{}'.format(src, r['channel_name']))
                     extract_tile.append(sub_tile)
 
             # Stack the subtiles to give array with shape (z, channels, h, w) and then reshape to 5D
@@ -209,10 +206,29 @@ class Operator(cli.DataCLI):
 
         logging.info('Extraction complete (results saved to %s)', osp.dirname(extract_path) if extract_path else None)
 
-    def montage(self, name, extract_name, region_indexes=None):
+    def montage(self, name, extract_name, region_indexes=None, crop=None):
+        """Create a montage of extracted tiles
+
+        Args:
+            name: Name of montage to be created; This will be used to construct result path like
+                EXP_DIR/output/montage/`name`
+            extract_name: Name of extract to use to generate montage
+            region_indexes: 1-based sequence of region indexes to process; can be specified as:
+                - None: Region indexes will be inferred from experiment configuration
+                - str or int: A single value will be interpreted as a single index
+                - tuple: A 2-item or 3-item tuple forming the slice (start, stop[, step]); stop is inclusive
+                - list: A list of integers will be used as is
+            tile_indexes: 1-based sequence of tile indexes to process; has same semantics as `region_indexes`
+            crop: Either none (default) or a 4-item list in the format (y_start, y_end, x_start, x_end) as
+                bounding indices (0-based) that will be applied as a slice on the final montage (this is helpful
+                for generating more reasonably sized montage subsets over large datasets)
+        """
         logging.info('Creating montage "%s" from extraction "%s"', name, extract_name)
         region_indexes = cli.resolve_index_list_arg(region_indexes, zero_based=True)
-        core.create_montage(self.data_dir, self.config, extract_name, name, region_indexes)
+        prep_fn = None
+        if crop is not None:
+            prep_fn = lambda tile: tile[:, :, :, crop[0]:crop[1], crop[2]:crop[3]]
+        core.create_montage(self.data_dir, self.config, extract_name, name, region_indexes, prep_fn=prep_fn)
 
 
 if __name__ == '__main__':

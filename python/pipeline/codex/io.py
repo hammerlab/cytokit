@@ -99,12 +99,15 @@ def save_csv(file, df, **kwargs):
     df.to_csv(file, **kwargs)
 
 
-def read_image(file):
-    # Ignore tiff metadata warnings from skimage
-    # with warnings.catch_warnings():
-    #     warnings.simplefilter("ignore")
-    #     return sk_io.imread(file)
-    return sk_io.imread(file)
+def read_image(file, return_metadata=False):
+    # Use skimage io if metadata not necessary
+    if not return_metadata:
+        return sk_io.imread(file)
+    # Otherwise, read extract metatdata using tifffile
+    else:
+        with TiffFile(file) as tif:
+            res = tif.asarray()
+            return res, _get_tif_metadata(tif, shape=res.shape)
 
 
 def read_tile(file, return_metadata=False):
@@ -141,12 +144,36 @@ def read_tile(file, return_metadata=False):
         res = tif.asarray()[slices]
 
         if return_metadata:
-            # At TOW, labeling information is the only helpful metadata worth passing around,
-            # but this may expand in the future
-            metadata = dict(labels=tags.get('Labels'))
-            return res, metadata
+            return res, _get_tif_metadata(tif, shape=res.shape)
         else:
             return res
+
+
+def _get_tif_metadata(tif, shape=None):
+    """Extract metadata from tif file
+
+    Args:
+        tif: File object
+        shape: Any multidimensional image shape with at least 2 dimensions where HW axes are last
+    Returns:
+        Dictionary containing relevant metadata
+    """
+    # At TOW, labeling information is the only helpful metadata worth passing around,
+    # but this may expand in the future
+    tags = dict(tif.imagej_metadata)
+
+    # Get 1D slice labels (which correspond to different axes of 5D tiles)
+    res = dict(labels=tags.get('Labels'))
+    if shape is not None:
+        # Provide labels in reshaped array that correspond to image index dimensions
+        if len(shape) >= 3:
+            # This reshaping works, for example in a 5D tile, by wrapping labels across the
+            # channel dimension, then the z dimension, then the cycle dimension
+            res['structured_labels'] = np.array(res['labels']).reshape(shape[:-2])
+        else:
+            # If image is 1D or 2D, return labels in 1D form
+            res['structured_labels'] = res['labels']
+    return res
 
 
 def save_tile(file, tile, config=None, infer_labels=True, **kwargs):

@@ -36,8 +36,9 @@ def get_montage_image():
     return ac['processor']['montage'].run(data.get_montage_image())
 
 
-def get_tile_image():
-    return ac['processor']['tile'].run(data.get_tile_image(*ac['selection']['tile']['coords']))
+def get_tile_image(apply_display_settings=True):
+    img = data.get_tile_image(*ac['selection']['tile']['coords'])
+    return ac['processor']['tile'].run(img) if apply_display_settings else img
 
 
 def get_tile_nchannels():
@@ -78,9 +79,6 @@ def get_base_data():
         df = local_vars['df']
         logger.info('Size of frame before custom operations = %s, after = %s', n, len(df))
 
-    if len(df) > cfg.max_cells:
-        logger.info('Sampling expression data for %s cells down to %s records', len(df), cfg.max_cells)
-        df = df.sample(n=cfg.max_cells, random_state=cfg.random_state)
     return df
 
 
@@ -197,10 +195,11 @@ def get_image_settings_layout(id_format, channel_names, class_name, type='tile')
                 ), style={'width': '50%', 'display': 'inline-block'}),
                 dcc.RangeSlider(
                     id=id_format.format(str(i) + '-range'),
-                    min=0,
+                    min=ranges[i][0],
                     max=ranges[i][1],
                     step=1,
-                    value=ranges[i],
+                    # Override default value to 1 for labeled images
+                    value=[0, 1] if channel_names[i].startswith(data.CH_SRC_CYTO) else ranges[i],
                     allowCross=False
                 )
             ])
@@ -257,7 +256,7 @@ def get_operation_code_layout():
         html.Div('Custom Operations:', style={'width': '100%'}),
         dcc.Textarea(
             id='operation-code',
-            placeholder='Enter custom code',
+            placeholder='Enter custom pre-processing code',
             value='',
             style={'width': '90%', 'height': '100%'},
             wrap=False,
@@ -267,6 +266,16 @@ def get_operation_code_layout():
         # html.Button('Apply', id='apply-button')
     ]
 
+
+def get_montage_title():
+    ny, nx = cfg.region_shape
+    ri = cfg.region_index
+    return html.Div(html.H4('Region {} ({} x {} Tiles)'.format(ri + 1, nx, ny), style={'textAlign': 'center'}))
+
+
+##############
+# App Layout #
+##############
 
 app.layout = html.Div([
         html.Div(
@@ -279,9 +288,12 @@ app.layout = html.Div([
                     ],
                     className='five columns'
                 ),
-                html.Div(
-                    lib.get_interactive_image('montage', ac['layouts']['montage'], style=MONTAGE_IMAGE_STYLE),
-                    className='four columns'
+                html.Div([
+                        get_montage_title(),
+                        lib.get_interactive_image('montage', ac['layouts']['montage'], style=MONTAGE_IMAGE_STYLE)
+                    ],
+                    className='four columns',
+                    style={'overflowY': 'scroll', 'overflowX': 'scroll'}
                 ),
                 html.Div(get_operation_code_layout(), className='three columns'),
             ],
@@ -290,9 +302,13 @@ app.layout = html.Div([
         html.Div(
             className='row',
             children=[
-                html.Div(
-                    lib.get_interactive_image('tile', ac['layouts']['tile'], style=TILE_IMAGE_STYLE),
-                    className='ten columns'
+                html.Div(id='single-cells', className='two columns'),
+                html.Div([
+                        html.Div(id='tile-title'),
+                        lib.get_interactive_image('tile', ac['layouts']['tile'], style=TILE_IMAGE_STYLE)
+                    ],
+                    className='eight columns',
+                    style={'overflowY': 'scroll', 'overflowX': 'scroll'}
                 ),
                 get_image_settings_layout('tile-ch-{}', data.get_tile_image_channels(), 'two columns')
             ]
@@ -303,6 +319,32 @@ app.layout = html.Div([
         ])
     ]
 )
+
+
+#############
+# Callbacks #
+#############
+
+
+def handle_display_settings_update(channel_ranges, channel_colors):
+    data.db.put('app', 'tile_channel_ranges', channel_ranges)
+    data.db.put('app', 'tile_channel_colors', channel_colors)
+    ac['processor']['tile'].ranges = channel_ranges
+    ac['processor']['tile'].colors = [color.map(c) for c in channel_colors]
+
+
+def handle_selected_data_update(selected_data):
+    data.db.put('app', 'selected_data', selected_data)
+
+
+def handle_montage_click_data(click_data):
+    # montage click data example:
+    # {'points': [{'x': 114.73916, 'curveNumber': 0, 'pointNumber': 421, 'y': 306.4889, 'pointIndex': 421}]}
+    if click_data:
+        sy, sx = cfg.montage_target_shape
+        ry, rx = cfg.region_shape
+        py, px = click_data['points'][0]['y'], click_data['points'][0]['x']
+        ac['selection']['tile']['coords'] = (int(px // (sx / rx)), ry - int(py // (sy / ry)) - 1)
 
 
 @app.callback(Output('code-message', 'children'), [Input('operation-code', 'value')])
@@ -365,15 +407,20 @@ def selection_type(selected_data):
     return None
 
 
-def get_graph_data_selection(selected_data):
+def get_graph_data_selection():
+    selected_data = data.db.get('app', 'selected_data')
     type = selection_type(selected_data)
     if type is None:
         return None
+
+    df = get_graph_data()
+    if df is None:
+        return None
+
     if type == 'lasso':
         # Fetch only cells/rows corresponding to selected data in graph (and index by tile loc)
-        df = get_graph_data().iloc[[p['pointIndex'] for p in selected_data['points']]]
+        df = df.iloc[[p['pointIndex'] for p in selected_data['points']]]
     elif type == 'range':
-        df = get_graph_data()
         axis_selections = get_graph_axis_selections()
         var_range = selected_data['range']['x']
         if axis_selections['xscale'] == 'log':
@@ -381,20 +428,36 @@ def get_graph_data_selection(selected_data):
         df = df[df[axis_selections['xvar']].between(*var_range)]
     else:
         raise ValueError('Selection type "{}" invalid'.format(type))
-
-    # Sample if necessary
-    if len(df) > cfg.max_montage_points:
-        logger.info('Sampling montage data for %s cells down to %s records', len(df), cfg.max_montage_points)
-        df = df.sample(n=cfg.max_montage_points, random_state=cfg.random_state)
-
     return df
 
 
-@app.callback(Output('montage', 'figure'), [Input('graph', 'selectedData')], [State('montage', 'relayoutData')])
-def update_montage(selected_data, relayout_data):
-    df = get_graph_data_selection(selected_data)
+@app.callback(
+    Output('montage', 'figure'),
+    [Input('graph', 'selectedData'), Input('montage', 'clickData')],
+    [State('montage', 'relayoutData')])
+def update_montage(selected_data, click_data, relayout_data):
+
+    # Persist updates to selected data
+    handle_selected_data_update(selected_data)
+
+    # Persist changes to selected tile
+    handle_montage_click_data(click_data)
+
+    # Get currently selected cell data
+    df = get_graph_data_selection()
+
     fig_data = [{'x': [], 'y': [], 'mode': 'markers', 'type': 'scattergl'}]
+    layout = ac['layouts']['montage']
+    layout['shapes'] = None
+
     if df is not None:
+
+        # Downsample if necessary
+        if len(df) > cfg.max_montage_cells:
+            logger.info('Sampling montage expression data for %s cells down to %s records', len(df),
+                        cfg.max_montage_cells)
+            df = df.sample(n=cfg.max_montage_cells, random_state=cfg.random_state)
+
         # Update montage points using region x/y of cells
         x, y = _rescale_montage_coords(df['rx'], df['ry'])
         fig_data = [{
@@ -404,7 +467,27 @@ def update_montage(selected_data, relayout_data):
             'marker': {'opacity': .5, 'color': 'white'},
             'type': 'scattergl'
         }]
-    figure = dict(data=fig_data, layout=ac['layouts']['montage'])
+
+        # Add rectangular dividers between tiles in montage, if configured to do so AND
+        # when some data has already been selected (otherwise lines aren't helpful)
+        if cfg.montage_grid_enabled and data.db.get('app', 'selected_data') is not None:
+            # Get shape (rows, cols) of individual montage grid cell by dividing target shape
+            # (e.g. 512x512) by the number of tiles expected in each dimension
+            shape = np.array(cfg.montage_target_shape) // np.array(cfg.region_shape)
+            shapes = []
+            for row in range(cfg.region_shape[0]):
+                for col in range(cfg.region_shape[1]):
+                    shapes.append({
+                        'type': 'rect',
+                        'x0': col * shape[1],
+                        'y0': row * shape[0],
+                        'x1': (col + 1) * shape[1],
+                        'y1': (row + 1) * shape[0],
+                        'line': {'color': 'rgba(0, 256, 0, .5)'}
+                    })
+            layout['shapes'] = shapes
+
+    figure = dict(data=fig_data, layout=layout)
     return _relayout(figure, relayout_data)
 
 
@@ -415,57 +498,136 @@ def _get_tile_hover_text(r):
     )
 
 
-def _get_tile_figure(selected_data, relayout_data):
+def get_tile_graph_data_selection():
+    df = get_graph_data_selection()
+    if df is None:
+        return None
+    # Further restrict to only the selected tile
+    df = df.set_index(['tile_x', 'tile_y']).sort_index()
+    tx, ty = ac['selection']['tile']['coords']
+    if (tx, ty) not in df.index:
+        return None
+    # Make sure to use list of tuples for slice to avoid series result with single matches
+    return df.loc[[(tx, ty)]]
+
+
+def _get_tile_figure(relayout_data):
     fig_data = [{'x': [], 'y': [], 'mode': 'markers', 'type': 'scattergl'}]
-    df = get_graph_data_selection(selected_data)
+    df = get_tile_graph_data_selection()
     if df is not None:
-        # Further restrict to only the selected tile
-        df = df.set_index(['tile_x', 'tile_y']).sort_index()
+        # Downsample if necessary
+        if len(df) > cfg.max_tile_cells:
+            logger.info('Sampling tile expression data for %s cells down to %s records', len(df), cfg.max_tile_cells)
+            df = df.sample(n=cfg.max_tile_cells, random_state=cfg.random_state)
+
         tx, ty = ac['selection']['tile']['coords']
-        if (tx, ty) in df.index:
-            df = df.loc[(tx, ty)]
-            fig_data = [{
-                'x': df['x'],
-                'y': cfg.tile_shape[0] - df['y'],
-                'mode': 'markers',
-                'text': df.apply(_get_tile_hover_text, axis=1),
-                'marker': {'opacity': 1., 'color': 'white'},
-                'type': 'scattergl'
-            }]
+        logger.info('Number of cells found in tile (x=%s, y=%s): %s', tx + 1, ty + 1, len(df))
+
+        fig_data = [{
+            'x': df['x'],
+            'y': cfg.tile_shape[0] - df['y'],
+            'mode': 'markers',
+            'text': df.apply(_get_tile_hover_text, axis=1),
+            'marker': {'opacity': 1., 'color': 'white'},
+            'type': 'scattergl'
+        }]
     figure = dict(data=fig_data, layout=ac['layouts']['tile'])
     return _relayout(figure, relayout_data)
 
 
-# @app.callback(Output('tile', 'figure'), [Input('image', 'clickData')])
+@app.callback(Output('tile-title', 'children'), [Input('montage', 'clickData')])
+def update_tile_title(click_data):
+    handle_montage_click_data(click_data)
+    tx, ty = ac['selection']['tile']['coords']
+    return [
+        html.H4('Tile X{}/Y{}'.format(tx + 1, ty + 1), style={'textAlign': 'center'})
+    ]
+
+
 @app.callback(
     Output('tile', 'figure'),
     [Input('graph', 'selectedData'), Input('montage', 'clickData')] +
     [Input('tile-ch-{}-range'.format(i), 'value') for i in range(get_tile_nchannels())] +
     [Input('tile-ch-{}-color'.format(i), 'value') for i in range(get_tile_nchannels())]
-    ,[
-        State('tile', 'relayoutData')
-    ])
+    , [State('tile', 'relayoutData')]
+    )
 def update_tile(*args):
-    # montage click data:
-    # {'points': [{'x': 114.73916, 'curveNumber': 0, 'pointNumber': 421, 'y': 306.4889, 'pointIndex': 421}]}
-    selected_data, montage_data, relayout_data = args[0], args[1], args[-1]
+    selected_data, click_data, relayout_data = args[0], args[1], args[-1]
+
+    # Persist updates to selected data
+    handle_selected_data_update(selected_data)
+
+    # Persist display settings updates
     nch = get_tile_nchannels()
     channel_ranges = args[2:(nch + 2)]
     channel_colors = args[(nch + 2):-1]
-    data.db.put('app', 'tile_channel_ranges', channel_ranges)
-    data.db.put('app', 'tile_channel_colors', channel_colors)
+    handle_display_settings_update(channel_ranges, channel_colors)
 
-    if montage_data:
-        sy, sx = cfg.montage_target_shape
-        ry, rx = cfg.region_shape
-        py, px = montage_data['points'][0]['y'], montage_data['points'][0]['x']
-        ac['selection']['tile']['coords'] = (int(px // (sx / rx)), ry - int(py // (sy / ry)) - 1)
-
-    ac['processor']['tile'].ranges = channel_ranges
-    ac['processor']['tile'].colors = [color.map(c) for c in channel_colors]
+    # Persist changes to selected tile
+    handle_montage_click_data(click_data)
 
     ac['layouts']['tile'] = lib.get_interactive_image_layout(get_tile_image())
-    return _get_tile_figure(selected_data, relayout_data)
+    return _get_tile_figure(relayout_data)
+
+
+@app.callback(
+    Output('single-cells', 'children'),
+    [Input('tile', 'figure')]
+    )
+def update_single_cells(_):
+    df = get_tile_graph_data_selection()
+    children = []
+
+    channels = data.get_tile_image_channels()
+    cell_boundary_channel = data.CH_SRC_CYTO + '_cell_boundary'
+
+    if cell_boundary_channel not in channels:
+        logger.warning('Cannot generate single cell images because extract does not contain cell boundary channel')
+        return children
+    if df is None:
+        return children
+
+    # Downsample if necessary
+    n_cells_in_tile = len(df)
+    if len(df) > cfg.max_single_cells:
+        logger.info('Sampling single cell data for %s cells down to %s records', len(df), cfg.max_single_cells)
+        df = df.sample(n=cfg.max_single_cells, random_state=cfg.random_state)
+
+    # Fetch raw tile image with original channels, and extract cell boundaries
+    img_tile = get_tile_image(apply_display_settings=False)
+    img_cell = img_tile[channels.index(cell_boundary_channel)].copy()
+
+    # Fetch RGB version of tile image
+    img_tile = get_tile_image(apply_display_settings=True)
+
+    # Eliminate cell objects not in sample
+    img_cell[~np.isin(img_cell, df['id'].values)] = 0
+
+    logger.debug(
+        'Single cell tile shape = %s (%s), cell boundary shape = %s (%s)',
+        img_tile.shape, img_tile.dtype, img_cell.shape, img_cell.dtype
+    )
+
+    # Extract regions in RGB image corresponding to cell labelings
+    cells = lib.extract_single_cell_images(
+        img_cell, img_tile, is_boundary=True,
+        patch_shape=cfg.cell_image_size,
+        apply_mask=True, fill_value=0)
+
+    if len(cells) == 0:
+        return children
+
+    header = html.Div([
+        html.H4('Selected Cells', style={'textAlign': 'center'}),
+        html.P(
+            'Showing {} of {} in current tile'.format(len(cells), n_cells_in_tile),
+            style={'textAlign': 'center', 'font-style': 'italic'}
+        )
+    ])
+    return [header] + [
+        html.Img(src='data:image/png;base64,{}'.format(lib.get_encoded_image(c['image'])))
+        for c in cells
+    ]
 
 
 if __name__ == '__main__':

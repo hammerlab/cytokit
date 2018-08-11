@@ -1,4 +1,6 @@
-from skimage.exposure import rescale_intensity
+from skimage import exposure
+from skimage import measure
+from skimage import morphology
 from PIL import Image
 import numpy as np
 from io import BytesIO
@@ -9,7 +11,7 @@ from cvutils import ops as cvops
 
 def get_encoded_image(img):
     if img.dtype != np.uint8:
-        img = rescale_intensity(img, out_range=np.uint8).astype(np.uint8)
+        img = exposure.rescale_intensity(img, out_range=np.uint8).astype(np.uint8)
     im = Image.fromarray(img)
     bio = BytesIO()
     im.save(bio, format='PNG')
@@ -65,7 +67,12 @@ def get_interactive_image_layout(img=None, shape=None):
 
 
 def get_interactive_image(id, layout, style=None):
-    return dcc.Graph(id=id, figure={'data': [], 'layout': layout}, style=(style or {}))
+    return dcc.Graph(
+        id=id,
+        figure={'data': [], 'layout': layout},
+        style=(style or {}),
+        config={'scrollZoom': True, 'showLink': False, 'displaylogo': False, 'linkText': ''}
+    )
 
 
 class ImageProcessor(object):
@@ -89,8 +96,58 @@ class ImageProcessor(object):
         return img
 
 
+def extract_single_cell_images(
+        cell_image, target_image,
+        patch_shape=None, is_boundary=True, apply_mask=False, fill_value=0):
+    """Extract single cell images from a target image
 
+    Args:
+        cell_mask_image: 2D label image containing cell masks (each with different id)
+        target_image: Image from which to extract patches around cells; must be at least 2D
+            in format HW[D1, D2, ...]
+        patch_shape: Target shape of individual cell images; If None (default) no cropping/padding
+            will occur but if set, this value should be a 2 item sequence [rows, cols] and cell image patches
+            will be conformed to this shape by either cropping or padding out from the center
+        is_boundary: Whether or not cell image is of boundary or masks
+    """
+    from skimage.measure import regionprops
 
+    if target_image.shape[:2] != cell_image.shape[:2]:
+        raise ValueError(
+            'Cell label image (shape = {}) must have same HW dimensions as target image (shape = {})'
+            .format(cell_image.shape, target_image.shape)
+        )
 
-# def InteractiveImage(id, img):
-#     return interactive_image(id, get_interactive_image_layout(img))
+    if patch_shape is not None and len(patch_shape) != 2:
+        raise ValueError('Target patch shape should be a 2 item sequence (given = {})'.format(patch_shape))
+
+    cells = []
+    props = regionprops(cell_image)
+    for p in props:
+
+        # Extract bounding box offsets for extraction
+        min_row, min_col, max_row, max_col = p.bbox
+
+        # Extract patch from target image
+        patch = target_image[min_row:max_row, min_col:max_col]
+
+        # Remove off-target pixels, if necessary
+        if apply_mask:
+            # Set mask containing which pixels in patch to keep
+            if is_boundary:
+                mask = p.convex_image
+            else:
+                mask = p.filled_image
+
+            # Set value outside of mask to provided fill value
+            patch[~mask] = fill_value
+
+        # Resize if necessary (without transforming original image content)
+        if patch_shape is not None:
+            patch = cvops.resize_image_with_crop_or_pad(
+                patch, tuple(patch_shape) + patch.shape[2:],
+                constant_values=fill_value)
+
+        cells.append(dict(id=p.label, properties=p, image=patch))
+    return cells
+

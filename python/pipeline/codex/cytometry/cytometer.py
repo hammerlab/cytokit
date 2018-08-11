@@ -159,7 +159,7 @@ class Cytometer2D(KerasCytometer2D):
         path = osp.join(codex_data.get_cache_dir(), 'cytometry', 'unet_v2_weights.h5')
         return codex_data.download_file_from_google_drive(unet_model.WEIGHTS_FILE_ID, path, name='UNet Weights')
 
-    def get_segmentation_mask(self, img_bin_nuci, img_memb=None, dilation_factor=0):
+    def get_segmentation_mask(self, img_bin_nuci, img_memb=None, dilation_factor=0, sigma=None, gamma=None):
         if dilation_factor > 0:
             img_bin_nuci = cv2.dilate(
                 img_bin_nuci.astype(np.uint8),
@@ -169,11 +169,16 @@ class Cytometer2D(KerasCytometer2D):
             return img_bin_nuci
 
         # Construct mask as threshold on membrane image OR binary nucleus mask
+        if sigma is not None:
+            img_memb = filters.gaussian(img_memb, sigma=sigma)
+        if gamma is not None:
+            img_memb = exposure.adjust_gamma(img_memb, gamma=gamma)
         img_bin_memb = img_memb > filters.threshold_otsu(img_memb)
         img_bin_memb = img_bin_memb | img_bin_nuci
-        return morphology.remove_small_holes(img_bin_memb, 64)
+        return img_bin_memb
 
     def segment(self, img_nuc, img_memb=None, nucleus_dilation=4, min_size=12,
+                membrane_sigma=None, membrane_gamma=None,
                 batch_size=DEFAULT_BATCH_SIZE, return_masks=False):
         if not self.initialized:
             self.initialize()
@@ -219,7 +224,7 @@ class Cytometer2D(KerasCytometer2D):
             # or if possible, using the given cell membrane image
             img_bin_mask = self.get_segmentation_mask(
                 img_bin_nuci, img_memb=img_memb[i] if img_memb is not None else None,
-                dilation_factor=nucleus_dilation)
+                dilation_factor=nucleus_dilation, sigma=membrane_sigma, gamma=membrane_gamma)
 
             # Run watershed using markers and expanded nuclei / cell mask
             img_cell_seg = segmentation.watershed(img_basin, img_bin_nucm_label, mask=img_bin_mask)

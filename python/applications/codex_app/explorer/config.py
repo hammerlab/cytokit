@@ -10,7 +10,9 @@ ENV_APP_EXP_DATA_DIR = 'APP_EXP_DATA_DIR'
 ENV_APP_DATA_DIR = 'APP_DATA_DIR'
 ENV_APP_PORT = 'APP_PORT'
 ENV_APP_HOST_IP = 'APP_HOST_IP'
-ENV_APP_MAX_CELLS = 'APP_MAX_CELLS'
+ENV_APP_MAX_MONTAGE_CELLS = 'APP_MAX_MONTAGE_CELLS'
+ENV_APP_MAX_TILE_CELLS = 'APP_MAX_TILE_CELLS'
+ENV_APP_MAX_SINGLE_CELLS = 'APP_MAX_SINGLE_CELLS'
 ENV_APP_REGION_INDEX = 'APP_REGION_INDEX'
 ENV_APP_EXTRACT_NAME = 'APP_EXTRACT_NAME'
 ENV_APP_MONTAGE_NAME = 'APP_MONTAGE_NAME'
@@ -19,10 +21,16 @@ ENV_APP_MONTAGE_CYCLE = 'MONTAGE_CYCLE '
 ENV_APP_MONTAGE_Z = 'MONTAGE_Z'
 ENV_APP_EXTRACT_CYCLE = 'APP_EXTRACT_CYCLE'
 ENV_APP_EXTRACT_Z = 'APP_EXTRACT_Z'
+ENV_APP_CELL_IMAGE_WIDTH = 'APP_CELL_IMAGE_WIDTH'
+ENV_APP_CELL_IMAGE_HEIGHT = 'APP_CELL_IMAGE_HEIGHT'
 
 DEFAULT_APP_DATA_PATH = osp.join(codex_data.get_cache_dir(), 'app', 'explorer')
 DEFAULT_APP_HOST_IP = '0.0.0.0'
-DEFAULT_MAX_CELLS = 1000000
+DEFAULT_MAX_MONTAGE_CELLS = 10000
+DEFAULT_MAX_TILE_CELLS = 10000
+DEFAULT_MAX_SINGLE_CELLS = 50
+DEFAULT_CELL_IMAGE_HEIGHT = 64
+DEFAULT_CELL_IMAGE_WIDTH = 64
 
 
 class AppConfig(object):
@@ -61,6 +69,7 @@ class AppConfig(object):
 
     @property
     def montage_target_shape(self):
+        # Return shape as rows, cols
         return 512, 512
 
     @property
@@ -122,6 +131,10 @@ class AppConfig(object):
         return int(os.getenv(ENV_APP_MONTAGE_Z, '0'))
 
     @property
+    def montage_grid_enabled(self):
+        return True
+
+    @property
     def extract_name(self):
         return os.environ[ENV_APP_EXTRACT_NAME]
 
@@ -133,29 +146,24 @@ class AppConfig(object):
     def extract_z(self):
         return int(os.getenv(ENV_APP_EXTRACT_Z, '0'))
 
-    # @property
-    # def montage_channels(self):
-    #     return sorted(os.environ[ENV_MONTAGE_CHANNELS].split(','))
-    #
-    # @property
-    # def montage_nchannels(self):
-    #     return len(self.montage_channels)
-
-    # @property
-    # def extract_channels(self):
-    #     return sorted(os.environ[ENV_EXTRACT_CHANNELS].split(','))
-    #
-    # @property
-    # def extract_nchannels(self):
-    #     return len(self.extract_channels)
+    @property
+    def max_montage_cells(self):
+        return int(os.getenv(ENV_APP_MAX_MONTAGE_CELLS, DEFAULT_MAX_MONTAGE_CELLS))
 
     @property
-    def max_cells(self):
-        return int(os.getenv(ENV_APP_MAX_CELLS, DEFAULT_MAX_CELLS))
+    def max_tile_cells(self):
+        return int(os.getenv(ENV_APP_MAX_TILE_CELLS, DEFAULT_MAX_TILE_CELLS))
 
     @property
-    def max_montage_points(self):
-        return 10000
+    def max_single_cells(self):
+        return int(os.getenv(ENV_APP_MAX_SINGLE_CELLS, DEFAULT_MAX_SINGLE_CELLS))
+
+    @property
+    def cell_image_size(self):
+        return (
+            int(os.getenv(ENV_APP_CELL_IMAGE_HEIGHT, DEFAULT_CELL_IMAGE_HEIGHT)),
+            int(os.getenv(ENV_APP_CELL_IMAGE_WIDTH, DEFAULT_CELL_IMAGE_WIDTH))
+        )
 
     @property
     def random_state(self):

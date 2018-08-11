@@ -2,6 +2,7 @@ from skimage.external.tifffile import imread
 from codex import io as codex_io
 from codex import config as codex_config
 from codex import data as codex_data
+from codex.cli.operator import CH_SRC_CYTO
 from codex_app.explorer.config import cfg
 from collections import defaultdict
 from collections import OrderedDict

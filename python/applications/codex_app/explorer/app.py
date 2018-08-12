@@ -34,6 +34,8 @@ app.css.append_css({'external_url': 'https://codepen.io/chriddyp/pen/dZVMbK.css'
 
 TILE_IMAGE_STYLE = dict(height='750px')
 MONTAGE_IMAGE_STYLE = None
+TITLE_STYLE = {'textAlign': 'center', 'margin-top': '0px', 'margin-bottom': '0px'}
+SUB_TITLE_STYLE = {**{'font-style': 'italic'}, **TITLE_STYLE}
 
 
 def get_montage_image():
@@ -98,6 +100,7 @@ def get_graph_data():
     selections = get_graph_axis_selections()
 
     if selections['xvar'] is None:
+        ac['counts']['graph_data']['n'] = 0
         return None
 
     # Create list of fields to extract that are always necessary
@@ -123,6 +126,8 @@ def get_graph_data():
         df['xvar'] = apply_log(df['xvar'])
     if 'yvar' in df and selections['yscale'] == 'log':
         df['yvar'] = apply_log(df['yvar'])
+
+    ac['counts']['graph_data']['n'] = len(df)
 
     return df
 
@@ -282,20 +287,20 @@ def get_operation_code_layout():
     ]
 
 
-def get_montage_title():
-    ny, nx = cfg.region_shape
-    ri = cfg.region_index
-    return html.Div(html.H4('Region {} ({} x {} Tiles)'.format(ri + 1, nx, ny), style={'textAlign': 'center'}))
-
-
-def get_single_cells_header(n_cells=0, n_tile=0):
-    return html.Div([
-        html.H4('Selected Cells', style={'textAlign': 'center'}),
-        html.P(
-            'Showing {} of {} in current tile'.format(n_cells, n_tile),
-            style={'textAlign': 'center', 'font-style': 'italic'}
-        )
-    ])
+# def get_single_cells_header(n_cells=0, n_tile=0):
+#     return html.Div([
+#         html.H4(
+#             'Selected Cells',
+#             style={'textAlign': 'center', 'margin-top': '0px', 'margin-bottom': '0px'}
+#         ),
+#         html.P(
+#             'Showing {} of {} in current tile'.format(n_cells, n_tile),
+#             style={
+#                 'textAlign': 'center', 'font-style': 'italic',
+#                 'margin-top': '0px', 'margin-bottom': '0px'
+#             }
+#         )
+#     ])
 
 ##############
 # App Layout #
@@ -335,7 +340,7 @@ app.layout = html.Div([
                     className='five columns'
                 ),
                 html.Div([
-                        get_montage_title(),
+                        html.Div(id='montage-title'),
                         lib.get_interactive_image('montage', ac['layouts']['montage'], style=MONTAGE_IMAGE_STYLE)
                     ],
                     style={'overflowY': 'scroll', 'overflowX': 'scroll'},
@@ -351,7 +356,11 @@ app.layout = html.Div([
         html.Div(
             className='row',
             children=[
-                html.Div(id='single-cells', children=get_single_cells_header(), className='two columns'),
+                html.Div(
+                    html.H4('Selected Cells', style=TITLE_STYLE),
+                    id='single-cells',
+                    className='two columns'
+                ),
                 html.Div([
                         html.Div(id='tile-title'),
                         lib.get_interactive_image('tile', ac['layouts']['tile'], style=TILE_IMAGE_STYLE)
@@ -468,10 +477,12 @@ def get_graph_data_selection():
     selected_data = data.db.get('app', 'selected_data')
     type = selection_type(selected_data)
     if type is None:
+        ac['counts']['graph_data_selection']['n'] = 0
         return None
 
     df = get_graph_data()
     if df is None:
+        ac['counts']['graph_data_selection']['n'] = 0
         return None
 
     mode = '2D' if data.db.get('app', 'axis_y_var') is not None else '1D'
@@ -494,7 +505,38 @@ def get_graph_data_selection():
         else:
             raise ValueError('Selection type "{}" invalid'.format(type))
 
+    ac['counts']['graph_data_selection']['n'] = len(df)
+
     return df
+
+
+@app.callback(Output('montage-title', 'children'), [Input('montage', 'figure'), Input('graph', 'figure')])
+def update_montage_title(*_):
+    ny, nx = cfg.region_shape
+    ri = cfg.region_index
+
+    children = [html.H4('Region {} ({} x {} Tiles)'.format(ri + 1, nx, ny), style=TITLE_STYLE)]
+
+    # Add informative count data (depending on whether or not any data selections have been made)
+    if ac['counts']['graph_data_selection']['n'] > 0:
+        children.append(html.P(
+            'Showing {} cells of {} selected ({} total in region)'.format(
+                ac['counts']['montage']['n'],
+                ac['counts']['graph_data_selection']['n'],
+                ac['counts']['graph_data']['n']
+            ), style=SUB_TITLE_STYLE
+        ))
+    # If there is no data selected, at least show how many cells there are total (if loaded yet)
+    elif ac['counts']['graph_data']['n'] > 0:
+        children.append(html.P(
+            'Showing {} cells of {} total'.format(
+                ac['counts']['montage']['n'],
+                ac['counts']['graph_data']['n']
+            ), style=SUB_TITLE_STYLE
+        ))
+    # Otherwise, show no subtitle
+
+    return children
 
 
 @app.callback(
@@ -517,6 +559,7 @@ def update_montage(selected_data, click_data, relayout_data):
     layout = ac['layouts']['montage']
     layout['shapes'] = None
 
+    ac['counts']['montage']['n'] = 0
     if df is not None:
 
         # Downsample if necessary
@@ -524,6 +567,8 @@ def update_montage(selected_data, click_data, relayout_data):
             logger.info('Sampling montage expression data for %s cells down to %s records', len(df),
                         cfg.max_montage_cells)
             df = df.sample(n=cfg.max_montage_cells, random_state=cfg.random_state)
+
+        ac['counts']['montage']['n'] = len(df)
 
         # Update montage points using region x/y of cells
         x, y = _rescale_montage_coords(df['rx'], df['ry'])
@@ -589,17 +634,21 @@ def get_tile_graph_data_selection():
     if (tx, ty) not in df.index:
         return None
     # Make sure to use list of tuples for slice to avoid series result with single matches
-    return df.loc[[(tx, ty)]]
+    df = df.loc[[(tx, ty)]]
+    return df
 
 
 def _get_tile_figure(relayout_data):
     fig_data = [{'x': [], 'y': [], 'mode': 'markers', 'type': 'scattergl'}]
     df = get_tile_graph_data_selection()
+
+    ac['counts']['tile']['n'] = 0
     if df is not None:
         # Downsample if necessary
         if len(df) > cfg.max_tile_cells:
             logger.info('Sampling tile expression data for %s cells down to %s records', len(df), cfg.max_tile_cells)
             df = df.sample(n=cfg.max_tile_cells, random_state=cfg.random_state)
+        ac['counts']['tile']['n'] = len(df)
 
         tx, ty = ac['selection']['tile']['coords']
         logger.info('Number of cells found in tile (x=%s, y=%s): %s', tx + 1, ty + 1, len(df))
@@ -617,13 +666,23 @@ def _get_tile_figure(relayout_data):
     return _relayout(figure, relayout_data)
 
 
-@app.callback(Output('tile-title', 'children'), [Input('montage', 'clickData')])
-def update_tile_title(click_data):
-    handle_montage_click_data(click_data)
+@app.callback(Output('tile-title', 'children'), [Input('tile', 'figure')])
+def update_tile_title(_):
     tx, ty = ac['selection']['tile']['coords']
-    return [
-        html.H4('Tile X{}/Y{}'.format(tx + 1, ty + 1), style={'textAlign': 'center'})
-    ]
+
+    # Always include tile X/Y in title
+    children = [html.H4('Tile X{}/Y{}'.format(tx + 1, ty + 1), style=TITLE_STYLE)]
+
+    # Add informative count data (depending on whether or not any data selections have been made)
+    if ac['counts']['graph_data_selection']['n'] > 0:
+        children.append(html.P(
+            'Showing {} cells of {} selected'.format(
+                ac['counts']['tile']['n'],
+                ac['counts']['graph_data_selection']['n']
+            ), style=SUB_TITLE_STYLE
+        ))
+
+    return children
 
 
 @app.callback(
@@ -652,19 +711,31 @@ def update_tile(*args):
     return _get_tile_figure(relayout_data)
 
 
+def get_single_cells_title(n_cells=0, n_tile=0):
+    children = [html.H4('Selected Cells', style=TITLE_STYLE)]
+
+    # Append count info to title/header only if it is informative
+    if n_cells:
+        children.append(html.P(
+            'Showing {} cells of {} selected in tile'.format(n_cells, n_tile),
+            style=SUB_TITLE_STYLE
+        ))
+
+    return children
+
+
 @app.callback(Output('single-cells', 'children'), [Input('tile', 'figure')])
 def update_single_cells(_):
     df = get_tile_graph_data_selection()
-    children = [get_single_cells_header()]
 
     channels = data.get_tile_image_channels()
     cell_boundary_channel = data.CH_SRC_CYTO + '_cell_boundary'
 
     if cell_boundary_channel not in channels:
         logger.warning('Cannot generate single cell images because extract does not contain cell boundary channel')
-        return children
+        return get_single_cells_title()
     if df is None:
-        return children
+        return get_single_cells_title()
 
     # Downsample if necessary
     n_cells_in_tile = len(df)
@@ -693,10 +764,7 @@ def update_single_cells(_):
         patch_shape=cfg.cell_image_size,
         apply_mask=True, fill_value=0)
 
-    if len(cells) == 0:
-        return children
-
-    return [get_single_cells_header(len(cells), n_cells_in_tile)] + [
+    return get_single_cells_title(len(cells), n_cells_in_tile) + [
         html.Img(
             title='Cell ID: {}'.format(c['id']),
             src='data:image/png;base64,{}'.format(lib.get_encoded_image(c['image']))

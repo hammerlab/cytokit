@@ -44,14 +44,15 @@ class AppConfig(object):
         ('region_index', 'Region Index'),
         ('tile_x', 'Tile X'),
         ('tile_y', 'Tile Y'),
-        ('id', 'ID'),
-        ('rid', 'RID'),
-        ('rx', 'Cell X (Within Region)'),
-        ('ry', 'Cell Y (Within Region)'),
-        ('x', 'Cell X (Within Tile)'),
-        ('y', 'Cell Y (Within Tile)')
+        ('id', 'Cell ID'),
+        ('rid', 'Cell ID (In Region)'),
+        ('rx', 'Cell X (In Region)'),
+        ('ry', 'Cell Y (In Region)'),
+        ('x', 'Cell X (In Tile)'),
+        ('y', 'Cell Y (In Tile)')
     ])
-    CYTO_HOVER_FIELDS = ['nucleus_diameter', 'nucleus_solidity', 'cell_diameter', 'cell_size']
+    CYTO_HOVER_FIELDS = ['id', 'nucleus_diameter', 'nucleus_solidity', 'cell_diameter', 'cell_size']
+    CYTO_INT_FIELDS = ['id', 'rid', 'x', 'y', 'rx', 'ry', 'tile_x', 'tile_y', 'region_index']
 
     def __init__(self):
         self._exp_config = codex_config.load(self.exp_config_path)

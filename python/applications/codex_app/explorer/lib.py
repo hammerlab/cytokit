@@ -71,7 +71,11 @@ def get_interactive_image(id, layout, style=None):
         id=id,
         figure={'data': [], 'layout': layout},
         style=(style or {}),
-        config={'scrollZoom': True, 'showLink': False, 'displaylogo': False, 'linkText': ''}
+        config={
+            'scrollZoom': True, 'showLink': False, 'displaylogo': False, 'linkText': '',
+            # Remove spike lines and selector tools
+            'modeBarButtonsToRemove': ['toggleSpikelines', 'lasso2d', 'select2d']
+        }
     )
 
 
@@ -128,8 +132,8 @@ def extract_single_cell_images(
         # Extract bounding box offsets for extraction
         min_row, min_col, max_row, max_col = p.bbox
 
-        # Extract patch from target image
-        patch = target_image[min_row:max_row, min_col:max_col]
+        # Extract patch from target image (make sure to copy for subsequent mutations)
+        patch = target_image[min_row:max_row, min_col:max_col].copy()
 
         # Remove off-target pixels, if necessary
         if apply_mask:

@@ -1,3 +1,7 @@
+# Cytokit Explorer App
+#
+# References:
+# - Plotly modebar options: https://github.com/plotly/plotly.js/blob/master/src/components/modebar/buttons.js
 import dash
 import json
 import fire
@@ -151,7 +155,9 @@ def get_graph_figure():
         'titlefont': {'size': 12},
         'xaxis': {'title': (selections['xvar'] or '').upper(), 'autorange': True},
         'yaxis': {'title': (selections['yvar'] or '').upper(), 'autorange': True},
+        'dragmode': 'select'
     }
+
     fig = dict(data=fig_data, layout=fig_layout)
     return fig
 
@@ -160,7 +166,11 @@ def get_graph():
     return dcc.Graph(
         id='graph',
         figure=get_graph_figure(),
-        animate=False
+        animate=False,
+        config={
+            'showLink': False, 'displaylogo': False, 'linkText': '',
+            'modeBarButtonsToRemove': ['toggleSpikelines']
+        }
     )
 
 
@@ -205,7 +215,9 @@ def get_image_settings_layout(id_format, channel_names, class_name, type='tile')
             ])
             for i in range(len(channel_names))
         ],
-        className=class_name
+        className=class_name,
+        # Pad slightly on left to avoid slider knob overlap with tile figure
+        style={'padding-left': '10px'}
     )
 
 
@@ -224,7 +236,10 @@ def get_axis_settings_layout(axis):
         field_names[c] = c
 
     return html.Div([
-            html.Div(axis.upper(), style={'width': '5%', 'display': 'inline-block'}),
+            html.Div(
+                html.P(axis.upper()),
+                style={'width': '3%', 'display': 'inline-block', 'position': 'relative', 'bottom': '10px'}
+            ),
             html.Div(
                 dcc.Dropdown(
                     id='axis_' + axis + '_var',
@@ -234,7 +249,7 @@ def get_axis_settings_layout(axis):
                     ],
                     value=var
                 ),
-                style={'width': '45%', 'display': 'inline-block'}
+                style={'width': '60%', 'display': 'inline-block'}
             ),
             html.Div(dcc.Dropdown(
                 id='axis_' + axis + '_scale',
@@ -245,7 +260,7 @@ def get_axis_settings_layout(axis):
                 value=scale,
                 searchable=False,
                 clearable=False
-            ), style={'width': '45%', 'display': 'inline-block'}),
+            ), style={'width': '30%', 'display': 'inline-block'}),
 
         ]
     )
@@ -273,11 +288,42 @@ def get_montage_title():
     return html.Div(html.H4('Region {} ({} x {} Tiles)'.format(ri + 1, nx, ny), style={'textAlign': 'center'}))
 
 
+def get_single_cells_header(n_cells=0, n_tile=0):
+    return html.Div([
+        html.H4('Selected Cells', style={'textAlign': 'center'}),
+        html.P(
+            'Showing {} of {} in current tile'.format(n_cells, n_tile),
+            style={'textAlign': 'center', 'font-style': 'italic'}
+        )
+    ])
+
 ##############
 # App Layout #
 ##############
 
+
 app.layout = html.Div([
+        html.Div(
+            className='row',
+            children=html.Div([
+                html.P(
+                    'Cytokit Explorer 1.0',
+                    style={
+                        'color': 'white', 'float': 'left', 'padding-left': '15px',
+                        'padding-top': '10px', 'font': '400 16px system-ui'
+                    }
+                ),
+                html.Div(html.Button(
+                    'Save Settings', id='save-button',
+                    style={'float': 'right', 'color': 'white', 'border-width': '0px'}
+                )),
+                # html.Div(html.Button(
+                #     'Export', id='exp-button',
+                #     style={'float': 'right', 'color': 'white', 'border-width': '0px'}
+                # ))
+            ]),
+            style={'backgroundColor': 'rgb(31, 119, 180)'}
+        ),
         html.Div(
             className='row',
             children=[
@@ -292,31 +338,31 @@ app.layout = html.Div([
                         get_montage_title(),
                         lib.get_interactive_image('montage', ac['layouts']['montage'], style=MONTAGE_IMAGE_STYLE)
                     ],
-                    className='four columns',
-                    style={'overflowY': 'scroll', 'overflowX': 'scroll'}
+                    style={'overflowY': 'scroll', 'overflowX': 'scroll'},
+                    className='four columns'
                 ),
-                html.Div(get_operation_code_layout(), className='three columns'),
+                html.Div(
+                    get_operation_code_layout(),
+                    className='three columns'
+                )
             ],
+            style={'margin-top': '10px'}
         ),
-        # html.Pre(id='console', className='four columns'),
         html.Div(
             className='row',
             children=[
-                html.Div(id='single-cells', className='two columns'),
+                html.Div(id='single-cells', children=get_single_cells_header(), className='two columns'),
                 html.Div([
                         html.Div(id='tile-title'),
                         lib.get_interactive_image('tile', ac['layouts']['tile'], style=TILE_IMAGE_STYLE)
                     ],
-                    className='eight columns',
+                    className='seven columns',
                     style={'overflowY': 'scroll', 'overflowX': 'scroll'}
                 ),
-                get_image_settings_layout('tile-ch-{}', data.get_tile_image_channels(), 'two columns')
+                get_image_settings_layout('tile-ch-{}', data.get_tile_image_channels(), 'three columns')
             ]
         ),
-        html.Div([
-            html.Button('Save Settings', id='save-button'),
-            html.Div('', id='message')
-        ])
+        html.Div('', id='message')
     ]
 )
 
@@ -359,7 +405,8 @@ def update_operation_code(code):
         Input('axis_x_scale', 'value'),
         Input('axis_y_var', 'value'),
         Input('axis_y_scale', 'value')
-    ])
+    ]
+)
 def update_graph(xvar, xscale, yvar, yscale):
     data.db.put('app', 'axis_x_var', xvar)
     data.db.put('app', 'axis_x_scale', xscale)
@@ -407,6 +454,16 @@ def selection_type(selected_data):
     return None
 
 
+def _apply_axis_filter(axis, df, var_range):
+    assert axis in ['x', 'y']
+    axis_selections = get_graph_axis_selections()
+
+    if axis_selections[axis + 'scale'] == 'log':
+        var_range = list(invert_log(np.array(var_range)))
+
+    return df[df[axis_selections[axis + 'var']].between(*var_range)]
+
+
 def get_graph_data_selection():
     selected_data = data.db.get('app', 'selected_data')
     type = selection_type(selected_data)
@@ -417,24 +474,34 @@ def get_graph_data_selection():
     if df is None:
         return None
 
-    if type == 'lasso':
-        # Fetch only cells/rows corresponding to selected data in graph (and index by tile loc)
-        df = df.iloc[[p['pointIndex'] for p in selected_data['points']]]
-    elif type == 'range':
-        axis_selections = get_graph_axis_selections()
-        var_range = selected_data['range']['x']
-        if axis_selections['xscale'] == 'log':
-            var_range = list(invert_log(np.array(var_range)))
-        df = df[df[axis_selections['xvar']].between(*var_range)]
+    mode = '2D' if data.db.get('app', 'axis_y_var') is not None else '1D'
+
+    if mode == '2D':
+        if type == 'lasso':
+            # Fetch only cells/rows corresponding to selected data in graph (and index by tile loc)
+            df = df.iloc[[p['pointIndex'] for p in selected_data['points']]]
+        elif type == 'range':
+            df = _apply_axis_filter('x', df, selected_data['range']['x'])
+            df = _apply_axis_filter('y', df, selected_data['range']['y'])
+        else:
+            raise ValueError('Selection type "{}" invalid'.format(type))
     else:
-        raise ValueError('Selection type "{}" invalid'.format(type))
+        if type == 'lasso':
+            px = np.array([p['x'] for p in selected_data['points']])
+            df = _apply_axis_filter('x', df, (px.min(), px.max()))
+        elif type == 'range':
+            df = _apply_axis_filter('x', df, selected_data['range']['x'])
+        else:
+            raise ValueError('Selection type "{}" invalid'.format(type))
+
     return df
 
 
 @app.callback(
     Output('montage', 'figure'),
     [Input('graph', 'selectedData'), Input('montage', 'clickData')],
-    [State('montage', 'relayoutData')])
+    [State('montage', 'relayoutData')]
+)
 def update_montage(selected_data, click_data, relayout_data):
 
     # Persist updates to selected data
@@ -463,9 +530,14 @@ def update_montage(selected_data, click_data, relayout_data):
         fig_data = [{
             'x': x,
             'y': cfg.montage_target_shape[0] - y,
+            'text': [
+                'Cell ID (Tile): {}<br>Cell ID (Region): {}'.format(r['id'], r['rid'])
+                for _, r in df[['id', 'rid']].iterrows()
+            ],
             'mode': 'markers',
             'marker': {'opacity': .5, 'color': 'white'},
-            'type': 'scattergl'
+            'type': 'scattergl',
+            'hoverinfo': 'text'
         }]
 
         # Add rectangular dividers between tiles in montage, if configured to do so AND
@@ -473,7 +545,7 @@ def update_montage(selected_data, click_data, relayout_data):
         if cfg.montage_grid_enabled and data.db.get('app', 'selected_data') is not None:
             # Get shape (rows, cols) of individual montage grid cell by dividing target shape
             # (e.g. 512x512) by the number of tiles expected in each dimension
-            shape = np.array(cfg.montage_target_shape) // np.array(cfg.region_shape)
+            shape = np.array(cfg.montage_target_shape) / np.array(cfg.region_shape)
             shapes = []
             for row in range(cfg.region_shape[0]):
                 for col in range(cfg.region_shape[1]):
@@ -485,6 +557,10 @@ def update_montage(selected_data, click_data, relayout_data):
                         'y1': (row + 1) * shape[0],
                         'line': {'color': 'rgba(0, 256, 0, .5)'}
                     })
+                    # Invert row indexer since plotly figure is bottom up and cytokit convention is top down
+                    if (col, cfg.region_shape[0] - row - 1) == ac['selection']['tile']['coords']:
+                        shapes[-1]['fillcolor'] = 'rgba(0, 256, 0, .3)'
+
             layout['shapes'] = shapes
 
     figure = dict(data=fig_data, layout=layout)
@@ -492,10 +568,15 @@ def update_montage(selected_data, click_data, relayout_data):
 
 
 def _get_tile_hover_text(r):
-    return '<br>'.join(
-        '{}: {:.2f}'.format(cfg.CYTO_FIELDS[f], r[f])
-        for f in cfg.CYTO_HOVER_FIELDS if f in r
-    )
+    fields = []
+    for f in cfg.CYTO_HOVER_FIELDS:
+        fmt = '{}: {:.3f}'
+        if f in cfg.CYTO_INT_FIELDS:
+            # Avoid integer formats as values maybe floats and string formatting
+            # will fail when specified as int and given float
+            fmt = '{}: {:.0f}'
+        fields.append(fmt.format(cfg.CYTO_FIELDS[f], r[f]))
+    return '<br>'.join(fields)
 
 
 def get_tile_graph_data_selection():
@@ -529,7 +610,8 @@ def _get_tile_figure(relayout_data):
             'mode': 'markers',
             'text': df.apply(_get_tile_hover_text, axis=1),
             'marker': {'opacity': 1., 'color': 'white'},
-            'type': 'scattergl'
+            'type': 'scattergl',
+            'hoverinfo': 'text'
         }]
     figure = dict(data=fig_data, layout=ac['layouts']['tile'])
     return _relayout(figure, relayout_data)
@@ -548,9 +630,9 @@ def update_tile_title(click_data):
     Output('tile', 'figure'),
     [Input('graph', 'selectedData'), Input('montage', 'clickData')] +
     [Input('tile-ch-{}-range'.format(i), 'value') for i in range(get_tile_nchannels())] +
-    [Input('tile-ch-{}-color'.format(i), 'value') for i in range(get_tile_nchannels())]
-    , [State('tile', 'relayoutData')]
-    )
+    [Input('tile-ch-{}-color'.format(i), 'value') for i in range(get_tile_nchannels())],
+    [State('tile', 'relayoutData')]
+)
 def update_tile(*args):
     selected_data, click_data, relayout_data = args[0], args[1], args[-1]
 
@@ -570,13 +652,10 @@ def update_tile(*args):
     return _get_tile_figure(relayout_data)
 
 
-@app.callback(
-    Output('single-cells', 'children'),
-    [Input('tile', 'figure')]
-    )
+@app.callback(Output('single-cells', 'children'), [Input('tile', 'figure')])
 def update_single_cells(_):
     df = get_tile_graph_data_selection()
-    children = []
+    children = [get_single_cells_header()]
 
     channels = data.get_tile_image_channels()
     cell_boundary_channel = data.CH_SRC_CYTO + '_cell_boundary'
@@ -617,15 +696,11 @@ def update_single_cells(_):
     if len(cells) == 0:
         return children
 
-    header = html.Div([
-        html.H4('Selected Cells', style={'textAlign': 'center'}),
-        html.P(
-            'Showing {} of {} in current tile'.format(len(cells), n_cells_in_tile),
-            style={'textAlign': 'center', 'font-style': 'italic'}
+    return [get_single_cells_header(len(cells), n_cells_in_tile)] + [
+        html.Img(
+            title='Cell ID: {}'.format(c['id']),
+            src='data:image/png;base64,{}'.format(lib.get_encoded_image(c['image']))
         )
-    ])
-    return [header] + [
-        html.Img(src='data:image/png;base64,{}'.format(lib.get_encoded_image(c['image'])))
         for c in cells
     ]
 

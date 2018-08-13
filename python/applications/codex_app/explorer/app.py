@@ -60,8 +60,6 @@ ac['processor']['tile'] = lib.ImageProcessor(ac['shape']['tile'][0])
 ac['selection']['tile']['coords'] = (0, 0)
 ac['layouts']['tile'] = lib.get_interactive_image_layout(get_tile_image())
 
-ac['operation']['code'] = None
-
 
 def get_graph_axis_selections():
     return dict(
@@ -77,11 +75,12 @@ def get_base_data():
     df = data.get_cytometry_stats()
 
     # Apply custom code if any has been passed in
-    if (ac['operation']['code'] or '').strip():
+    if data.db.exists('app', 'operation_code'):
+        code = data.db.get('app', 'operation_code')
         n = len(df)
-        logger.info('Applying custom code:\n%s', ac['operation']['code'])
+        logger.info('Applying custom code:\n%s', code)
         local_vars = {'df': df}
-        exec(ac['operation']['code'], globals(), local_vars)
+        exec(code, globals(), local_vars)
         df = local_vars['df']
         logger.info('Size of frame before custom operations = %s, after = %s', n, len(df))
 
@@ -144,7 +143,7 @@ def get_graph_figure():
                 x=x,
                 y=y,
                 mode='markers',
-                marker={'opacity': .3},
+                marker={'opacity': cfg.graph_point_opacity},
                 type='scattergl'
             )
         ]
@@ -186,17 +185,24 @@ def _ch_disp_name(ch):
 
 def get_image_settings_layout(id_format, channel_names, class_name, type='tile'):
 
-    ranges = data.db.get('app', type + '_channel_ranges')
-    if ranges is None or len(ranges) != len(channel_names):
-        channel_dtype = data.get_channel_dtype_map()
-        assert len(channel_dtype) == len(channel_names), \
-            'Channel data type map "{}" does not match length of channel list "{}"'\
-            .format(channel_dtype, channel_names)
-        ranges = [[0, np.iinfo(t).max] for t in channel_dtype.values()]
+    values = data.db.get('app', type + '_channel_ranges')
+
+    channel_dtype = data.get_channel_dtype_map()
+    assert len(channel_dtype) == len(channel_names), \
+        'Channel data type map "{}" does not match length of channel list "{}"'\
+        .format(channel_dtype, channel_names)
+    ranges = [[0, np.iinfo(t).max] for t in channel_dtype.values()]
 
     colors = data.db.get('app', type + '_channel_colors')
     if colors is None or len(colors) != len(channel_names):
         colors = color.get_defaults(len(channel_names))
+
+    def get_value_range(i):
+        if values:
+            return values[i]
+        if channel_names[i].startswith(data.CH_SRC_CYTO):
+            return [0, 1]
+        return ranges[i]
 
     return html.Div([
             html.Div([
@@ -214,7 +220,7 @@ def get_image_settings_layout(id_format, channel_names, class_name, type='tile')
                     max=ranges[i][1],
                     step=1,
                     # Override default value to 1 for labeled images
-                    value=[0, 1] if channel_names[i].startswith(data.CH_SRC_CYTO) else ranges[i],
+                    value=get_value_range(i),
                     allowCross=False
                 )
             ])
@@ -282,25 +288,10 @@ def get_operation_code_layout():
             wrap=False,
             rows=25
         ),
-        html.Div('', id='code-message')
-        # html.Button('Apply', id='apply-button')
+        html.Button('Apply', id='apply-button')
+        # html.Div('', id='code-message')
     ]
 
-
-# def get_single_cells_header(n_cells=0, n_tile=0):
-#     return html.Div([
-#         html.H4(
-#             'Selected Cells',
-#             style={'textAlign': 'center', 'margin-top': '0px', 'margin-bottom': '0px'}
-#         ),
-#         html.P(
-#             'Showing {} of {} in current tile'.format(n_cells, n_tile),
-#             style={
-#                 'textAlign': 'center', 'font-style': 'italic',
-#                 'margin-top': '0px', 'margin-bottom': '0px'
-#             }
-#         )
-#     ])
 
 ##############
 # App Layout #
@@ -371,7 +362,8 @@ app.layout = html.Div([
                 get_image_settings_layout('tile-ch-{}', data.get_tile_image_channels(), 'three columns')
             ]
         ),
-        html.Div('', id='message')
+        html.Div('', id='message'),
+        html.P(id='null1')
     ]
 )
 
@@ -402,10 +394,10 @@ def handle_montage_click_data(click_data):
         ac['selection']['tile']['coords'] = (int(px // (sx / rx)), ry - int(py // (sy / ry)) - 1)
 
 
-@app.callback(Output('code-message', 'children'), [Input('operation-code', 'value')])
+@app.callback(Output('null1', 'children'), [Input('operation-code', 'value')])
 def update_operation_code(code):
-    ac['operation']['code'] = code
-    return ''
+    data.db.put('app', 'operation_code', code)
+    return None
 
 
 @app.callback(

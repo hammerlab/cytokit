@@ -23,6 +23,7 @@ ENV_APP_EXTRACT_CYCLE = 'APP_EXTRACT_CYCLE'
 ENV_APP_EXTRACT_Z = 'APP_EXTRACT_Z'
 ENV_APP_CELL_IMAGE_WIDTH = 'APP_CELL_IMAGE_WIDTH'
 ENV_APP_CELL_IMAGE_HEIGHT = 'APP_CELL_IMAGE_HEIGHT'
+ENV_APP_GRAPH_POINT_OPACITY = 'APP_GRAPH_POINT_OPACITY'
 
 DEFAULT_APP_DATA_PATH = osp.join(codex_data.get_cache_dir(), 'app', 'explorer')
 DEFAULT_APP_HOST_IP = '0.0.0.0'
@@ -31,6 +32,7 @@ DEFAULT_MAX_TILE_CELLS = 10000
 DEFAULT_MAX_SINGLE_CELLS = 50
 DEFAULT_CELL_IMAGE_HEIGHT = 64
 DEFAULT_CELL_IMAGE_WIDTH = 64
+DEFAULT_GRAPH_POINT_OPACITY = .5
 
 
 class AppConfig(object):
@@ -167,7 +169,12 @@ class AppConfig(object):
         )
 
     @property
+    def graph_point_opacity(self):
+        return float(os.getenv(ENV_APP_GRAPH_POINT_OPACITY, DEFAULT_GRAPH_POINT_OPACITY))
+
+    @property
     def random_state(self):
         return 1
+
 
 cfg = AppConfig()

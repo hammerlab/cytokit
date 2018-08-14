@@ -8,6 +8,7 @@ from skimage import measure
 from skimage import filters
 from skimage import exposure
 from skimage import transform
+from skimage.future import graph as label_graph
 from scipy import ndimage
 from codex import math as codex_math
 from codex import data as codex_data
@@ -17,6 +18,7 @@ CELL_CHANNEL = 0
 NUCLEUS_CHANNEL = 1
 DEFAULT_CELL_INTENSITY_PREFIX = 'ci:'
 DEFAULT_NUCL_INTENSITY_PREFIX = 'ni:'
+DEFAULT_CELL_GRAPH_PREFIX = 'cg:'
 
 
 class KerasCytometer2D(object):
@@ -146,6 +148,138 @@ def _to_uint8(img, name):
     return img
 
 
+class ObjectProperties(object):
+
+    def __init__(self, cell, nucleus):
+        self.cell = cell
+        self.nucleus = nucleus
+        if cell.label != nucleus.label:
+            raise ValueError(
+                'Expecting equal labels for cell and nucleus (nucleus label = {}, cell label = {})'
+                .format(nucleus.label, cell.label)
+            )
+
+
+class FeatureCalculator(object):
+
+    def get_feature_names(self):
+        raise NotImplementedError()
+
+    def get_feature_values(self, signals, labels, graph, props, z):
+        raise NotImplementedError()
+
+
+class BasicCellFeatures(FeatureCalculator):
+
+    def get_feature_names(self):
+        # Note: "size" is used here instead of area/volume for compatibility between 2D and 3D
+        return [
+            'id', 'x', 'y', 'z',
+            'cell_size', 'cell_diameter', 'cell_perimeter', 'cell_solidity',
+            'nucleus_size', 'nucleus_diameter', 'nucleus_perimeter', 'nucleus_solidity'
+        ]
+
+    def get_feature_values(self, signals, labels, graph, props, z):
+        # Extract these once as their calculations are not cached
+        cell_area, nuc_area = props.cell.area, props.nucleus.area
+        return [
+            props.cell.label, props.cell.centroid[1], props.cell.centroid[0], z,
+            cell_area, codex_math.area_to_diameter(cell_area), props.cell.perimeter, props.cell.solidity,
+            nuc_area, codex_math.area_to_diameter(nuc_area), props.cell.nucleus, props.nucleus.solidity
+        ]
+
+
+def _quantify_intensities(image, prop):
+    # Get a (n_pixels, n_channels) array of intensity values associated with
+    # this region and then average across n_pixels dimension
+    intensities = image[prop.coords[:, 0], prop.coords[:, 1]].mean(axis=0)
+    assert intensities.ndim == 1, 'Expecting 1D resulting intensities but got shape {}'.format(intensities.shape)
+    return list(intensities)
+
+
+class IntensityFeatures(FeatureCalculator):
+
+    def __init__(self, n_channels, prefix, component, channel_names=None):
+        self.n_channels = n_channels
+        self.prefix = prefix
+        self.channel_names = channel_names
+        self.component = component
+        if component not in ['cell', 'nucleus']:
+            raise ValueError(
+                'Cellular component to quantify intensities for must be one of ["cell", "nucleus"] not "{}"'
+                .format(component)
+            )
+
+    def get_feature_names(self):
+        # Get list of raw channel names (with default to numbered list)
+        if self.channel_names is None:
+            channel_names = ['{:03d}'.format(i) for i in range(self.n_channels)]
+        else:
+            channel_names = self.channel_names
+
+        return [self.prefix + c for c in channel_names]
+
+    def get_feature_values(self, signals, labels, graph, props, z):
+        # Signals should have shape ZHWC
+        assert signals.ndims == 4, 'Expecting 4D signals image but got shape {}'.format(signals.shape)
+
+        # Intentionally avoid using attribute inference / reflection on the ObjectProperties
+        # class for determining this as it is possible to compute intensities based on transformations
+        # of the properties objects (i.e. don't tie what can be computed with what is provided too closely)
+        prop = props.cell if self.component == 'cell' else props.nucleus
+        values = _quantify_intensities(signals[z], prop)
+        if len(values) != self.n_channels:
+            raise AssertionError(
+                'Expecting {} {} intensity measurements but got result {}'
+                .format(self.n_channels, self.component, values)
+            )
+        return values
+
+
+class GraphFeatures(FeatureCalculator):
+
+    def __init__(self, prefix):
+        self.prefix = prefix
+
+    def get_feature_names(self, ):
+        feature_names = ['n_neighbors', 'neighbors', 'adj_neighbor_pct', 'adj_bg_pct']
+        return [self.prefix + c for c in feature_names]
+
+    def get_feature_values(self, signals, labels, graph, props, z):
+        # graph.adj behaves like a dict keyed by node id where each node id is an integer label in the
+        # labeled image and the value associated is another dictionary keyed by neighbor node ids (with
+        # values equal to the data associated with the edge).  Examples:
+        # rag.adj[1] --> AtlasView({2: {'weight': 1.0, 'count': 24}})
+        # rag.adj[1][2] --> {'weight': 1.0, 'count': 24}
+        # Also note that if a background class is present all nodes will be neighbors of it, but if there is no
+        # background (when watershed returns no 0 labeled images if no mask given) then there will be no "0"
+        # node id (so be careful with assuming its there)
+
+        # Get the edges/neighbors data from the graph for this cell
+        nbrs = graph.adj[props.cell.label]
+
+        # Get list of non-bg neighbor ids
+        nids = [nid for nid in nbrs.keys() if nid != 0]
+
+        # Get raw weight (which is number of bordering pixels on both sides of boundary)
+        # associated with each non-bg neighbor
+        nbwts = np.array([nbrs[nid]['count'] for nid in nids])
+
+        # Get raw weight of background, if present
+        bgwt = nbrs[0]['count'] if 0 in nbrs else 0
+
+        wtsum = bgwt + nbwts.sum()
+        assert wtsum > 0, \
+            'Cell {} has no neighbors and associated boundary pixel counts (this should not be possible)'\
+            .format(props.cell.label)
+        return [
+            len(nids),
+            ','.join([str(nid) for nid in nids]),
+            list(nbwts / wtsum),
+            bgwt / wtsum
+        ]
+
+
 class Cytometer2D(KerasCytometer2D):
 
     def _get_model(self, input_shape):
@@ -259,8 +393,10 @@ class Cytometer2D(KerasCytometer2D):
     def quantify(self, tile, img_seg, channel_names=None,
                  cell_intensity_prefix=DEFAULT_CELL_INTENSITY_PREFIX,
                  nucleus_intensity_prefix=DEFAULT_NUCL_INTENSITY_PREFIX,
+                 cell_graph_prefix=DEFAULT_CELL_GRAPH_PREFIX,
                  include_cell_intensity=True,
-                 include_nucleus_intensity=False):
+                 include_nucleus_intensity=False,
+                 include_cell_graph=False):
         ncyc, nz, _, nh, nw = tile.shape
 
         # Move cycles and channels to last axes (in that order)
@@ -271,71 +407,59 @@ class Cytometer2D(KerasCytometer2D):
         tile = np.reshape(tile, (nz, nh, nw, -1))
         nch = tile.shape[-1]
 
-        if channel_names is None:
-            channel_names = ['{:03d}'.format(i) for i in range(nch)]
-        if nch != len(channel_names):
+        if channel_names is not None and nch != len(channel_names):
             raise ValueError(
-                'Data tile contains {} channels but channel names list contains only {} items '
-                '(names given = {}, tile shape = {})'
-                .format(nch, len(channel_names), channel_names, tile.shape))
+                'Tile has {} channels but given channel name list has {} (they should be equal); '
+                'channel names given = {}, tile shape = {}'
+                .format(nch, len(channel_names), channel_names, tile.shape)
+            )
 
-        # Set final list of channel intensity labels (if any)
-        intensity_names = []
+        # Configure features to be calculated based on provided flags
+        feature_calculators = [BasicCellFeatures()]
         if include_cell_intensity:
-            intensity_names += [cell_intensity_prefix + c for c in channel_names]
+            feature_calculators.append(IntensityFeatures(nch, cell_intensity_prefix, 'cell', channel_names))
         if include_nucleus_intensity:
-            intensity_names += [nucleus_intensity_prefix + c for c in channel_names]
-        del channel_names
+            feature_calculators.append(IntensityFeatures(nch, nucleus_intensity_prefix, 'nucleus', channel_names))
+        if include_cell_graph:
+            feature_calculators.append(GraphFeatures(cell_graph_prefix))
 
-        res = []
-        for iz in range(nz):
-            cell_props = measure.regionprops(img_seg[iz][CELL_CHANNEL], cache=False)
-            nuc_props = measure.regionprops(img_seg[iz][NUCLEUS_CHANNEL], cache=False)
-            assert len(cell_props) == len(nuc_props), \
-                'Expecting cell and nucleus properties to have same length (nuc props = {}, cell props = {})'\
-                .format(len(nuc_props), len(cell_props))
+        # Compute list of resulting feature names (values will be added in this order)
+        feature_names = [v for fc in feature_calculators for v in fc.get_feature_names()]
 
-            # Function used to fetch channel intensities for a specific object (i.e. scikit image "property")
-            def _quantify_region(prop):
-                # Get a (n_pixels, n_channels) array of intensity values associated with
-                # this region and then average across n_pixels dimension
-                intensities = tile[iz][prop.coords[:, 0], prop.coords[:, 1]].mean(axis=0)
-                assert intensities.ndim == 1
-                assert len(intensities) == nch
-                return list(intensities)
+        feature_values = []
+        for z in range(nz):
+            # Calculate properties of masked+labeled cell components
+            cell_props = measure.regionprops(img_seg[z][CELL_CHANNEL], cache=False)
+            nucleus_props = measure.regionprops(img_seg[z][NUCLEUS_CHANNEL], cache=False)
+            if len(cell_props) != len(nucleus_props):
+                raise ValueError(
+                    'Expecting cell and nucleus properties to have same length (nucleus props = {}, cell props = {})'
+                    .format(len(nucleus_props), len(cell_props))
+                )
 
-            # Loop through each detected cell and quantify signal intensities
+            # Compute RAG for cells if necessary
+            graph = None
+            if include_cell_graph:
+                labels = img_seg[z][CELL_CHANNEL]
+
+                # rag_boundary fails on all zero label matrices so default to empty graph if that is the case
+                # see: https://github.com/scikit-image/scikit-image/blob/master/skimage/future/graph/rag.py#L386
+                if np.count_nonzero(labels) > 0:
+                    graph = label_graph.rag_boundary(labels, np.ones(labels.shape))
+                else:
+                    graph = label_graph.RAG()
+
+            # Loop through each detected cell and compute features
             for i in range(len(cell_props)):
-                cell_prop, nuc_prop = cell_props[i], nuc_props[i]
-                assert cell_prop.label == nuc_prop.label, \
-                    'Expecting equal labels for cell and nucleus (nuc label = {}, cell label = {})'\
-                    .format(nuc_prop.label, cell_prop.label)
+                props = ObjectProperties(cell=cell_props[i], nucleus=nucleus_props[i])
 
-                # Compute cell/nucleus intensities (if either is configured for calculation)
-                intensities = []
-                if include_cell_intensity:
-                    intensities += _quantify_region(cell_prop)
-                if include_nucleus_intensity:
-                    intensities += _quantify_region(nuc_prop)
+                # Run each feature calculator and add results in order
+                feature_values.append([
+                    v for fc in feature_calculators
+                    for v in fc.get_feature_values(tile, img_seg, graph, props, z)
+                ])
 
-                # Add compulsory properties
-                cell_area, nuc_area = cell_prop.area, nuc_prop.area
-                row = [
-                    cell_prop.label, cell_prop.centroid[1], cell_prop.centroid[0], iz,
-                    cell_area, codex_math.area_to_diameter(cell_area), cell_prop.solidity,
-                    nuc_area, codex_math.area_to_diameter(nuc_area), nuc_prop.solidity
-                ]
-                # Add intensities, if any
-                row += intensities
-                res.append(row)
-
-        # Note: "size" is used here instead of "area" for compatibility between 2D and 3D
-        columns = [
-            'id', 'x', 'y', 'z',
-            'cell_size', 'cell_diameter', 'cell_solidity',
-            'nucleus_size', 'nucleus_diameter', 'nucleus_solidity'
-        ]
-        return pd.DataFrame(res, columns=columns + intensity_names)
+        return pd.DataFrame(feature_values, columns=feature_names)
 
 
 # def _get_flat_ball(size):

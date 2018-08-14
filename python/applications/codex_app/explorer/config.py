@@ -41,6 +41,7 @@ class AppConfig(object):
         ('cell_diameter', 'Cell Diameter'),
         ('nucleus_diameter', 'Nucleus Diameter'),
         ('cell_size', 'Cell Size'),
+        ('cell_solidity', 'Cell Solidity'),
         ('nucleus_size', 'Nucleus Size'),
         ('nucleus_solidity', 'Nucleus Solidity'),
         ('region_index', 'Region Index'),

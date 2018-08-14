@@ -394,25 +394,24 @@ def handle_montage_click_data(click_data):
         ac['selection']['tile']['coords'] = (int(px // (sx / rx)), ry - int(py // (sy / ry)) - 1)
 
 
-@app.callback(Output('null1', 'children'), [Input('operation-code', 'value')])
-def update_operation_code(code):
-    data.db.put('app', 'operation_code', code)
-    return None
-
-
 @app.callback(
     Output('graph', 'figure'), [
         Input('axis_x_var', 'value'),
         Input('axis_x_scale', 'value'),
         Input('axis_y_var', 'value'),
-        Input('axis_y_scale', 'value')
+        Input('axis_y_scale', 'value'),
+        Input('apply-button', 'n_clicks')
+
+    ], [
+        State('operation-code', 'value')
     ]
 )
-def update_graph(xvar, xscale, yvar, yscale):
+def update_graph(xvar, xscale, yvar, yscale, _, code):
     data.db.put('app', 'axis_x_var', xvar)
     data.db.put('app', 'axis_x_scale', xscale)
     data.db.put('app', 'axis_y_var', yvar)
     data.db.put('app', 'axis_y_scale', yscale)
+    data.db.put('app', 'operation_code', code)
     fig = get_graph_figure()
     return fig
 

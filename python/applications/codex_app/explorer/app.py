@@ -278,12 +278,15 @@ def get_axis_settings_layout(axis):
 
 
 def get_operation_code_layout():
+    code = ''
+    if data.db.exists('app', 'operation_code'):
+        code = data.db.get('app', 'operation_code')
     return [
         html.Div('Custom Operations:', style={'width': '100%'}),
         dcc.Textarea(
             id='operation-code',
             placeholder='Enter custom pre-processing code',
-            value='',
+            value=code,
             style={'width': '90%', 'height': '100%'},
             wrap=False,
             rows=25

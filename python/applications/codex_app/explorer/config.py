@@ -42,6 +42,9 @@ class AppConfig(object):
         ('nucleus_diameter', 'Nucleus Diameter'),
         ('cell_size', 'Cell Size'),
         ('cell_solidity', 'Cell Solidity'),
+        ('cell_solidity', 'Cell Solidity'),
+        ('n_neighbors', 'Cell Num Neighbors (w/ Shared Boundary)'),
+        ('adj_bg_pct', 'Cell Percent Bordering Background'),
         ('nucleus_size', 'Nucleus Size'),
         ('nucleus_solidity', 'Nucleus Solidity'),
         ('region_index', 'Region Index'),
@@ -54,7 +57,12 @@ class AppConfig(object):
         ('x', 'Cell X (In Tile)'),
         ('y', 'Cell Y (In Tile)')
     ])
-    CYTO_HOVER_FIELDS = ['id', 'nucleus_diameter', 'nucleus_solidity', 'cell_diameter', 'cell_size']
+    CYTO_HOVER_FIELDS = [
+        'id',
+        'nucleus_diameter', 'nucleus_solidity',
+        'cell_diameter', 'cell_size',
+        'n_neighbors', 'adj_bg_pct'
+    ]
     CYTO_INT_FIELDS = ['id', 'rid', 'x', 'y', 'rx', 'ry', 'tile_x', 'tile_y', 'region_index']
 
     def __init__(self):

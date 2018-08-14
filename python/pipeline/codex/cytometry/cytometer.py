@@ -185,7 +185,7 @@ class BasicCellFeatures(FeatureCalculator):
         return [
             props.cell.label, props.cell.centroid[1], props.cell.centroid[0], z,
             cell_area, codex_math.area_to_diameter(cell_area), props.cell.perimeter, props.cell.solidity,
-            nuc_area, codex_math.area_to_diameter(nuc_area), props.cell.nucleus, props.nucleus.solidity
+            nuc_area, codex_math.area_to_diameter(nuc_area), props.nucleus.perimeter, props.nucleus.solidity
         ]
 
 
@@ -221,7 +221,7 @@ class IntensityFeatures(FeatureCalculator):
 
     def get_feature_values(self, signals, labels, graph, props, z):
         # Signals should have shape ZHWC
-        assert signals.ndims == 4, 'Expecting 4D signals image but got shape {}'.format(signals.shape)
+        assert signals.ndim == 4, 'Expecting 4D signals image but got shape {}'.format(signals.shape)
 
         # Intentionally avoid using attribute inference / reflection on the ObjectProperties
         # class for determining this as it is possible to compute intensities based on transformations
@@ -236,14 +236,14 @@ class IntensityFeatures(FeatureCalculator):
         return values
 
 
+def _pct_list(fractions):
+    return ','.join(['{:.2f}'.format(100 * v) for v in fractions])
+
+
 class GraphFeatures(FeatureCalculator):
 
-    def __init__(self, prefix):
-        self.prefix = prefix
-
-    def get_feature_names(self, ):
-        feature_names = ['n_neighbors', 'neighbors', 'adj_neighbor_pct', 'adj_bg_pct']
-        return [self.prefix + c for c in feature_names]
+    def get_feature_names(self):
+        return ['n_neighbors', 'neighbor_ids', 'adj_neighbor_pct', 'adj_bg_pct']
 
     def get_feature_values(self, signals, labels, graph, props, z):
         # graph.adj behaves like a dict keyed by node id where each node id is an integer label in the
@@ -275,8 +275,8 @@ class GraphFeatures(FeatureCalculator):
         return [
             len(nids),
             ','.join([str(nid) for nid in nids]),
-            list(nbwts / wtsum),
-            bgwt / wtsum
+            _pct_list(nbwts / wtsum),
+            _pct_list([bgwt / wtsum])
         ]
 
 
@@ -393,7 +393,6 @@ class Cytometer2D(KerasCytometer2D):
     def quantify(self, tile, img_seg, channel_names=None,
                  cell_intensity_prefix=DEFAULT_CELL_INTENSITY_PREFIX,
                  nucleus_intensity_prefix=DEFAULT_NUCL_INTENSITY_PREFIX,
-                 cell_graph_prefix=DEFAULT_CELL_GRAPH_PREFIX,
                  include_cell_intensity=True,
                  include_nucleus_intensity=False,
                  include_cell_graph=False):
@@ -421,7 +420,7 @@ class Cytometer2D(KerasCytometer2D):
         if include_nucleus_intensity:
             feature_calculators.append(IntensityFeatures(nch, nucleus_intensity_prefix, 'nucleus', channel_names))
         if include_cell_graph:
-            feature_calculators.append(GraphFeatures(cell_graph_prefix))
+            feature_calculators.append(GraphFeatures())
 
         # Compute list of resulting feature names (values will be added in this order)
         feature_names = [v for fc in feature_calculators for v in fc.get_feature_names()]

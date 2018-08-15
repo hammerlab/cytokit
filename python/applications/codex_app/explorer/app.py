@@ -26,9 +26,7 @@ logger = logging.getLogger(__name__)
 
 data.initialize()
 
-# processors = {}
 app = dash.Dash()
-# app.config['suppress_callback_exceptions'] = True
 app.css.append_css({'external_url': 'https://codepen.io/chriddyp/pen/dZVMbK.css'})
 
 
@@ -59,6 +57,8 @@ ac['shape']['tile'] = data.get_tile_image().shape
 ac['processor']['tile'] = lib.ImageProcessor(ac['shape']['tile'][0])
 ac['selection']['tile']['coords'] = (0, 0)
 ac['layouts']['tile'] = lib.get_interactive_image_layout(get_tile_image())
+
+ac['flag']['message'] = False
 
 
 def get_graph_axis_selections():
@@ -282,16 +282,16 @@ def get_operation_code_layout():
     if data.db.exists('app', 'operation_code'):
         code = data.db.get('app', 'operation_code')
     return [
-        html.Div('Custom Operations:', style={'width': '100%'}),
+        html.Div('Custom Operations', style={'width': '100%', 'textAlign': 'center'}),
         dcc.Textarea(
             id='operation-code',
             placeholder='Enter custom pre-processing code',
             value=code,
-            style={'width': '90%', 'height': '100%'},
+            style={'width': '100%', 'height': '100%'},
             wrap=False,
             rows=25
         ),
-        html.Button('Apply', id='apply-button')
+        html.Button('Apply', id='apply-button', style={'width': '100%'})
         # html.Div('', id='code-message')
     ]
 
@@ -305,23 +305,42 @@ app.layout = html.Div([
         html.Div(
             className='row',
             children=html.Div([
-                html.P(
+                html.Div(
                     'Cytokit Explorer 1.0',
+                    className='four columns',
                     style={
-                        'color': 'white', 'float': 'left', 'padding-left': '15px',
+                        'color': 'white', 'padding-left': '15px',
                         'padding-top': '10px', 'font': '400 16px system-ui'
                     }
                 ),
-                html.Div(html.Button(
-                    'Save Settings', id='save-button',
-                    style={'float': 'right', 'color': 'white', 'border-width': '0px'}
-                )),
-                # html.Div(html.Button(
-                #     'Export', id='exp-button',
-                #     style={'float': 'right', 'color': 'white', 'border-width': '0px'}
-                # ))
+                html.Div(
+                    'Experiment: {}'.format(cfg.exp_name),
+                    className='four columns',
+                    style={
+                        'color': 'white', 'text-align': 'center',
+                        'padding-top': '10px', 'font': '400 16px system-ui'
+                    }
+                ),
+                html.Div(
+                    html.Button(
+                        'Save Settings', id='save-button',
+                        style={'color': 'white', 'border-width': '0px', 'float': 'right'}
+                    ),
+                    className='four columns'
+                )
             ]),
             style={'backgroundColor': 'rgb(31, 119, 180)'}
+        ),
+        html.Div([
+                html.Div(
+                    '', id='message',
+                    style={'float': 'left', 'color': 'white', 'padding-top': '10px', 'padding-left': '15px'}
+                ),
+                html.Button('X', id='close-message-button', style={'float': 'right', 'backgroundColor': 'white'})
+            ],
+            id='message-container',
+            className='row',
+            style={'display': 'none', 'backgroundColor': 'rgb(44, 160, 44)'}
         ),
         html.Div(
             className='row',
@@ -365,7 +384,6 @@ app.layout = html.Div([
                 get_image_settings_layout('tile-ch-{}', data.get_tile_image_channels(), 'three columns')
             ]
         ),
-        html.Div('', id='message'),
         html.P(id='null1')
     ]
 )
@@ -423,8 +441,21 @@ def update_graph(xvar, xscale, yvar, yscale, _, code):
 def save_state(n_clicks):
     if n_clicks is None:
         return ''
-    path = data.db.save()
-    return 'Application state saved to "{}"'.format(path)
+    # Currently, only app-related properties are worth saving (but this may include
+    # large images/datasets in the future)
+    path = data.db.save(groups=['app'])
+    ac['flag']['message'] = True
+    return html.P('Application state saved to "{}"'.format(path))
+
+
+@app.callback(
+    Output('message-container', 'style'),
+    [Input('message', 'children'), Input('close-message-button', 'n_clicks')])
+def toggle_message(*_):
+    if not ac['flag']['message']:
+        return {'display': 'none'}
+    ac['flag']['message'] = False
+    return {'display': 'block', 'backgroundColor': 'rgb(44, 160, 44)'}
 
 
 def _rescale_montage_coords(x, y):

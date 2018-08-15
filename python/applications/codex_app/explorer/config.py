@@ -5,7 +5,9 @@ from collections import OrderedDict
 from codex import data as codex_data
 from codex import config as codex_config
 
+ENV_APP_EXP_NAME = 'APP_EXP_NAME'
 ENV_APP_EXP_CONFIG_PATH = 'APP_EXP_CONFIG_PATH'
+ENV_APP_CYTO_DATA_PATH = 'APP_CYTO_DATA_PATH'
 ENV_APP_EXP_DATA_DIR = 'APP_EXP_DATA_DIR'
 ENV_APP_DATA_DIR = 'APP_DATA_DIR'
 ENV_APP_PORT = 'APP_PORT'
@@ -70,8 +72,16 @@ class AppConfig(object):
         self._exp_config.register_environment()
 
     @property
+    def exp_name(self):
+        return os.getenv(ENV_APP_EXP_NAME, '')
+
+    @property
     def exp_config_path(self):
         return os.environ[ENV_APP_EXP_CONFIG_PATH]
+
+    @property
+    def cytometry_data_path(self):
+        return os.getenv(ENV_APP_CYTO_DATA_PATH)
 
     @property
     def exp_config(self):

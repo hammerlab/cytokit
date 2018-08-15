@@ -70,14 +70,16 @@ class DictDatastore(Datastore):
                 self.data = pickle.load(fd)
         return self
 
-    def save(self):
+    def save(self, groups=None):
         import pickle
         if not osp.exists(self.data_dir):
             os.makedirs(self.data_dir, exist_ok=True)
         path = osp.join(self.data_dir, 'data.pkl')
 
-        # Choose groups to save data for (at TOW only app level data is saved)
-        dbs = {k: v for k, v in self.data.items() if k in ['app']}
+        dbs = self.data
+        if groups is not None:
+            dbs = {k: v for k, v in self.data.items() if k in groups}
+
         with open(path, 'wb') as fd:
             pickle.dump(dbs, fd)
         return path
@@ -88,8 +90,10 @@ def get_cytometry_stats():
 
 
 def _get_cytometry_data():
-    path = codex_io.get_cytometry_agg_path('csv')
-    return pd.read_csv(osp.join(cfg.exp_data_dir, path))
+    path = cfg.cytometry_data_path
+    if path is None:
+        path = osp.join(cfg.exp_data_dir, codex_io.get_cytometry_agg_path('csv'))
+    return pd.read_csv(path)
 
 
 def _load_montage_data():

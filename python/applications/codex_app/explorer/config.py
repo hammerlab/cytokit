@@ -65,7 +65,7 @@ class AppConfig(object):
         'cell_diameter', 'cell_size',
         'n_neighbors', 'adj_bg_pct'
     ]
-    CYTO_INT_FIELDS = ['id', 'rid', 'x', 'y', 'rx', 'ry', 'tile_x', 'tile_y', 'region_index']
+    CYTO_INT_FIELDS = ['id', 'rid', 'x', 'y', 'rx', 'ry', 'tile_x', 'tile_y', 'region_index', 'n_neighbors']
 
     def __init__(self):
         self._exp_config = codex_config.load(self.exp_config_path)

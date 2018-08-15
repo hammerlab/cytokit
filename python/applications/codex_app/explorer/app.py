@@ -87,14 +87,6 @@ def get_base_data():
     return df
 
 
-def apply_log(v):
-    return np.log10(v)
-
-
-def invert_log(v):
-    return np.power(10, v)
-
-
 def get_graph_data():
     selections = get_graph_axis_selections()
 
@@ -120,11 +112,6 @@ def get_graph_data():
     df = get_base_data().copy()[cols]
     for k, v in vars.items():
         df[k] = df[v]
-
-    if 'xvar' in df and selections['xscale'] == 'log':
-        df['xvar'] = apply_log(df['xvar'])
-    if 'yvar' in df and selections['yscale'] == 'log':
-        df['yvar'] = apply_log(df['yvar'])
 
     ac['counts']['graph_data']['n'] = len(df)
 
@@ -157,8 +144,16 @@ def get_graph_figure():
         'margin': dict(t=25),
         'title': '',
         'titlefont': {'size': 12},
-        'xaxis': {'title': (selections['xvar'] or '').upper(), 'autorange': True},
-        'yaxis': {'title': (selections['yvar'] or '').upper(), 'autorange': True},
+        'xaxis': {
+            'title': (selections['xvar'] or '').upper(),
+            'autorange': True,
+            'type': selections['xscale']
+        },
+        'yaxis': {
+            'title': (selections['yvar'] or '').upper(),
+            'autorange': True,
+            'type': selections['yscale']
+        },
         'dragmode': 'select'
     }
 
@@ -491,10 +486,6 @@ def selection_type(selected_data):
 def _apply_axis_filter(axis, df, var_range):
     assert axis in ['x', 'y']
     axis_selections = get_graph_axis_selections()
-
-    if axis_selections[axis + 'scale'] == 'log':
-        var_range = list(invert_log(np.array(var_range)))
-
     return df[df[axis_selections[axis + 'var']].between(*var_range)]
 
 

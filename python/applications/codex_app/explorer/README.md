@@ -23,7 +23,7 @@ filters:
 
 This example shows a sample where the cell preparation resulted in a clumping of many of the cells in a way 
 that interfered with the target fluorescent dye measurements.  The selected cells here are restricted to 
-those that directly contact at least one other cell (n_neighbors > 1) and you can see how this is reflected 
+those that directly contact at least one other cell (n_neighbors >= 1) and you can see how this is reflected 
 in the images as highlights/dots on cells in clumps of some kind:
 
 ![Clump_Example](../../../../docs/images/explorer_clump_gate.jpg)

@@ -3,34 +3,41 @@
 
 ## Cytokit
 
-Cytokit is an image processing toolkit for analyzing high-dimensional microscopy acquisitions.  The 
-majority of the operations provided within Cytokit are intended to run as trained
-deep learning models or other computational graphs on top of TensorFlow so as to exploit
-GPU acceleration for processing terabyte-sized experiments.  
+Cytokit is a collection of tools for quantifying and analyzing properties of individual cells in large fluorescent microscopy
+datasets that are often, but not necessarily, generated from multiplexed staining protocols over many fields of view or time periods.  
+As a complement to open source tools like ImageJ and CellProfiler, Cytokit offers much more efficient I/O, memory, and GPU placement 
+strategies on top of TensorFlow implementations of common image processing algorithms to improve the proccessing times associated
+with 100+ GB experiments.
 
-While intended for large datasets, 
-single images or otherwise low-dimensional samples are also supported where any of the following 
-common operations could be conducted to capitalize on the freely-available, GPU-based implementations
-provided here:
+Image processing operations supported in Cytokit are generally sourced from existing, pre-trained deep learning models or are
+at least in part adapted from open source packages to run in a single or multi-GPU environment.  These operations include:
 
-- **Image Registration** - Repeated imaging of cells under different conditions or in different 
-time periods can result in sample drift, which can be inverted using a TensorFlow 
-implementation of [Phase Correlation](https://en.wikipedia.org/wiki/Phase_correlation) for 
-image registration
-- **Deconvolution** - Flourescent image blur can be compensated for using a GPU-based implementation
-of the [Richardson-Lucy Deconvolution](https://en.wikipedia.org/wiki/Richardson%E2%80%93Lucy_deconvolution) algorithm (provided via [Flowdec](https://github.com/hammerlab/flowdec)).
-- **Focal Quality Assessment** - Identifying peaks in focal quality within image volumes is 
-provided using an image classifier designed by [GoogleAi](https://ai.google/) 
+- *Image Registration* - A reference channel (often a nuclear stain) can be used to align multiple images of the same specimen taken in different time periods using a 
+GPU-accelerated implementation of [Phase Correlation](https://en.wikipedia.org/wiki/Phase_correlation) for image alignment
+- *Deconvolution* - A TensorFlow implementation of Richardson Deconvolution is provided along with a Fast Gibson-Lanni PSF approximation model (see [Flowdec](https://github.com/hammerlab/flowdec))
+- *Focus Quality Assessment* - Identifying peaks in focal quality within image volumes is provided using an image classifier designed by [GoogleAi](https://ai.google/) 
 (see [Using Deep Learning to Facilitate Scientific Image Analysis](https://ai.googleblog.com/2018/03/using-deep-learning-to-facilitate.html)) 
-- **Cell Segmentation** - Cytokit includes an application of a Keras-based
-U-Net model for nuclei and cell segmentation, as well as attribution of other signals
-to those segmented volumes (e.g. quantifying CD4 signals in t-cells identified
-by nuclear stains).
-- **Cytometric Analysis** - FCS and CSV exports can also be produced by Cytokit to facilitate
-analysis in other tools like [FlowJo](https://www.flowjo.com/), [Cytobank](https://www.cytobank.org/), [FCS Express](https://www.denovosoftware.com/site/Flow-RUO-Overview.shtml), etc.    
+- *Cell Segmentation* - A deep learning model for nuclei segmentation, first incorporated as a part of CellProfiler 3.0, is used to power localization of fluorescent signals to individual cells (see [CellProfiler 3.0: Next-generation image processing for biology](http://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.2005970))
+- *Illumination Correction* - A fast foreground polynomial illumination function approximation model can be enabled to correct minor lighting variations in both individual images and tiled fields of view (both corrections are modeled simultaneously to capture local and global patterns)
 
-Cytokit was built initially for processing Keyence images, specifically resulting from the [CODEX](https://www.akoyabio.com/technology/) protocol,
-but would support any imaging process that produces tiled images with a specific naming convention.
+Cytokit pipelines can be configured to use any of the above and produce several types of results for downstream analysis.  These may include user-defined extractions into tiff stacks for visualization, montages of tiled fields of view across any dimensions available in the dataset, or cytometric statistics in FCS or CSV files containing the following information:
+
+- *Cell Positioning* - Spatial x/y/z coordinates as well as tiling and sample coordinates
+- *Signal Intensities* - Mean intensities of fluorescent channels localized to both the cell and nucleus 
+- *Adjacency Graph* - Identifiers of neighboring cells as well as sizes of shared boundaries (as a percentage of cell perimeter)
+- *Cell Morphology* - Size, diameter, solidity, eccentricity, etc.
+
+Additionally, Cytokit offers a UI for quality assurance and high-level analysis with a focus on visualization of the relationships between spatial properties of cells and signal intensities.  See the [Cytokit Explorer](python/applications/codex_app/explorer) docs for more details.
+
+Installing and configuring Cytokit currently involves little more than installing [nvidia-docker](https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)) and building or downloading the Cytokit container image, but this inherently limits support to Linux operating systems only.  Additional limitations of Cytokit include:
+
+- There is currently no CPU-only docker image 
+- Algorithms ported to run on TensorFlow graphs nearly all support fewer features than their CPU-only, open source counterparts
+- Generating and running pipelines requires working knowledge of JupyterLab and a little tolerance for yaml/json files as well as command lines
+- Only tiff files are supported as a raw input image format
+- Deconvolution requires manual configuration of microscope attributes like filter wavelengths, immersion media, and numerical aperture (though support to infer much of this based on the imaging platform may be added in the future)
+- 3 dimensional inputs are supported but cell segmentation and related outputs are currently 2 dimensional 
+- General system requirements include at least 24G RAM and 8G of GPU memory (per GPU)
 
 ### Examples 
 
@@ -99,14 +106,15 @@ analysis:
   - processor_data_summary 
 ```
 
-#### Operation Composition
+#### CLI
 
-A fairly detailed configuration like the above could be used in conjunction with the CLI to run all configured operations or they can also be run in more composable, ad-hoc ways like this (based on [Python-Fire](https://github.com/google/python-fire)) :
+A fairly detailed configuration like the above could be used in conjunction with the CLI to run 
+all configured operations:
 
 ```bash
 export EXPERIMENT_DIR=/data/20180614_TCell_CD4_CD8
 
-# Pre-process, create visualization, and export cytometry stats
+# Process the raw data and then create/run configurable visualizations and analyses 
 > cytokit processor run \
   --data-dir=$EXPERIMENT_DIR/raw \
   --output-dir=$EXPERIMENT_DIR/output/v1 \
@@ -114,15 +122,23 @@ export EXPERIMENT_DIR=/data/20180614_TCell_CD4_CD8
   --run-drift-comp=False \
   --run-best-focus=True \
   --run-deconvolution=True \
-  --gpus=[0,1] - \
-operator extract \
-  --name='viz_extract' \
-  --channels=['raw_dapi','proc_dapi','proc_cd4','proc_cd8','cyto_cell_boundary','cyto_nucleus_boundary'] - \
-operator montage \
-  --name='viz_extract_montage' \
-  --extract-name='viz_extract' - \
-analysis aggregate_cytometry_statistics \
-  --mode='best_z_plane'
+  --gpus=[0,1]
+> cytokit operator run_all
+> cytokit analysis run_all
+```
+
+Or individual extractions and analysis operations could be run as needed:
+
+```bash
+# These commands are defined in the configuration but can also be run individually
+# for extractions or other operations that don't need to be run constantly
+
+> cytokit operator extract --name='viz_extract' \
+  --channels=['raw_dapi','proc_dapi','proc_cd4','proc_cd8','cyto_cell_boundary','cyto_nucleus_boundary']
+
+> cytokit operator montage --name='viz_extract_montage' --extract-name='viz_extract'
+  
+> cytokit analysis processor_data_summary
 ```
 
 For the above case specifically, this roughly translates to:
@@ -131,7 +147,7 @@ For the above case specifically, this roughly translates to:
 - Run cell segmentation model to determine cell and nucleus boundaries
 - Extract some raw, processed, and segmented data (whatever channels you want) from each tile and put it all in new ones
 - Montage all the results together
-- Export csvs and fcs
+- Export csvs and fcs files
 
 After that, you could load the 6 channel 5,040 x 6,720 montage image into ImageJ, fiddle with some color/contrast settings on the channels, and then get fairly informative images like this:
 
@@ -154,6 +170,25 @@ Additionally, stats on those cells and associated signal intensities would be ag
 | 0            | 0          | 0      | 0      | 5  | 5.986  | 7.618 | 4 | 223       | 0.965 | 72           | 0.935  | 57.309 | 25.008  | 36.686 | 4      | 
 
 
+### Explorer UI
+
+After processing an experiment, the Explorer UI application can be run within the same docker container
+for fast visualization of the relationship between spatial features of cells and fluorescent signal 
+intensities:
+
+![ExplorerScreenshot](docs/images/explorer_gfp_pos_image.jpg)
+
+
+Some features here include:
+
+- Lasso or box gates on 1 or 2D signals
+- Projection of selected cells onto montage images of entire experiments
+- Interactive highlighting of cells within individual images 
+- Extraction of single cell image patches (matching gates/filters)
+- Specification of custom logic for filtering
+
+See the [Cytokit Explorer](python/applications/codex_app/explorer/README.md) docs for more examples.
+  
 ### Installation
 
 Cytokit is intended to be run via nvidia-docker + linux only.  More instructions TBD.

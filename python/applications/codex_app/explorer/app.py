@@ -287,7 +287,6 @@ def get_operation_code_layout():
             rows=25
         ),
         html.Button('Apply', id='apply-button', style={'width': '100%'})
-        # html.Div('', id='code-message')
     ]
 
 

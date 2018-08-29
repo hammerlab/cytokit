@@ -26,6 +26,8 @@ ENV_APP_EXTRACT_Z = 'APP_EXTRACT_Z'
 ENV_APP_CELL_IMAGE_WIDTH = 'APP_CELL_IMAGE_WIDTH'
 ENV_APP_CELL_IMAGE_HEIGHT = 'APP_CELL_IMAGE_HEIGHT'
 ENV_APP_GRAPH_POINT_OPACITY = 'APP_GRAPH_POINT_OPACITY'
+ENV_APP_MONTAGE_POINT_COLOR = 'APP_MONTAGE_POINT_COLOR'
+ENV_APP_TILE_POINT_COLOR = 'APP_TILE_POINT_COLOR'
 
 DEFAULT_APP_DATA_PATH = osp.join(codex_data.get_cache_dir(), 'app', 'explorer')
 DEFAULT_APP_HOST_IP = '0.0.0.0'
@@ -35,6 +37,8 @@ DEFAULT_MAX_SINGLE_CELLS = 50
 DEFAULT_CELL_IMAGE_HEIGHT = 64
 DEFAULT_CELL_IMAGE_WIDTH = 64
 DEFAULT_GRAPH_POINT_OPACITY = .5
+DEFAULT_APP_MONTAGE_POINT_COLOR = 'white'
+DEFAULT_APP_TILE_POINT_COLOR = 'white'
 
 
 class AppConfig(object):
@@ -194,6 +198,14 @@ class AppConfig(object):
     @property
     def random_state(self):
         return 1
+
+    @property
+    def montage_point_color(self):
+        return os.getenv(ENV_APP_MONTAGE_POINT_COLOR, DEFAULT_APP_MONTAGE_POINT_COLOR)
+
+    @property
+    def tile_point_color(self):
+        return os.getenv(ENV_APP_TILE_POINT_COLOR, DEFAULT_APP_TILE_POINT_COLOR)
 
 
 cfg = AppConfig()

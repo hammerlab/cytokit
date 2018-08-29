@@ -109,7 +109,8 @@ def get_graph_data():
         if selections['yvar'] not in cols:
             cols += [selections['yvar']]
 
-    df = get_base_data().copy()[cols]
+    #df = get_base_data().copy()[cols]
+    df = get_base_data().copy().filter(items=cols)
     for k, v in vars.items():
         df[k] = df[v]
 
@@ -595,7 +596,7 @@ def update_montage(selected_data, click_data, relayout_data):
                 for _, r in df[['id', 'rid']].iterrows()
             ],
             'mode': 'markers',
-            'marker': {'opacity': .5, 'color': 'white'},
+            'marker': {'opacity': .5, 'color': cfg.montage_point_color},
             'type': 'scattergl',
             'hoverinfo': 'text'
         }]
@@ -630,6 +631,9 @@ def update_montage(selected_data, click_data, relayout_data):
 def _get_tile_hover_text(r):
     fields = []
     for f in cfg.CYTO_HOVER_FIELDS:
+        # Ignore any hover-text fields not present in data
+        if f not in r:
+            continue
         fmt = '{}: {:.3f}'
         if f in cfg.CYTO_INT_FIELDS:
             # Avoid integer formats as values maybe floats and string formatting
@@ -673,7 +677,7 @@ def _get_tile_figure(relayout_data):
             'y': cfg.tile_shape[0] - df['y'],
             'mode': 'markers',
             'text': df.apply(_get_tile_hover_text, axis=1),
-            'marker': {'opacity': 1., 'color': 'white'},
+            'marker': {'opacity': 1., 'color': cfg.tile_point_color},
             'type': 'scattergl',
             'hoverinfo': 'text'
         }]

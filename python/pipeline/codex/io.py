@@ -53,7 +53,9 @@ PATH_FORMATS = dict(
     keyence_multi_cycle_v01=_get_def_path_formats(
         'Cyc{cycle:d}_reg{region:d}/{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
     keyence_multi_cycle_v02=_get_def_path_formats(
-        'Cyc{cycle:d}_Reg{region:d}/{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif')
+        'Cyc{cycle:d}_Reg{region:d}/{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
+    keyence_multi_cycle_v03=_get_def_path_formats(
+        'Cyc{cycle:d}_reg{region:d}/Image_{tile:05d}_Z{z:03d}_CH{channel:d}.tif')
 )
 
 

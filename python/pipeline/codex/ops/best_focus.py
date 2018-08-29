@@ -56,19 +56,27 @@ class CodexFocalPlaneSelector(CodexOp):
         nz = img.shape[0]
 
         scores = []
+        classes = []
         for iz in range(nz):
             pred = self.mqiest.predict(img[iz])
             # Append n_classes length array of class probabilities ordered from 0 to n_classes
             # where 0 is the best possible quality and n_classes the worst
             scores.append(pred.probabilities)
+            classes.append(np.argmax(pred.probabilities))
 
-        # Calculate scores as probability weighted sum of class indexes, giving one score per z-plane
+        # Calculate scores as probability weighted sum of (reversed) class indexes, giving one score per z-plane
         scores = np.dot(np.array(scores), np.arange(self.n_classes)[::-1])
         assert len(scores) == nz, \
             'Expecting {} scores but only {} were found (scores = {})'.format(nz, len(scores), scores)
+
+        # Reverse class designations
+        classes = self.n_classes - np.array(classes) - 1
+
         # Determine best z plane as index with highest score
         best_z = np.argmax(scores)
-        self.record({'scores': scores, 'best_z': best_z})
+
+        # Record and log classification information
+        self.record({'scores': scores, 'classes': classes, 'best_z': best_z})
         logger.debug('Best focal plane: z = {} (score: {})'.format(best_z, scores.max()))
 
         # Subset tile to best focal plane

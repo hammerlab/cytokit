@@ -17,7 +17,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 DEFAULT_FILTER_PARAMS = dict(percentile_range=[.01, .99], features=['cell_size'], max_cells=250000)
-DEFAULT_FEATURE_PARAMS = dict(tile=dict(type='polynomial', degree=2), region=dict(type='polynomial', degree=2))
+DEFAULT_FEATURE_PARAMS = dict(
+    tile=dict(type='polynomial', degree=2),
+    region=dict(type='polynomial', degree=2),
+    index=dict(type='polynomial', degree=2)
+)
 DEFAULT_MODEL_PARAMS = dict(type='ls')
 DEFAULT_PREDICTION_PARAMS = dict(step_size=10)
 MODELS = {
@@ -50,12 +54,17 @@ def _get_coordinate_features(region_shape, tile_shape, step=1):
     # Produce 2D array with 2 cols, ry and rx
     X_region = np.transpose([np.repeat(ri, nc), np.tile(ci, nr)])
 
-    # Mod region coordinates by tile height and width
+    # Create tile index features by dividing region y/x coordinates by tile shape
+    X_index = np.floor_divide(X_region, tile_shape)
+
+    # Mod region coordinates by tile height and width to give coordinates within tile
     X_tile = np.mod(X_region, tile_shape)
 
     # Return all 4 features as a data frame as well as number of (potentially sampled
     # coordinate points along each dimension)
-    X = pd.DataFrame(np.hstack((X_region, X_tile)), columns=['ry', 'rx', 'y', 'x'])
+    # NOTE: All field names here must match fields in cytometry data frames
+    X = pd.DataFrame(np.hstack((X_region, X_index, X_tile)), columns=['ry', 'rx', 'tile_y', 'tile_x', 'y', 'x'])
+
     return X, (nr, nc)
 
 
@@ -165,8 +174,9 @@ class IlluminationCorrection(codex_op.CodexOp):
 
     def _prepare_prediction_features(self, df):
 
-        # Feature grep preparation function
-        def prep(X, params):
+        # Feature group preparation function
+        def prep(X, group):
+            params = self.feature_params[group]
             type = params.get('type')
             if not type or type == 'none':
                 return None
@@ -177,8 +187,9 @@ class IlluminationCorrection(codex_op.CodexOp):
 
         # Get features for each group (region and tile) or None, if either is disabled
         features = [x for x in [
-            prep(df[['ry', 'rx']], self.feature_params['region']),
-            prep(df[['y', 'x']], self.feature_params['tile'])
+            prep(df[['ry', 'rx']], 'region'),
+            prep(df[['tile_y', 'tile_x']], 'index'),
+            prep(df[['y', 'x']], 'tile')
         ] if x is not None]
         if len(features) == 0:
             raise ValueError('At least one of region or tile features must be enabled')
@@ -212,7 +223,7 @@ class IlluminationCorrection(codex_op.CodexOp):
                     'Cytometry data empty after application of feature filters for channel {}'.format(channel))
 
             # Extract spatial cell features and prediction target
-            X = self._prepare_prediction_features(dfm[['ry', 'rx', 'y', 'x']])
+            X = self._prepare_prediction_features(dfm)
             y = dfm[self.intensity_prefix + channel]
 
             logger.debug(

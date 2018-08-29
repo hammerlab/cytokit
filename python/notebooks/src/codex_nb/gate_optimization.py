@@ -3,14 +3,17 @@ import pandas as pd
 from scipy.special import expit
 from scipy import optimize
 
+
 def get_binary_indicators(n_feature):
         return np.array(np.meshgrid(*[[0, 1] for _ in range(n_feature)])).T.reshape(-1, n_feature)
-    
+
+
 def get_feature_labels(feature_names, positive='+', negative='-', sep='/'):
     return [
         sep.join([feature_names[i] + (positive if flag > 0 else negative) for i, flag in enumerate(icombo)])
         for icombo in get_binary_indicators(len(feature_names))
     ]
+
 
 class BinDistOptim(object):
     

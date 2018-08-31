@@ -65,7 +65,7 @@ ENV CODEX_REPO_DIR $CODEX_REPO_DIR
 ENV CVUTILS_REPO_DIR $CVUTILS_REPO_DIR
 ENV SHELL /bin/bash
 
-# Eliminate globally these warnings: FutureWarning: Conversion of the second argument of issubdtype from
+# Eliminate these warnings globally: FutureWarning: Conversion of the second argument of issubdtype from
 # `float` to `np.floating` is deprecated. In future, it will be treated as `np.float64 == np.dtype(float).type`
 # See here for discussion: https://github.com/h5py/h5py/issues/961
 ENV PYTHONWARNINGS "ignore::FutureWarning:h5py"

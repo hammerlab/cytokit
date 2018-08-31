@@ -415,10 +415,13 @@ def run_preprocessing(pl_conf, logging_init_fn):
         client.close()
         cluster.close()
 
-    # Save measurement data prior to postprocessing
+    # Save measurement data to disk
     measure_data = concat(res)
-    path = exec.record_processor_data(measure_data, pl_conf.output_dir)
-    logging.info('Pre-processing complete; Measurement data saved to "%s"', path)
+    if measure_data:
+        path = exec.record_processor_data(measure_data, pl_conf.output_dir)
+        logging.info('Pre-processing complete; Measurement data saved to "%s"', path)
+    else:
+        logging.info('Pre-processing complete')
 
 
 def run_postprocessing(pl_conf):
@@ -433,8 +436,12 @@ def run_postprocessing(pl_conf):
     task.op_flags.run_tile_generator = False
 
     logging.info('Starting post-processing pipeline')
-    run_postprocess_task(task)
-    logging.info('Post-processing complete')
+    measure_data = run_postprocess_task(task)
+    if measure_data:
+        path = exec.record_processor_data(measure_data, pl_conf.output_dir)
+        logging.info('Post-processing complete; Measurement data saved to "%s"', path)
+    else:
+        logging.info('Post-processing complete')
 
 
 def run(pl_conf, logging_init_fn=None):

@@ -260,6 +260,10 @@ class CodexConfigV10(Config):
         return self._processor_params('cytometry')
 
     @property
+    def spectral_unmixing_params(self):
+        return self._processor_params('spectral_unmixing')
+
+    @property
     def illumination_correction_params(self):
         return self._processor_params('illumination_correction')
 

@@ -20,6 +20,12 @@ DEFAULT_CELL_INTENSITY_PREFIX = 'ci:'
 DEFAULT_NUCL_INTENSITY_PREFIX = 'ni:'
 DEFAULT_CELL_SPOT_PREFIX = 'cs:'
 DEFAULT_NUCL_SPOT_PREFIX = 'ns:'
+DEFAULT_PREFIXES = [
+    DEFAULT_CELL_INTENSITY_PREFIX,
+    DEFAULT_NUCL_INTENSITY_PREFIX,
+    DEFAULT_CELL_SPOT_PREFIX,
+    DEFAULT_NUCL_SPOT_PREFIX
+]
 
 DEFAULT_SPOT_CIRCULARITY = [.5, 1]
 DEFAULT_SPOT_AREA = [2, 64]
@@ -226,14 +232,16 @@ def _quantify_intensities(image, prop):
 
 class IntensityFeatures(FeatureCalculator):
 
-    def __init__(self, n_channels, component, channel_names=None):
+    def __init__(self, n_channels, channel_names, component):
         self.n_channels = n_channels
         self.channel_names = channel_names
         self.component = component
 
-        if self.channel_names is None:
-            self.channel_names = ['{:03d}'.format(i) for i in range(n_channels)]
-
+        if len(channel_names) != n_channels:
+            raise ValueError(
+                'Channel name list expected to have {} names (names given = {})',
+                n_channels, channel_names
+            )
         if component not in INTENSITY_COMPONENTS:
             raise ValueError(
                 'Cellular component to quantify intensities for must be one of {} not "{}"'
@@ -262,16 +270,14 @@ class IntensityFeatures(FeatureCalculator):
 
 class SpotFeatures(FeatureCalculator):
 
-    def __init__(self, channel_indexes, component, channel_names=None,
-                 circularity_range=DEFAULT_SPOT_CIRCULARITY, area_range=DEFAULT_SPOT_AREA):
+    def __init__(self, channel_indexes, channel_names, component,
+                 circularity_range=DEFAULT_SPOT_CIRCULARITY, area_range=DEFAULT_SPOT_AREA, threshold=None):
         self.channel_indexes = channel_indexes
         self.channel_names = channel_names
         self.component = component
         self.circularity_range = circularity_range
         self.area_range = area_range
-
-        if self.channel_names is None:
-            self.channel_names = ['{:03d}'.format(i) for i in channel_indexes]
+        self.threshold = threshold
 
         if len(channel_indexes) != len(channel_names):
             raise ValueError(
@@ -297,7 +303,7 @@ class SpotFeatures(FeatureCalculator):
 
         # Determine spot count (with cell component) for each channel requested
         cts = []
-        for ci in channel_indexes:
+        for ci in self.channel_indexes:
 
             # Extract image for channel over cell component
             image = signals[z, ..., ci]
@@ -308,23 +314,36 @@ class SpotFeatures(FeatureCalculator):
             min_row, min_col, max_row, max_col = prop.bbox
             image = image[min_row:max_row, min_col:max_col] * prop.image
 
-            # Apply thresholding and labeling before getting spot properties
-            image = image > filters.threshold_otsu(image)
-            ps = measure.regionprops(measure.label(image))
+            # If image contains only one intensity value (or none), add zero count and continue
+            if len(np.unique(image)) <= 1:
+                cts.append(0)
+                continue
+
+            # Apply thresholding and labeling before getting spot properties, using supplied threshold
+            # if possible and otsu otherwise
+            thresh_image = image > (filters.threshold_otsu(image) if self.threshold is None else self.threshold)
+            ps = measure.regionprops(measure.label(thresh_image))
 
             # Loop through spot objects and count those that pass the given filters
             ct = 0
             for p in ps:
-                area = p.area
+                area, perimeter = p.area, p.perimeter
 
                 # See: https://en.wikipedia.org/wiki/Shape_factor_(image_analysis_and_microscopy)#Circularity
-                circularity = (4 * np.pi * area) / p.perimeter**2
+                circularity = 1 if np.isclose(perimeter, 0) else (4 * np.pi * area) / perimeter**2
                 circularity = np.clip(circularity, 0, 1)
 
                 if self.area_range[0] <= area <= self.area_range[1] \
                         and self.circularity_range[0] <= circularity <= self.circularity_range[1]:
                     ct += 1
             cts.append(ct)
+
+            # Debugging single cell images
+            # from skimage import io as skio
+            # skio.imsave('/lab/data/cellimages/{:05d}_{}_extract.png'.format(prop.label, self.component), image)
+            # skio.imsave('/lab/data/cellimages/{:05d}_{}_binary.png'.format(prop.label, self.component), prop.image.astype(np.uint8) * 255)
+            # skio.imsave('/lab/data/cellimages/{:05d}_{}_threshold_ct{}.png'.format(prop.label, self.component, ct), thresh_image.astype(np.uint8) * 255)
+
         return cts
 
 
@@ -486,7 +505,7 @@ class Cytometer2D(KerasCytometer2D):
                  include_cell_intensity=True,
                  include_nucleus_intensity=False,
                  include_cell_graph=False,
-                 spot_count_channel_indexes=None,
+                 spot_count_channels=None,
                  spot_count_params=None):
         ncyc, nz, _, nh, nw = tile.shape
 
@@ -498,7 +517,11 @@ class Cytometer2D(KerasCytometer2D):
         tile = np.reshape(tile, (nz, nh, nw, -1))
         nch = tile.shape[-1]
 
-        if channel_names is not None and nch != len(channel_names):
+        # Generate default channel names list if necessary
+        if channel_names is None:
+            channel_names = ['{:03d}'.format(i) for i in range(nch)]
+
+        if nch != len(channel_names):
             raise ValueError(
                 'Tile has {} channels but given channel name list has {} (they should be equal); '
                 'channel names given = {}, tile shape = {}'
@@ -508,18 +531,18 @@ class Cytometer2D(KerasCytometer2D):
         # Configure features to be calculated based on provided flags
         feature_calculators = [BasicCellFeatures()]
         if include_cell_intensity:
-            feature_calculators.append(IntensityFeatures(nch, COMP_CELL, channel_names))
+            feature_calculators.append(IntensityFeatures(nch, channel_names, COMP_CELL))
         if include_nucleus_intensity:
-            feature_calculators.append(IntensityFeatures(nch, COMP_NUCLEUS, channel_names))
+            feature_calculators.append(IntensityFeatures(nch, channel_names, COMP_NUCLEUS))
         if include_cell_graph:
             feature_calculators.append(GraphFeatures())
-        if spot_count_channel_indexes is not None:
-            names = None if channel_names is None else [channel_names[i] for i in spot_count_channel_indexes]
+        if spot_count_channels is not None:
+            indexes = [channel_names.index(c) for c in spot_count_channels]
             params = spot_count_params or {}
-            feature_calculators.append(SpotFeatures(spot_count_channel_indexes, COMP_CELL, names, **params))
-            feature_calculators.append(SpotFeatures(spot_count_channel_indexes, COMP_NUCLEUS, names, **params))
+            feature_calculators.append(SpotFeatures(indexes, spot_count_channels, COMP_CELL, **params))
+            feature_calculators.append(SpotFeatures(indexes, spot_count_channels, COMP_NUCLEUS, **params))
 
-            # Compute list of resulting feature names (values will be added in this order)
+        # Compute list of resulting feature names (values will be added in this order)
         feature_names = [v for fc in feature_calculators for v in fc.get_feature_names()]
 
         feature_values = []

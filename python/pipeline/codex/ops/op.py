@@ -58,7 +58,7 @@ class OpMonitor(object):
         if op not in self.data:
             self.data[op] = []
         # Merge global context into operation data and add to 
-        # list of all records for this operations
+        # list of all records for this operation
         self.data[op].append({**self.context, **data})
         return self
 

@@ -53,7 +53,7 @@ def resolve_int_list_arg(arg):
                 'a range as start, stop[, step] w/ inclusive stop (given = {})'.format(arg))
         # Interpret as range inclusive of end point
         vals = [int(v) for v in arg]
-        return list(range(vals[0], vals[1] + 1, None if len(vals) < 3 else vals[2]))
+        return list(range(vals[0], vals[1] + 1, 1 if len(vals) < 3 else vals[2]))
     if isinstance(arg, list):
         return [int(v) for v in arg]
     raise ValueError('Argument of type {} could not be interpreted as a list (given = {})'.format(type(arg), arg))
@@ -123,7 +123,7 @@ class DataCLI(CLI):
         self.config = get_config(config_path or data_dir)
         self.data_dir = data_dir
 
-    def run_all(self):
+    def run_all(self, **kwargs):
         for config in self._get_function_configs():
             if 'enabled' in config and not config['enabled']:
                 logging.debug('Skipping explicitly disabled processing function %s', config)
@@ -133,6 +133,12 @@ class DataCLI(CLI):
                 raise ValueError('Processing function configuration "%s" is not valid (should only have 1 key)', config)
             op = list(config.keys())[0]
             if not hasattr(self, op):
-                raise ValueError('Processing function name "%s" is invalid', op)
+                raise ValueError('CLI function name "%s" is invalid', op)
             logging.info('Running operation "%s" with arguments "%s"', op, config[op])
-            getattr(self, op)(**config[op])
+            fn = getattr(self, op)
+
+            # Extract kwargs relevant for this operation
+            params = {k: v for k, v in kwargs.items() if k in fn.__code__.co_varnames}
+
+            # Merge kwargs with configured parameters and pass all to function call
+            fn(**{**config[op], **params})

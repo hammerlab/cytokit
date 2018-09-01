@@ -17,6 +17,13 @@ def record_processor_data(data, output_dir):
         past_data.update(data)
         data = past_data
 
+    # Ensure that values in data dict are lists of dicts (not DataFrames already
+    # since they will not serialize correctly)
+    data = {
+        k: v.to_dict(orient='records') if isinstance(v, pd.DataFrame) else v
+        for k, v in data.items()
+    }
+
     # Use pandas for serialization as it has built-in numpy type converters
     pd.Series(data).to_json(path, orient='index')
     return path

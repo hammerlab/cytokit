@@ -14,7 +14,7 @@ from codex_app.explorer.data import cache as ac
 from codex_app.explorer import lib as lib
 from codex_app.explorer.config import cfg
 from codex_app.explorer import color
-from codex.cytometry.cytometer import DEFAULT_CELL_INTENSITY_PREFIX, DEFAULT_NUCL_INTENSITY_PREFIX
+from codex.cytometry.cytometer import DEFAULT_PREFIXES
 from collections import OrderedDict
 import pandas as pd
 import numpy as np
@@ -237,8 +237,8 @@ def get_axis_settings_layout(axis):
     field_names = OrderedDict(cfg.CYTO_FIELDS)
 
     # Add list of possible field values based on "base" dataset, which may
-    # include expression levels for different cell components
-    regex = DEFAULT_CELL_INTENSITY_PREFIX + '|' + DEFAULT_NUCL_INTENSITY_PREFIX
+    # include features for different cell components
+    regex = '|'.join(DEFAULT_PREFIXES)
     for c in get_base_data().filter(regex=regex).columns.tolist():
         field_names[c] = c
 

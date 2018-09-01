@@ -22,6 +22,7 @@ from codex.ops import best_focus
 from codex.ops import deconvolution
 from codex.ops import tile_summary
 from codex.ops import illumination_correction
+from codex.ops import spectral_unmixing
 from dask.distributed import Client, LocalCluster
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class OpFlags(object):
     def __init__(self,
             run_best_focus=True, run_drift_comp=True, run_summary=True,
             run_tile_generator=True, run_crop=True, run_deconvolution=True,
-            run_cytometry=True, run_illumination_correction=True):
+            run_cytometry=True, run_illumination_correction=True, run_spectral_unmixing=True):
         self.run_tile_generator = run_tile_generator
         self.run_crop = run_crop
         self.run_deconvolution = run_deconvolution
@@ -43,10 +44,11 @@ class OpFlags(object):
         self.run_summary = run_summary
         self.run_cytometry = run_cytometry
         self.run_illumination_correction = run_illumination_correction
+        self.run_spectral_unmixing = run_spectral_unmixing
 
     def postprocessing_enabled(self):
-        # Currently, illumination correction is the only post processing operation
-        return self.run_illumination_correction
+        return self.run_illumination_correction or \
+            self.run_spectral_unmixing
 
     def preprocessing_enabled(self):
         return self.run_tile_generator or \
@@ -245,32 +247,44 @@ def postprocess_tile(tile, tile_indices, ops, log_fn, task_config):
 
     # Illumination Correction
     if ops.illumination_op:
-
         # Prepare and save illumination images, if not already done
         ops.illumination_op.prepare_region_data(output_dir)
         path = ops.illumination_op.save_region_data(output_dir)
         if path is not None:
-            log_fn('Region illumination images saved to "{}"'.format(path))
+            log_fn('Illumination data saved to "{}"'.format(path))
 
         # Run correction for tile
         tile = ops.illumination_op.run(tile, tile_indices)
-        path = ops.illumination_op.save(tile_indices, output_dir, tile)
-        log_fn('Illumination correction complete; Corrected tile saved to "{}"'.format(path), tile)
-
-        # Get best focus data
-        # TODO Prevent needing to re-read the processor data file each time
-        best_focus_data = function_data.get_best_focus_coord_map(output_dir)
-        best_focus_z_plane = best_focus_data[(tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)]
-
-        # Rerun cytometry based on corrected tile
-        cyto_data = ops.cytometry_op.run(tile, best_focus_z_plane=best_focus_z_plane)
-        paths = ops.cytometry_op.save(tile_indices, output_dir, cyto_data)
-        log_fn(
-            'Illumination-corrected tile cytometry complete; Statistics saved to "{}"'
-            .format(paths[-1]), cyto_data[0]
-        )
+        log_fn('Illumination correction complete', tile)
     else:
         log_fn('Skipping illumination correction', debug=True)
+
+    # Spectral Unmixing
+    if ops.unmixing_op:
+        # Prepare unmixing models for each region
+        ops.unmixing_op.prepare_region_data(output_dir)
+
+        # Run correction for tile
+        tile = ops.unmixing_op.run(tile, tile_indices)
+        log_fn('Spectral unmixing complete', tile)
+    else:
+        log_fn('Skipping spectral unmixing', debug=True)
+
+    # Get best focus data
+    # TODO Prevent needing to re-read the processor data file each time
+    best_focus_data = function_data.get_best_focus_coord_map(output_dir)
+    best_focus_z_plane = best_focus_data[(tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)]
+
+    # Rerun cytometry based on corrected tile
+    cyto_data = ops.cytometry_op.run(tile, best_focus_z_plane=best_focus_z_plane)
+    paths = ops.cytometry_op.save(tile_indices, output_dir, cyto_data)
+    log_fn('Postprocessing cytometry complete; Statistics saved to "{}"'.format(paths[-1]), cyto_data[0])
+
+    # Save resulting tile
+    path = codex_io.get_processor_img_path(
+        tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)
+    codex_io.save_tile(osp.join(output_dir, path), tile, config=task_config.exp_config)
+    log_fn('Saved postprocessed tile to "{}"'.format(path), tile)
 
 
 def get_log_fn(i, n_tiles, region_index, tx, ty):
@@ -303,8 +317,10 @@ def get_postprocess_op_set(task_config):
     return op.CodexOpSet(
         illumination_op=illumination_correction.IlluminationCorrection(exp_config)
         if task_config.op_flags.run_illumination_correction else None,
+        unmixing_op=spectral_unmixing.SpectralUnmixing(exp_config)
+        if task_config.op_flags.run_spectral_unmixing else None,
         cytometry_op=cytometry.get_op(exp_config)
-        if task_config.op_flags.run_illumination_correction else None
+        if task_config.op_flags.postprocessing_enabled() else None
     )
 
 

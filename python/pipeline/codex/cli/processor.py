@@ -29,7 +29,8 @@ class Processor(cli.DataCLI):
             run_drift_comp=True,
             run_summary=True,
             run_cytometry=True,
-            run_illumination_correction=True,
+            run_illumination_correction=False,
+            run_spectral_unmixing=False,
 
             # Bookkeeping
             record_execution=True):
@@ -41,6 +42,8 @@ class Processor(cli.DataCLI):
             - Selection of best focal planes within z-stacks
             - Cropping of tile overlap
             - Cell segmentation and quantification
+            - Illumination correction
+            - Spectral Unmixing
 
         Nothing beyond an input data directory and an output directory are required (see arguments
         below), but GPU information should be provided via the `gpus` argument to ensure that
@@ -78,6 +81,8 @@ class Processor(cli.DataCLI):
             run_cytometry: Flag indicating whether or not image tiles should be segmented and quantified
             run_illumination_correction: Flag indicating whether or not image tiles and cytometry data should be
                 adjusted according to global illumination patterns across entire regions
+            run_spectral_unmixing: Flag indicating whether or not cross-talk between fluorescent channels should
+                be corrected via blind spectral unmixing
             record_execution: Flag indicating whether or not to store arguments and environment in
                 a file within the output directory; defaults to True
             record_data: Flag indicating whether or not summary information from each operation
@@ -107,7 +112,8 @@ class Processor(cli.DataCLI):
             run_summary=run_summary,
             run_tile_generator=run_tile_generator,
             run_cytometry=run_cytometry,
-            run_illumination_correction=run_illumination_correction
+            run_illumination_correction=run_illumination_correction,
+            run_spectral_unmixing=run_spectral_unmixing
         )
         pl_config = pipeline.PipelineConfig(
             self.config, region_indexes, tile_indexes, self.data_dir, output_dir,

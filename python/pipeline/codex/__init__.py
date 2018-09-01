@@ -15,6 +15,9 @@ ENV_CYTOMETRY_3D_MODEL_PATH = 'CODEX_CYTOMETRY_3D_MODEL_PATH'
 # specific handlers
 ENV_RAW_FILE_TYPE = 'CODEX_RAW_FILE_TYPE'
 
+# Random state for processing operations
+SEED = 5523
+
 
 def get_env_vars():
     """Get map of all CODEX environment variables"""

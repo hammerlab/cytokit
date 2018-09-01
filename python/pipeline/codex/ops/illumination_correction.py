@@ -13,6 +13,7 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from sklearn.pipeline import Pipeline
 from skimage import transform
+from codex import SEED
 import logging
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,6 @@ MODELS = {
     'knn': {'factory': lambda args: KNeighborsRegressor(**args)},
     'mlp': {'factory': lambda args: Pipeline([('scale', StandardScaler()), ('est', MLPRegressor(**args))])}
 }
-SEED = 5512
 
 
 # max_cells=250000
@@ -76,7 +76,6 @@ class IlluminationCorrection(codex_op.CodexOp):
             feature_params=DEFAULT_FEATURE_PARAMS,
             model_params=DEFAULT_MODEL_PARAMS,
             prediction_params=DEFAULT_PREDICTION_PARAMS,
-            overwrite_tile=False,
             intensity_prefix=DEFAULT_CELL_INTENSITY_PREFIX):
         super().__init__(config)
 
@@ -90,9 +89,6 @@ class IlluminationCorrection(codex_op.CodexOp):
         self.feature_params = _get_params('feature_params', params, feature_params)
         self.model_params = _get_params('model_params', params, model_params)
         self.prediction_params = _get_params('prediction_params', params, prediction_params)
-
-        # Extract flag indicating whether or not to overwrite original tiles with corrected results
-        self.overwrite_tile = params.get('overwrite_tile', overwrite_tile)
 
         # Extract prefix of intensity signals within cytometry data to be used for correction
         # (these correspond to cell or nucleus intensities, though either prefix is configurable)
@@ -356,15 +352,9 @@ class IlluminationCorrection(codex_op.CodexOp):
         return tile
 
     def save(self, tile_indices, output_dir, tile):
-        if self.overwrite_tile:
-            # Overwrite the original preprocessed tile with corrected version
-            path = codex_io.get_processor_img_path(
-                tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)
-            codex_io.save_tile(osp.join(output_dir, path), tile, config=self.config)
-        else:
-            # Save corrected tile in separate location
-            path = codex_io.get_illumination_image_path(
-                tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)
-            codex_io.save_tile(osp.join(output_dir, path), tile, config=self.config)
+        # Overwrite the original preprocessed tile with corrected version
+        path = codex_io.get_processor_img_path(
+            tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)
+        codex_io.save_tile(osp.join(output_dir, path), tile, config=self.config)
         return path
 

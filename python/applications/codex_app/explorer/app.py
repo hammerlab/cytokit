@@ -783,13 +783,18 @@ def update_single_cells(_):
         patch_shape=cfg.cell_image_size,
         apply_mask=True, fill_value=0)
 
-    return get_single_cells_title(len(cells), n_cells_in_tile) + [
+    style = {'padding': '1px'}
+    if cfg.cell_image_display_scale_factor is not None:
+        style['width'] = '{:.0f}%'.format(cfg.cell_image_display_scale_factor*100)
+    images = [
         html.Img(
             title='Cell ID: {}'.format(c['id']),
-            src='data:image/png;base64,{}'.format(lib.get_encoded_image(c['image']))
+            src='data:image/png;base64,{}'.format(lib.get_encoded_image(c['image'])),
+            style=style
         )
         for c in cells
     ]
+    return get_single_cells_title(len(cells), n_cells_in_tile) + [html.Div(images, style={'line-height': '.5'})]
 
 
 if __name__ == '__main__':

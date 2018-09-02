@@ -339,10 +339,11 @@ class SpotFeatures(FeatureCalculator):
             cts.append(ct)
 
             # Debugging single cell images
-            # from skimage import io as skio
-            # skio.imsave('/lab/data/cellimages/{:05d}_{}_extract.png'.format(prop.label, self.component), image)
-            # skio.imsave('/lab/data/cellimages/{:05d}_{}_binary.png'.format(prop.label, self.component), prop.image.astype(np.uint8) * 255)
-            # skio.imsave('/lab/data/cellimages/{:05d}_{}_threshold_ct{}.png'.format(prop.label, self.component, ct), thresh_image.astype(np.uint8) * 255)
+            # if ct > 0:
+            #     from skimage import io as skio
+            #     skio.imsave('/lab/data/cellimages/{:05d}_{}_extract.png'.format(prop.label, self.component), image)
+            #     skio.imsave('/lab/data/cellimages/{:05d}_{}_binary.png'.format(prop.label, self.component), prop.image.astype(np.uint8) * 255)
+            #     skio.imsave('/lab/data/cellimages/{:05d}_{}_threshold_ct{}.png'.format(prop.label, self.component, ct), thresh_image.astype(np.uint8) * 255)
 
         return cts
 

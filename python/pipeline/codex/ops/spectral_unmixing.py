@@ -91,6 +91,9 @@ class SpectralUnmixing(codex_op.CodexOp):
         else:
             H = np.array(self.crosstalk_coefficients, dtype=float)
 
+        # Normalize column sums to 1
+        H = H / H.sum(axis=0)
+
         return NMF(max_iter=10000, init='custom', random_state=SEED).fit(X, W=W, H=H)
 
     def get_decomposition_coefs(self, est):

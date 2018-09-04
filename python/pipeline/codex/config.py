@@ -9,7 +9,7 @@ from collections import namedtuple
 TILING_MODE_SNAKE = 'snake'
 
 
-def _load_json_config(data_dir, filename):
+def _load_config(data_dir, filename):
     f = osp.join(data_dir, filename)
     if not osp.exists(f):
         raise ValueError('Required configuration file "{}" does not exist'.format(f))
@@ -26,7 +26,7 @@ def _load_json_config(data_dir, filename):
 
 
 def _load_experiment_config(data_dir, filename):
-    return _load_json_config(data_dir, filename)
+    return _load_config(data_dir, filename)
 
 
 TileDims = namedtuple('TileDims', ['cycles', 'z', 'channels', 'height', 'width'])
@@ -167,6 +167,9 @@ class CodexConfigV10(Config):
 
         return res
 
+    def to_dict(self):
+        return self._conf
+
     @property
     def experiment_name(self):
         return self._conf['name']
@@ -238,6 +241,10 @@ class CodexConfigV10(Config):
 
     def _processor_params(self, op):
         return self._conf['processor'].get(op, {})
+
+    @property
+    def processor_args(self):
+        return self._processor_params('args')
 
     @property
     def tile_generator_params(self):

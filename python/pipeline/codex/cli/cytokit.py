@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import fire
-from codex.cli import analysis, operator, processor
+from codex.cli import analysis, operator, processor, config
 
 
 class Cytokit(object):
@@ -13,6 +13,9 @@ class Cytokit(object):
 
     def analysis(self):
         return analysis.Analysis
+
+    def config(self):
+        return config.Config
 
 
 if __name__ == '__main__':

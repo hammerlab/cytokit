@@ -8,6 +8,9 @@ from codex import cli
 
 class Processor(cli.DataCLI):
 
+    def _get_function_configs(self):
+        return self.config.processor_args
+
     def run(self,
             output_dir,
 
@@ -24,11 +27,11 @@ class Processor(cli.DataCLI):
             # Processing flags
             run_tile_generator=True,
             run_crop=True,
-            run_deconvolution=True,
-            run_best_focus=True,
-            run_drift_comp=True,
-            run_summary=True,
-            run_cytometry=True,
+            run_deconvolution=False,
+            run_best_focus=False,
+            run_drift_comp=False,
+            run_summary=False,
+            run_cytometry=False,
             run_illumination_correction=False,
             run_spectral_unmixing=False,
 
@@ -121,9 +124,6 @@ class Processor(cli.DataCLI):
             tile_prefetch_capacity=tile_prefetch_capacity
         )
         pipeline.run(pl_config, logging_init_fn=self._logging_init_fn)
-
-    def _get_function_configs(self):
-        raise NotImplementedError()
 
 
 if __name__ == '__main__':

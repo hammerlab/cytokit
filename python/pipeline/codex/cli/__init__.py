@@ -109,7 +109,7 @@ class DataCLI(CLI):
         """CLI Initialization
 
         Args:
-            data_dir: Path to experiment or output root directory
+            data_dir: Path to experiment output root directory
             config_path: Either a directory containing a configuration by the default name (controlled via
              env variable "CODEX_CONFIG_DEFAULT_FILENAME"), e.g. "experiment.yaml", or a path
                 to a single file; If not provided this will default to `data_dir`

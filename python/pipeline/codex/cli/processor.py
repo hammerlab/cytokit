@@ -9,7 +9,7 @@ from codex import cli
 class Processor(cli.DataCLI):
 
     def _get_function_configs(self):
-        return self.config.processor_args
+        return [{self.run.__name__: self.config.processor_args}]
 
     def run(self,
             output_dir,

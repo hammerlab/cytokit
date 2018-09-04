@@ -49,6 +49,7 @@ def _get_def_path_formats(raw_image_format):
 PATH_FORMATS = dict(
     keyence_single_cycle_v01=_get_def_path_formats('1_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
     keyence_single_cycle_v02=_get_def_path_formats('1_{tile:05d}_Z{z:03d}_CH{channel:d}.jpg'),
+    keyence_single_cycle_v03=_get_def_path_formats('1_XY01_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
     keyence_multi_cycle_v01=_get_def_path_formats(
         'Cyc{cycle:d}_reg{region:d}/{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
     keyence_multi_cycle_v02=_get_def_path_formats(

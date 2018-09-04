@@ -102,6 +102,7 @@ class SpectralUnmixing(codex_op.CodexOp):
     def prepare_region_data(self, output_dir):
         if self.data is not None:
             return
+        logger.info('Preparing spectral unmixing models')
 
         df = function_data.get_cytometry_data(output_dir, self.config, mode='all')
         n = len(df)

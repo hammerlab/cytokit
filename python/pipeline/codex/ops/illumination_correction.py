@@ -286,6 +286,8 @@ class IlluminationCorrection(codex_op.CodexOp):
     def prepare_region_data(self, output_dir):
         if self.data is not None:
             return
+        logger.info('Preparing illumination correction models')
+
         # Use whatever cytometry data was generated, whether it was for best
         # z planes, all planes, or a specific one
         df = function_data.get_cytometry_data(output_dir, self.config, mode='all')

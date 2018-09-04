@@ -125,12 +125,8 @@ class DataCLI(CLI):
 
     def run_all(self, **kwargs):
         for config in self._get_function_configs():
-            if 'enabled' in config and not config['enabled']:
-                logging.debug('Skipping explicitly disabled processing function %s', config)
-                continue
-            config.pop('enabled', None)
             if len(config) != 1:
-                raise ValueError('Processing function configuration "%s" is not valid (should only have 1 key)', config)
+                raise ValueError('Processing function configuration "%s" is not valid (should only have 1 key)'.format(config))
             op = list(config.keys())[0]
             if not hasattr(self, op):
                 raise ValueError('CLI function name "%s" is invalid', op)

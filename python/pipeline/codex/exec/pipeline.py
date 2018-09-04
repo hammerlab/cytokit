@@ -366,19 +366,8 @@ def run_task(task_config, ops, process_fn):
     return measure_data
 
 
-def run_preprocess_task(task_config):
-    ops = get_preprocess_op_set(task_config)
-    return run_task(task_config, ops, preprocess_tile)
-
-
-def run_postprocess_task(task_config):
-    ops = get_postprocess_op_set(task_config)
-    return run_task(task_config, ops, postprocess_tile)
-
-
-def run_preprocessing(pl_conf, logging_init_fn):
+def run_tasks(pl_conf, task_type, task_fn, logging_init_fn):
     # Initialize local dask cluster
-    logger.info('Initializing tasks for %s workers', pl_conf.n_workers)
     logger.debug('Pipeline configuration: %s', pl_conf)
     cluster = LocalCluster(
         n_workers=pl_conf.n_workers, threads_per_worker=1,
@@ -387,12 +376,8 @@ def run_preprocessing(pl_conf, logging_init_fn):
     )
     client = Client(cluster)
 
-    ##########################
-    # Preprocessing Pipeline #
-    ##########################
-
     # Split total region + tile indexes to process into separate lists for each worker
-    # (by indexes of those index combinations)
+    # (by indexes of those combinations)
     tiles = pl_conf.region_tiles
     idx_batches = np.array_split(np.arange(len(tiles)), pl_conf.n_workers)
 
@@ -408,7 +393,7 @@ def run_preprocessing(pl_conf, logging_init_fn):
         for i, idx_batch in enumerate(idx_batches)
     ]
 
-    logger.info('Starting pre-processing pipeline for %s tasks', len(tasks))
+    logger.info('Starting %s pipeline for %s tasks (%s workers)', task_type, len(tasks), pl_conf.n_workers)
     logger.debug('Task definitions:\n\t%s', '\n\t'.join([str(t) for t in tasks]))
     try:
         # Passing logging initialization operation, if given, to workers now
@@ -421,7 +406,7 @@ def run_preprocessing(pl_conf, logging_init_fn):
             worker.auto_restart = False
 
         # Pass tasks to each worker to execute in parallel
-        res = client.map(run_preprocess_task, tasks)
+        res = client.map(task_fn, tasks)
         res = [r.result() for r in res]
         if len(res) != len(tasks):
             raise ValueError('Parallel execution returned {} results but {} were expected'.format(len(res), len(tasks)))
@@ -435,39 +420,34 @@ def run_preprocessing(pl_conf, logging_init_fn):
     measure_data = concat(res)
     if measure_data:
         path = exec.record_processor_data(measure_data, pl_conf.output_dir)
-        logging.info('Pre-processing complete; Measurement data saved to "%s"', path)
+        logging.info('%s complete; Measurement data saved to "%s"', task_type, path)
     else:
-        logging.info('Pre-processing complete')
+        logging.info('%s complete', task_type)
 
 
-def run_postprocessing(pl_conf):
-    tiles = pl_conf.region_tiles
+def run_preprocess_task(task_config):
+    ops = get_preprocess_op_set(task_config)
+    return run_task(task_config, ops, preprocess_tile)
 
-    # Create postprocessing task configuration to load all tiles for all regions
-    task = pl_conf.get_task_config(region_indexes=tiles[:, 0], tile_indexes=tiles[:, 1], gpu=None)
 
-    # Configure the task to use an input directory equal to preprocessing output and to source
+def run_postprocess_task(task_config):
+    # Configure the task to use an input directory equal to pre-processing output and to source
     # preprocessed tiles instead of raw files
     task.data_dir = task.output_dir
     task.op_flags.run_tile_generator = False
 
-    logging.info('Starting post-processing pipeline')
-    measure_data = run_postprocess_task(task)
-    if measure_data:
-        path = exec.record_processor_data(measure_data, pl_conf.output_dir)
-        logging.info('Post-processing complete; Measurement data saved to "%s"', path)
-    else:
-        logging.info('Post-processing complete')
+    ops = get_postprocess_op_set(task_config)
+    return run_task(task_config, ops, postprocess_tile)
 
 
 def run(pl_conf, logging_init_fn=None):
     start = timer()
 
     if pl_conf.op_flags.preprocessing_enabled():
-        run_preprocessing(pl_conf, logging_init_fn)
+        run_tasks(pl_conf, 'Pre-processing', run_preprocess_task, logging_init_fn)
 
     if pl_conf.op_flags.postprocessing_enabled():
-        run_postprocessing(pl_conf)
+        run_tasks(pl_conf, 'Post-processing', run_postprocess_task, logging_init_fn)
 
     stop = timer()
     logger.info('Pipeline execution completed in %.0f seconds', stop - start)

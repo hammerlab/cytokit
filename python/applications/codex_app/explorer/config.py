@@ -37,7 +37,7 @@ DEFAULT_MAX_TILE_CELLS = 10000
 DEFAULT_MAX_SINGLE_CELLS = 50
 DEFAULT_CELL_IMAGE_HEIGHT = 64
 DEFAULT_CELL_IMAGE_WIDTH = 64
-DEFAULT_GRAPH_POINT_OPACITY = .5
+DEFAULT_GRAPH_POINT_OPACITY = .2
 DEFAULT_APP_MONTAGE_POINT_COLOR = 'white'
 DEFAULT_APP_TILE_POINT_COLOR = 'white'
 
@@ -49,11 +49,10 @@ class AppConfig(object):
         ('nucleus_diameter', 'Nucleus Diameter'),
         ('cell_size', 'Cell Size'),
         ('cell_solidity', 'Cell Solidity'),
-        ('cell_solidity', 'Cell Solidity'),
-        ('n_neighbors', 'Cell Num Neighbors (w/ Shared Boundary)'),
-        ('adj_bg_pct', 'Cell Percent Bordering Background'),
+        ('cell_circularity', 'Cell Circularity'),
         ('nucleus_size', 'Nucleus Size'),
         ('nucleus_solidity', 'Nucleus Solidity'),
+        ('nucleus_circularity', 'Nucleus Circularity'),
         ('region_index', 'Region Index'),
         ('tile_x', 'Tile X'),
         ('tile_y', 'Tile Y'),
@@ -62,15 +61,17 @@ class AppConfig(object):
         ('rx', 'Cell X (In Region)'),
         ('ry', 'Cell Y (In Region)'),
         ('x', 'Cell X (In Tile)'),
-        ('y', 'Cell Y (In Tile)')
+        ('y', 'Cell Y (In Tile)'),
+        ('cg:n_neighbors', 'Cell Num Neighbors (w/ Shared Boundary)'),
+        ('cg:adj_bg_pct', 'Cell Percent Bordering Background'),
     ])
     CYTO_HOVER_FIELDS = [
         'id',
         'nucleus_diameter', 'nucleus_solidity',
         'cell_diameter', 'cell_size',
-        'n_neighbors', 'adj_bg_pct'
+        'cg:n_neighbors', 'cg:adj_bg_pct'
     ]
-    CYTO_INT_FIELDS = ['id', 'rid', 'x', 'y', 'rx', 'ry', 'tile_x', 'tile_y', 'region_index', 'n_neighbors']
+    CYTO_INT_FIELDS = ['id', 'rid', 'x', 'y', 'rx', 'ry', 'tile_x', 'tile_y', 'region_index', 'cg:n_neighbors']
 
     def __init__(self):
         self._exp_config = codex_config.load(self.exp_config_path)

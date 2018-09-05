@@ -425,19 +425,19 @@ def run_tasks(pl_conf, task_type, task_fn, logging_init_fn):
         logging.info('%s complete', task_type)
 
 
-def run_preprocess_task(task_config):
-    ops = get_preprocess_op_set(task_config)
-    return run_task(task_config, ops, preprocess_tile)
+def run_preprocess_task(task):
+    ops = get_preprocess_op_set(task)
+    return run_task(task, ops, preprocess_tile)
 
 
-def run_postprocess_task(task_config):
+def run_postprocess_task(task):
     # Configure the task to use an input directory equal to pre-processing output and to source
     # preprocessed tiles instead of raw files
     task.data_dir = task.output_dir
     task.op_flags.run_tile_generator = False
 
-    ops = get_postprocess_op_set(task_config)
-    return run_task(task_config, ops, postprocess_tile)
+    ops = get_postprocess_op_set(task)
+    return run_task(task, ops, postprocess_tile)
 
 
 def run(pl_conf, logging_init_fn=None):

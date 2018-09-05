@@ -130,14 +130,23 @@ def get_graph_figure():
             dict(
                 x=x,
                 y=y,
+                # See: https://github.com/plotly/plotly.py/blob/master/plotly/colors.py
+                colorscale='Portland',
+                type='histogram2dcontour',
+                opacity=.8,
+                contours={'coloring': 'fill'}
+            ),
+            dict(
+                x=x,
+                y=y,
                 mode='markers',
-                marker={'opacity': cfg.graph_point_opacity},
+                marker={'opacity': cfg.graph_point_opacity, 'color': 'white'},
                 type='scattergl'
             )
         ]
     else:
         fig_data = [
-            dict(x=x, type='histogram')
+            dict(x=x, type='histogram', marker={'color': '#0b64a2'})
         ]
 
     selections = get_graph_axis_selections()
@@ -240,7 +249,9 @@ def get_axis_settings_layout(axis):
     # include features for different cell components
     regex = '|'.join(DEFAULT_PREFIXES)
     for c in get_base_data().filter(regex=regex).columns.tolist():
-        field_names[c] = c
+        # Only add the raw field name if it is not in the pre-mapped field list
+        if c not in field_names:
+            field_names[c] = c
 
     return html.Div([
             html.Div(
@@ -324,7 +335,7 @@ app.layout = html.Div([
                     className='four columns'
                 )
             ]),
-            style={'backgroundColor': 'rgb(31, 119, 180)'}
+            style={'backgroundColor': '#0b64a2'}
         ),
         html.Div([
                 html.Div(

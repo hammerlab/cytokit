@@ -18,13 +18,16 @@ CELL_CHANNEL = 0
 NUCLEUS_CHANNEL = 1
 DEFAULT_CELL_INTENSITY_PREFIX = 'ci:'
 DEFAULT_NUCL_INTENSITY_PREFIX = 'ni:'
+DEFAULT_CELL_GRAPH_PREFIX = 'cg:'
 DEFAULT_CELL_SPOT_PREFIX = 'cs:'
 DEFAULT_NUCL_SPOT_PREFIX = 'ns:'
+
 DEFAULT_PREFIXES = [
     DEFAULT_CELL_INTENSITY_PREFIX,
     DEFAULT_NUCL_INTENSITY_PREFIX,
     DEFAULT_CELL_SPOT_PREFIX,
-    DEFAULT_NUCL_SPOT_PREFIX
+    DEFAULT_NUCL_SPOT_PREFIX,
+    DEFAULT_CELL_GRAPH_PREFIX
 ]
 
 DEFAULT_SPOT_CIRCULARITY = [.5, 1]
@@ -208,17 +211,22 @@ class BasicCellFeatures(FeatureCalculator):
         # Note: "size" is used here instead of area/volume for compatibility between 2D and 3D
         return [
             'id', 'x', 'y', 'z',
-            'cell_size', 'cell_diameter', 'cell_perimeter', 'cell_solidity',
-            'nucleus_size', 'nucleus_diameter', 'nucleus_perimeter', 'nucleus_solidity'
+            'cell_size', 'cell_diameter', 'cell_perimeter', 'cell_circularity', 'cell_solidity',
+            'nucleus_size', 'nucleus_diameter', 'nucleus_perimeter', 'nucleus_circularity', 'nucleus_solidity'
         ]
 
     def get_feature_values(self, signals, labels, graph, props, z):
         # Extract these once as their calculations are not cached
         cell_area, nuc_area = props.cell.area, props.nucleus.area
+        cell_perimeter, nuc_perimeter = props.cell.perimeter, props.nucleus.perimeter
         return [
             props.cell.label, props.cell.centroid[1], props.cell.centroid[0], z,
-            cell_area, codex_math.area_to_diameter(cell_area), props.cell.perimeter, props.cell.solidity,
-            nuc_area, codex_math.area_to_diameter(nuc_area), props.nucleus.perimeter, props.nucleus.solidity
+
+            cell_area, codex_math.area_to_diameter(cell_area),
+            cell_perimeter, codex_math.circularity(cell_area, cell_perimeter), props.cell.solidity,
+
+            nuc_area, codex_math.area_to_diameter(nuc_area),
+            nuc_perimeter, codex_math.circularity(nuc_area, nuc_perimeter), props.nucleus.solidity
         ]
 
 
@@ -270,14 +278,14 @@ class IntensityFeatures(FeatureCalculator):
 
 class SpotFeatures(FeatureCalculator):
 
-    def __init__(self, channel_indexes, channel_names, component,
-                 circularity_range=DEFAULT_SPOT_CIRCULARITY, area_range=DEFAULT_SPOT_AREA, threshold=None):
+    METRICS = ['area', 'circularity', 'coverage']
+
+    def __init__(self, channel_indexes, channel_names, component, threshold=None, sigma=None):
         self.channel_indexes = channel_indexes
         self.channel_names = channel_names
         self.component = component
-        self.circularity_range = circularity_range
-        self.area_range = area_range
         self.threshold = threshold
+        self.sigma = sigma
 
         if len(channel_indexes) != len(channel_names):
             raise ValueError(
@@ -292,7 +300,11 @@ class SpotFeatures(FeatureCalculator):
 
     def get_feature_names(self):
         prefix = SPOT_COMPONENTS[self.component]
-        return [prefix + c for c in self.channel_names]
+        features = []
+        for c in self.channel_names:
+            for metric in self.METRICS:
+                features.append(prefix + c + ':' + metric)
+        return features
 
     def get_feature_values(self, signals, labels, graph, props, z):
         # Signals should have shape ZHWC
@@ -302,7 +314,8 @@ class SpotFeatures(FeatureCalculator):
         prop = props[self.component]
 
         # Determine spot count (with cell component) for each channel requested
-        cts = []
+        res = []
+        default_value = [None] * len(self.METRICS)
         for ci in self.channel_indexes:
 
             # Extract image for channel over cell component
@@ -316,36 +329,36 @@ class SpotFeatures(FeatureCalculator):
 
             # If image contains only one intensity value (or none), add zero count and continue
             if len(np.unique(image)) <= 1:
-                cts.append(0)
+                res.extend(default_value)
                 continue
 
             # Apply thresholding and labeling before getting spot properties, using supplied threshold
             # if possible and otsu otherwise
-            thresh_image = image > (filters.threshold_otsu(image) if self.threshold is None else self.threshold)
+            if self.sigma is not None:
+                image = filters.gaussian(image, sigma=self.sigma, preserve_range=True)
+            threshold = filters.threshold_otsu(image) if self.threshold is None else self.threshold
+            thresh_image = image > threshold
             ps = measure.regionprops(measure.label(thresh_image))
 
-            # Loop through spot objects and count those that pass the given filters
-            ct = 0
+            # Loop through spot objects and add metrics for each
+            metrics = []
             for p in ps:
                 area, perimeter = p.area, p.perimeter
+                circularity = codex_math.circularity(area, perimeter)
+                coverage = 100. * np.clip(area / prop.area, 0, 1)
+                metrics.append((area, circularity, coverage))
 
-                # See: https://en.wikipedia.org/wiki/Shape_factor_(image_analysis_and_microscopy)#Circularity
-                circularity = 1 if np.isclose(perimeter, 0) else (4 * np.pi * area) / perimeter**2
-                circularity = np.clip(circularity, 0, 1)
-
-                if self.area_range[0] <= area <= self.area_range[1] \
-                        and self.circularity_range[0] <= circularity <= self.circularity_range[1]:
-                    ct += 1
-            cts.append(ct)
+            for i in range(len(self.METRICS)):
+                res.append(','.join([str(m[i]) for m in metrics]))
 
             # Debugging single cell images
-            # if ct > 0:
+            # if len(areas) > 0:
             #     from skimage import io as skio
             #     skio.imsave('/lab/data/cellimages/{:05d}_{}_extract.png'.format(prop.label, self.component), image)
             #     skio.imsave('/lab/data/cellimages/{:05d}_{}_binary.png'.format(prop.label, self.component), prop.image.astype(np.uint8) * 255)
             #     skio.imsave('/lab/data/cellimages/{:05d}_{}_threshold_ct{}.png'.format(prop.label, self.component, ct), thresh_image.astype(np.uint8) * 255)
 
-        return cts
+        return res
 
 
 def _pct_list(fractions):
@@ -355,7 +368,10 @@ def _pct_list(fractions):
 class GraphFeatures(FeatureCalculator):
 
     def get_feature_names(self):
-        return ['n_neighbors', 'neighbor_ids', 'adj_neighbor_pct', 'adj_bg_pct']
+        return [
+            DEFAULT_CELL_GRAPH_PREFIX + c
+            for c in ['n_neighbors', 'neighbor_ids', 'adj_neighbor_pct', 'adj_bg_pct']
+        ]
 
     def get_feature_values(self, signals, labels, graph, props, z):
         # graph.adj behaves like a dict keyed by node id where each node id is an integer label in the

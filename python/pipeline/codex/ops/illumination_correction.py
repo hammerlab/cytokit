@@ -173,6 +173,8 @@ class IlluminationCorrection(codex_op.CodexOp):
         # Feature group preparation function
         def prep(X, group):
             params = self.feature_params[group]
+            if params is None:
+                return None
             type = params.get('type')
             if not type or type == 'none':
                 return None
@@ -191,7 +193,8 @@ class IlluminationCorrection(codex_op.CodexOp):
             raise ValueError('At least one of region or tile features must be enabled')
 
         # Concatenate features, if necessary
-        return features[0] if len(features) == 1 else np.hstack(tuple(features))
+        features = features[0] if len(features) == 1 else np.hstack(tuple(features))
+        return features
 
     def _estimate_model(self, X, y):
         # Fit regression model used to represent illumination surface

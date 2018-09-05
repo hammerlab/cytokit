@@ -23,3 +23,13 @@ def pixel_volume_to_diameter_um(pixel_volume, resolution_um):
     """Convert volume in pixels to diameter in microns based on (lateral) microscope resolution"""
     return volume_to_diameter(pixel_volume) * resolution_um
 
+
+def circularity(area, perimeter):
+    """Compute circularity of an object based on area and perimeter
+
+    Resulting score is 1 for a perfect circle and closer to 0 for non-circular objects. See here for
+    more details: https://en.wikipedia.org/wiki/Shape_factor_(image_analysis_and_microscopy)#Circularity
+    """
+    # Default tiny objects to perfect circularity
+    res = 1.0 if np.isclose(perimeter, 0) else (4 * np.pi * area) / perimeter ** 2
+    return np.clip(res, 0, 1)

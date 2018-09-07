@@ -25,7 +25,7 @@ ENV_APP_EXTRACT_CYCLE = 'APP_EXTRACT_CYCLE'
 ENV_APP_EXTRACT_Z = 'APP_EXTRACT_Z'
 ENV_APP_CELL_IMAGE_WIDTH = 'APP_CELL_IMAGE_WIDTH'
 ENV_APP_CELL_IMAGE_HEIGHT = 'APP_CELL_IMAGE_HEIGHT'
-ENV_APP_CELL_IMAGE_DISPLAY_SCALE = 'APP_CELL_IMAGE_DISPLAY_SCALE'
+ENV_APP_CELL_IMAGE_DISPLAY_WIDTH = 'APP_CELL_IMAGE_DISPLAY_WIDTH'
 ENV_APP_GRAPH_POINT_OPACITY = 'APP_GRAPH_POINT_OPACITY'
 ENV_APP_MONTAGE_POINT_COLOR = 'APP_MONTAGE_POINT_COLOR'
 ENV_APP_TILE_POINT_COLOR = 'APP_TILE_POINT_COLOR'
@@ -200,15 +200,12 @@ class AppConfig(object):
         )
 
     @property
-    def cell_image_display_scale_factor(self):
-        """Get cell image display scaling factor
-
-        This scale factor (between .1 and 1) will be used to scale centered/cropped cell image patches for display
-        """
-        scale = os.getenv(ENV_APP_CELL_IMAGE_DISPLAY_SCALE)
-        if scale is None:
+    def cell_image_display_width(self):
+        """Get cell image display width in pixels (height will scale proportionally)"""
+        width = os.getenv(ENV_APP_CELL_IMAGE_DISPLAY_WIDTH)
+        if width is None:
             return None
-        return min(max(float(scale), .1), 1.0)
+        return int(width)
 
     @property
     def graph_point_opacity(self):

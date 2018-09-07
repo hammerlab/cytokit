@@ -59,6 +59,7 @@ ac['selection']['tile']['coords'] = (0, 0)
 ac['layouts']['tile'] = lib.get_interactive_image_layout(get_tile_image())
 
 ac['flag']['message'] = False
+ac['flag']['clear_buffer'] = False
 
 
 def get_graph_axis_selections():
@@ -390,7 +391,17 @@ app.layout = html.Div([
                 get_image_settings_layout('tile-ch-{}', data.get_tile_image_channels(), 'three columns')
             ]
         ),
-        html.P(id='null1')
+        html.Div(
+            className='row',
+            children=[
+                html.Div([
+                    html.H4('Selected Cell Buffer', style={**TITLE_STYLE, **{'display': 'inline'}}),
+                    html.Button('Clear', id='clear-buffer', style={'display': 'inline', 'margin-left': '10px'})
+                ], style={'align': 'center'}),
+                html.Div(id='single-cells-buffer', className='ten columns')
+            ]
+        ),
+        html.P(id='clear-buffer-state')
     ]
 )
 
@@ -754,8 +765,44 @@ def get_single_cells_title(n_cells=0, n_tile=0):
     return children
 
 
-@app.callback(Output('single-cells', 'children'), [Input('tile', 'figure')])
-def update_single_cells(_):
+@app.callback(
+    Output('clear-buffer-state', 'children'),
+    [Input('clear-buffer', 'n_clicks')]
+)
+def update_clear_buffer_state(_):
+    ac['flag']['clear_buffer'] = True
+    return None
+
+
+@app.callback(
+    Output('single-cells-buffer', 'children'),
+    [Input('single-cells', 'children'), Input('clear-buffer-state', 'children')],
+    [State('single-cells-buffer', 'children')]
+)
+def update_single_cell_buffer(new_children, _, current_children):
+    if ac['flag']['clear_buffer']:
+        ac['flag']['clear_buffer'] = False
+        return []
+
+    res = (current_children or [])
+    if new_children is not None:
+        for c in new_children:
+            if 'id' in c['props']:
+                print(c['props']['id'], c['type'])
+            if c['type'] == 'Div' and 'id' in c['props'] and c['props']['id'] == 'single-cell-images':
+                res.extend(c['props']['children'])
+    print('Returning {} children'.format(len(res)))
+    if len(res) > 6:
+        print(res[0], res[5])
+    return res
+
+
+@app.callback(
+    Output('single-cells', 'children'),
+    [Input('tile', 'figure')],
+    [State('single-cells', 'children')]
+)
+def update_single_cells(_, children):
     df = get_tile_graph_data_selection()
 
     channels = data.get_tile_image_channels()
@@ -795,8 +842,8 @@ def update_single_cells(_):
         apply_mask=True, fill_value=0)
 
     style = {'padding': '1px'}
-    if cfg.cell_image_display_scale_factor is not None:
-        style['width'] = '{:.0f}%'.format(cfg.cell_image_display_scale_factor*100)
+    if cfg.cell_image_display_width is not None:
+        style['width'] = '{:.0f}px'.format(cfg.cell_image_display_width)
     images = [
         html.Img(
             title='Cell ID: {}'.format(c['id']),
@@ -805,7 +852,13 @@ def update_single_cells(_):
         )
         for c in cells
     ]
-    return get_single_cells_title(len(cells), n_cells_in_tile) + [html.Div(images, style={'line-height': '.5'})]
+    return get_single_cells_title(len(cells), n_cells_in_tile) + [
+        html.Div(
+            images,
+            id='single-cell-images',
+            style={'line-height': '.5', 'overflowY': 'scroll', 'max-height': '700px'}
+        )
+    ]
 
 
 if __name__ == '__main__':

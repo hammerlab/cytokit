@@ -20,13 +20,11 @@ DEFAULT_CELL_INTENSITY_PREFIX = 'ci:'
 DEFAULT_NUCL_INTENSITY_PREFIX = 'ni:'
 DEFAULT_CELL_GRAPH_PREFIX = 'cg:'
 DEFAULT_CELL_SPOT_PREFIX = 'cs:'
-DEFAULT_NUCL_SPOT_PREFIX = 'ns:'
 
 DEFAULT_PREFIXES = [
     DEFAULT_CELL_INTENSITY_PREFIX,
     DEFAULT_NUCL_INTENSITY_PREFIX,
     DEFAULT_CELL_SPOT_PREFIX,
-    DEFAULT_NUCL_SPOT_PREFIX,
     DEFAULT_CELL_GRAPH_PREFIX
 ]
 
@@ -39,11 +37,6 @@ COMP_NUCLEUS = 'nucleus'
 INTENSITY_COMPONENTS = {
     COMP_CELL: DEFAULT_CELL_INTENSITY_PREFIX,
     COMP_NUCLEUS: DEFAULT_NUCL_INTENSITY_PREFIX
-}
-
-SPOT_COMPONENTS = {
-    COMP_CELL: DEFAULT_CELL_SPOT_PREFIX,
-    COMP_NUCLEUS: DEFAULT_NUCL_SPOT_PREFIX
 }
 
 
@@ -278,12 +271,11 @@ class IntensityFeatures(FeatureCalculator):
 
 class SpotFeatures(FeatureCalculator):
 
-    METRICS = ['area', 'circularity', 'coverage']
+    METRICS = ['area_in_cell', 'area_in_nucleus', 'circularity', 'coverage']
 
-    def __init__(self, channel_indexes, channel_names, component, threshold=None, sigma=None):
+    def __init__(self, channel_indexes, channel_names, threshold=None, sigma=None):
         self.channel_indexes = channel_indexes
         self.channel_names = channel_names
-        self.component = component
         self.threshold = threshold
         self.sigma = sigma
 
@@ -292,26 +284,17 @@ class SpotFeatures(FeatureCalculator):
                 'Channel name and index lists must have same length (names given = {}, indexes given = {})',
                 channel_names, channel_indexes
             )
-        if component not in SPOT_COMPONENTS:
-            raise ValueError(
-                'Cellular component to quantify intensities for must be one of {} not "{}"'
-                .format(list(SPOT_COMPONENTS.keys()), component)
-            )
 
     def get_feature_names(self):
-        prefix = SPOT_COMPONENTS[self.component]
         features = []
         for c in self.channel_names:
             for metric in self.METRICS:
-                features.append(prefix + c + ':' + metric)
+                features.append(DEFAULT_CELL_SPOT_PREFIX + c + ':' + metric)
         return features
 
     def get_feature_values(self, signals, labels, graph, props, z):
         # Signals should have shape ZHWC
         assert signals.ndim == 4, 'Expecting 4D signals image but got shape {}'.format(signals.shape)
-
-        # Extract target skimage region prop
-        prop = props[self.component]
 
         # Determine spot count (with cell component) for each channel requested
         res = []
@@ -321,11 +304,11 @@ class SpotFeatures(FeatureCalculator):
             # Extract image for channel over cell component
             image = signals[z, ..., ci]
 
-            # Extract bounding box in original image and multiply by prop.image to give
+            # Extract bounding box in original image and multiply by cell.image to give
             # original image with region containing object alone
             assert image.ndim == 2, 'Expecting 2D image at this point, not image with shape {}'.format(image.shape)
-            min_row, min_col, max_row, max_col = prop.bbox
-            image = image[min_row:max_row, min_col:max_col] * prop.image
+            min_row, min_col, max_row, max_col = props.cell.bbox
+            image = image[min_row:max_row, min_col:max_col] * props.cell.image
 
             # If image contains only one intensity value (or none), add zero count and continue
             if len(np.unique(image)) <= 1:
@@ -340,23 +323,35 @@ class SpotFeatures(FeatureCalculator):
             thresh_image = image > threshold
             ps = measure.regionprops(measure.label(thresh_image))
 
+            # If there are no spot objects, short-circuit to next loop
+            if not ps:
+                res.extend(default_value)
+                continue
+
+            # Create a binary nucleus image within the cell image bounding box
+            nuc_image = np.zeros_like(props.cell.image, dtype=bool)
+            nuc_image[props.nucleus.coords[:, 0] - min_row, props.nucleus.coords[:, 1] - min_col] = True
+
             # Loop through spot objects and add metrics for each
             metrics = []
             for p in ps:
                 area, perimeter = p.area, p.perimeter
+                nuc_area = nuc_image[p.coords[:, 0], p.coords[:, 1]].sum()
                 circularity = codex_math.circularity(area, perimeter)
-                coverage = 100. * np.clip(area / prop.area, 0, 1)
-                metrics.append((area, circularity, coverage))
+                coverage = np.clip(area / props.cell.area, 0, 1)
+                metrics.append((area, nuc_area, circularity, coverage))
 
             for i in range(len(self.METRICS)):
                 res.append(','.join([str(m[i]) for m in metrics]))
 
             # Debugging single cell images
-            # if len(areas) > 0:
-            #     from skimage import io as skio
-            #     skio.imsave('/lab/data/cellimages/{:05d}_{}_extract.png'.format(prop.label, self.component), image)
-            #     skio.imsave('/lab/data/cellimages/{:05d}_{}_binary.png'.format(prop.label, self.component), prop.image.astype(np.uint8) * 255)
-            #     skio.imsave('/lab/data/cellimages/{:05d}_{}_threshold_ct{}.png'.format(prop.label, self.component, ct), thresh_image.astype(np.uint8) * 255)
+            # from skimage import io as skio
+            # label = props.cell.label
+            # print('Cell {}: {}'.format(label, metrics))
+            # skio.imsave('/lab/data/cellimages/{:05d}_extract.png'.format(label), image.astype(signals.dtype))
+            # skio.imsave('/lab/data/cellimages/{:05d}_cell_binary.png'.format(label), props.cell.image.astype(np.uint8) * 255)
+            # skio.imsave('/lab/data/cellimages/{:05d}_nucleus_binary.png'.format(label), nuc_image.astype(np.uint8) * 255)
+            # skio.imsave('/lab/data/cellimages/{:05d}_threshold_ct{}.png'.format(label, len(ps)), thresh_image.astype(np.uint8) * 255)
 
         return res
 
@@ -556,8 +551,7 @@ class Cytometer2D(KerasCytometer2D):
         if spot_count_channels is not None:
             indexes = [channel_names.index(c) for c in spot_count_channels]
             params = spot_count_params or {}
-            feature_calculators.append(SpotFeatures(indexes, spot_count_channels, COMP_CELL, **params))
-            feature_calculators.append(SpotFeatures(indexes, spot_count_channels, COMP_NUCLEUS, **params))
+            feature_calculators.append(SpotFeatures(indexes, spot_count_channels, **params))
 
         # Compute list of resulting feature names (values will be added in this order)
         feature_names = [v for fc in feature_calculators for v in fc.get_feature_names()]

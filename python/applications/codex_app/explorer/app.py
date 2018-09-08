@@ -783,26 +783,19 @@ def update_single_cell_buffer(new_children, _, current_children):
     if ac['flag']['clear_buffer']:
         ac['flag']['clear_buffer'] = False
         return []
-
     res = (current_children or [])
     if new_children is not None:
         for c in new_children:
-            if 'id' in c['props']:
-                print(c['props']['id'], c['type'])
             if c['type'] == 'Div' and 'id' in c['props'] and c['props']['id'] == 'single-cell-images':
                 res.extend(c['props']['children'])
-    print('Returning {} children'.format(len(res)))
-    if len(res) > 6:
-        print(res[0], res[5])
     return res
 
 
 @app.callback(
     Output('single-cells', 'children'),
-    [Input('tile', 'figure')],
-    [State('single-cells', 'children')]
+    [Input('tile', 'figure')]
 )
-def update_single_cells(_, children):
+def update_single_cells(_):
     df = get_tile_graph_data_selection()
 
     channels = data.get_tile_image_channels()

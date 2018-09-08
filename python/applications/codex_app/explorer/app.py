@@ -212,14 +212,22 @@ def get_image_settings_layout(id_format, channel_names, class_name, type='tile')
 
     return html.Div([
             html.Div([
-                html.Div(_ch_disp_name(channel_names[i]), style={'width': '50%', 'display': 'inline-block'}),
+                html.Div(
+                    _ch_disp_name(channel_names[i]),
+                    style={'width': '33%', 'display': 'inline-block'}
+                ),
+                html.Div(
+                    ' - '.join([str(v) for v in get_value_range(i)]),
+                    id=id_format.format(str(i) + '-range-label'),
+                    style={'width': '33%', 'display': 'inline-block', 'text-align': 'center'}
+                ),
                 html.Div(dcc.Dropdown(
                     id=id_format.format(str(i) + '-color'),
                     options=[{'label': c.title(), 'value': c} for c in color.get_all_color_names()],
                     value=colors[i],
                     clearable=False,
                     searchable=False
-                ), style={'width': '50%', 'display': 'inline-block'}),
+                ), style={'width': '33%', 'display': 'inline-block'}),
                 dcc.RangeSlider(
                     id=id_format.format(str(i) + '-range'),
                     min=ranges[i][0],
@@ -394,11 +402,15 @@ app.layout = html.Div([
         html.Div(
             className='row',
             children=[
-                html.Div([
-                    html.H4('Selected Cell Buffer', style={**TITLE_STYLE, **{'display': 'inline'}}),
-                    html.Button('Clear', id='clear-buffer', style={'display': 'inline', 'margin-left': '10px'})
-                ], style={'align': 'center'}),
-                html.Div(id='single-cells-buffer', className='ten columns')
+                html.Div(
+                    html.H4('Selected Cell Buffer', style={**TITLE_STYLE, **{'float': 'right'}}),
+                    className='six columns'
+                ),
+                html.Div(
+                    html.Button('Clear', id='clear-buffer', style={'float': 'left', 'margin-left': '10px'}),
+                    className='six columns'
+                ),
+                html.Div(id='single-cells-buffer', className='twelve columns')
             ]
         ),
         html.P(id='clear-buffer-state')
@@ -724,6 +736,18 @@ def update_tile_title(_):
         ))
 
     return children
+
+
+# Channel slider range label callbacks
+for i in range(get_tile_nchannels()):
+    @app.callback(
+        Output('tile-ch-{}-range-label'.format(i), 'children'),
+        [Input('tile-ch-{}-range'.format(i), 'value')]
+    )
+    def update_channel_range_label(val):
+        if val is None:
+            return None
+        return ' - '.join([str(v) for v in val])
 
 
 @app.callback(

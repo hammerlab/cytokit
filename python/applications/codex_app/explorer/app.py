@@ -40,8 +40,10 @@ def get_montage_image():
     return ac['processor']['montage'].run(data.get_montage_image())
 
 
-def get_tile_image(apply_display_settings=True):
-    img = data.get_tile_image(*ac['selection']['tile']['coords'])
+def get_tile_image(apply_display_settings=True, coords=None):
+    if coords is None:
+        coords = ac['selection']['tile']['coords']
+    img = data.get_tile_image(*coords)
     return ac['processor']['tile'].run(img) if apply_display_settings else img
 
 
@@ -79,11 +81,11 @@ def get_base_data():
     if data.db.exists('app', 'operation_code'):
         code = data.db.get('app', 'operation_code')
         n = len(df)
-        logger.info('Applying custom code:\n%s', code)
+        logger.debug('Applying custom code:\n%s', code)
         local_vars = {'df': df}
         exec(code, globals(), local_vars)
         df = local_vars['df']
-        logger.info('Size of frame before custom operations = %s, after = %s', n, len(df))
+        logger.debug('Size of frame before custom operations = %s, after = %s', n, len(df))
 
     return df
 
@@ -206,7 +208,7 @@ def get_image_settings_layout(id_format, channel_names, class_name, type='tile')
     def get_value_range(i):
         if values:
             return values[i]
-        if channel_names[i].startswith(data.CH_SRC_CYTO):
+        if channel_names[i].startswith(lib.CH_SRC_CYTO):
             return [0, 1]
         return ranges[i]
 
@@ -406,14 +408,17 @@ app.layout = html.Div([
                     html.H4('Selected Cell Buffer', style={**TITLE_STYLE, **{'float': 'right'}}),
                     className='six columns'
                 ),
-                html.Div(
-                    html.Button('Clear', id='clear-buffer', style={'float': 'left', 'margin-left': '10px'}),
+                html.Div([
+                        html.Button('Clear', id='clear-buffer', style={'float': 'left', 'margin-left': '10px'}),
+                        html.Button('Load All', id='load-buffer', style={'float': 'left', 'margin-left': '10px'})
+                    ],
                     className='six columns'
                 ),
                 html.Div(id='single-cells-buffer', className='twelve columns')
             ]
         ),
-        html.P(id='clear-buffer-state')
+        html.P(id='clear-buffer-state'),
+        html.P(id='load-buffer-state')
     ]
 )
 
@@ -677,18 +682,28 @@ def _get_tile_hover_text(r):
     return '<br>'.join(fields)
 
 
-def get_tile_graph_data_selection():
+def get_tile_coordinates_in_selection():
+    """Return list of all tile x, y tuples currently present in selected cell data"""
     df = get_graph_data_selection()
     if df is None:
         return None
-    # Further restrict to only the selected tile
+    return list(df.set_index(['tile_x', 'tile_y']).index.unique())
+
+
+def get_tile_graph_data_selection(coords=None):
+    df = get_graph_data_selection()
+    if df is None:
+        return None
+    if coords is None:
+        coords = ac['selection']['tile']['coords']
+    tx, ty = coords
+
+    # Further restrict selected data to only the requested tile
     df = df.set_index(['tile_x', 'tile_y']).sort_index()
-    tx, ty = ac['selection']['tile']['coords']
     if (tx, ty) not in df.index:
         return None
     # Make sure to use list of tuples for slice to avoid series result with single matches
-    df = df.loc[[(tx, ty)]]
-    return df
+    return df.loc[[(tx, ty)]]
 
 
 def _get_tile_figure(relayout_data):
@@ -776,6 +791,10 @@ def update_tile(*args):
     return _get_tile_figure(relayout_data)
 
 
+#######################
+# Single Cell Functions
+#######################
+
 def get_single_cells_title(n_cells=0, n_tile=0):
     children = [html.H4('Selected Cells', style=TITLE_STYLE)]
 
@@ -793,21 +812,83 @@ def get_single_cells_title(n_cells=0, n_tile=0):
     Output('clear-buffer-state', 'children'),
     [Input('clear-buffer', 'n_clicks')]
 )
-def update_clear_buffer_state(_):
-    ac['flag']['clear_buffer'] = True
+def update_clear_buffer_state(n_clicks):
+    if n_clicks:
+        ac['flag']['clear_buffer'] = True
     return None
 
 
 @app.callback(
+    Output('load-buffer-state', 'children'),
+    [Input('load-buffer', 'n_clicks')]
+)
+def update_load_buffer_state(n_clicks):
+    if n_clicks:
+        ac['flag']['load_buffer'] = True
+    return None
+
+
+def create_cell_image(cell):
+    style = {'padding': '1px'}
+    if cfg.cell_image_display_width is not None:
+        style['width'] = '{:.0f}px'.format(cfg.cell_image_display_width)
+    return html.Img(
+        title='Cell ID: {}'.format(cell['id']),
+        src='data:image/png;base64,{}'.format(lib.get_encoded_image(cell['image'])),
+        style=style
+    )
+
+
+def get_single_cell_data(coords=None):
+    df = get_tile_graph_data_selection(coords=coords)
+    if df is None:
+        return None, None
+
+    # Downsample if necessary
+    n_cells_in_tile = len(df)
+    if len(df) > cfg.max_single_cells:
+        logger.info(
+            'Sampling single cell data for %s cells down to %s records %s',
+            len(df), cfg.max_single_cells,
+            '' if coords is None else '[tile = ' + str(coords) + ']'
+        )
+        df = df.sample(n=cfg.max_single_cells, random_state=cfg.random_state)
+
+    raw_tile = get_tile_image(apply_display_settings=False, coords=coords)
+    display_tile = get_tile_image(apply_display_settings=True, coords=coords)
+    channels = data.get_tile_image_channels()
+    cell_data = lib.get_single_cell_data(df, raw_tile, display_tile, channels, cell_image_size=cfg.cell_image_size)
+    return cell_data, n_cells_in_tile
+
+
+@app.callback(
     Output('single-cells-buffer', 'children'),
-    [Input('single-cells', 'children'), Input('clear-buffer-state', 'children')],
+    [
+        Input('single-cells', 'children'),
+        Input('clear-buffer-state', 'children'),
+        Input('load-buffer-state', 'children')
+    ],
     [State('single-cells-buffer', 'children')]
 )
-def update_single_cell_buffer(new_children, _, current_children):
+def update_single_cell_buffer(new_children, _1, _2, current_children):
     if ac['flag']['clear_buffer']:
         ac['flag']['clear_buffer'] = False
         return []
     res = (current_children or [])
+
+    # If load buffer flag was set, ignore cells for selected tile and instead load all cells
+    # across entire experiment
+    if ac['flag']['load_buffer']:
+        ac['flag']['load_buffer'] = False
+        tile_coords = get_tile_coordinates_in_selection()
+        for i, coords in enumerate(tile_coords):
+            logger.info('Extracting cells (for buffer) from tile %s (%s of %s)', coords, i+1, len(tile_coords))
+            cell_data, _ = get_single_cell_data(coords)
+            if cell_data is not None:
+                res.extend([create_cell_image(cell) for cell in cell_data])
+        return res
+
+    # Otherwise, append new entries from tile just selected
     if new_children is not None:
         for c in new_children:
             if c['type'] == 'Div' and 'id' in c['props'] and c['props']['id'] == 'single-cell-images':
@@ -820,56 +901,12 @@ def update_single_cell_buffer(new_children, _, current_children):
     [Input('tile', 'figure')]
 )
 def update_single_cells(_):
-    df = get_tile_graph_data_selection()
-
-    channels = data.get_tile_image_channels()
-    cell_boundary_channel = data.CH_SRC_CYTO + '_cell_boundary'
-
-    if cell_boundary_channel not in channels:
-        logger.warning('Cannot generate single cell images because extract does not contain cell boundary channel')
-        return get_single_cells_title()
-    if df is None:
+    cell_data, n_cells_in_tile = get_single_cell_data()
+    if cell_data is None:
         return get_single_cells_title()
 
-    # Downsample if necessary
-    n_cells_in_tile = len(df)
-    if len(df) > cfg.max_single_cells:
-        logger.info('Sampling single cell data for %s cells down to %s records', len(df), cfg.max_single_cells)
-        df = df.sample(n=cfg.max_single_cells, random_state=cfg.random_state)
-
-    # Fetch raw tile image with original channels, and extract cell boundaries
-    img_tile = get_tile_image(apply_display_settings=False)
-    img_cell = img_tile[channels.index(cell_boundary_channel)].copy()
-
-    # Fetch RGB version of tile image
-    img_tile = get_tile_image(apply_display_settings=True)
-
-    # Eliminate cell objects not in sample
-    img_cell[~np.isin(img_cell, df['id'].values)] = 0
-
-    logger.debug(
-        'Single cell tile shape = %s (%s), cell boundary shape = %s (%s)',
-        img_tile.shape, img_tile.dtype, img_cell.shape, img_cell.dtype
-    )
-
-    # Extract regions in RGB image corresponding to cell labelings
-    cells = lib.extract_single_cell_images(
-        img_cell, img_tile, is_boundary=True,
-        patch_shape=cfg.cell_image_size,
-        apply_mask=True, fill_value=0)
-
-    style = {'padding': '1px'}
-    if cfg.cell_image_display_width is not None:
-        style['width'] = '{:.0f}px'.format(cfg.cell_image_display_width)
-    images = [
-        html.Img(
-            title='Cell ID: {}'.format(c['id']),
-            src='data:image/png;base64,{}'.format(lib.get_encoded_image(c['image'])),
-            style=style
-        )
-        for c in cells
-    ]
-    return get_single_cells_title(len(cells), n_cells_in_tile) + [
+    images = [create_cell_image(cell) for cell in cell_data]
+    return get_single_cells_title(len(cell_data), n_cells_in_tile) + [
         html.Div(
             images,
             id='single-cell-images',

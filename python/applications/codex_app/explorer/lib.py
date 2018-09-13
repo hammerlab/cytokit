@@ -1,12 +1,16 @@
 from skimage import exposure
 from skimage import measure
 from skimage import morphology
+from codex.cli.operator import CH_SRC_CYTO
 from PIL import Image
 import numpy as np
 from io import BytesIO
 import base64
 import dash_core_components as dcc
 from cvutils import ops as cvops
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_encoded_image(img):
@@ -100,22 +104,51 @@ class ImageProcessor(object):
         return img
 
 
-def extract_single_cell_images(
-        cell_image, target_image,
-        patch_shape=None, is_boundary=True, apply_mask=False, fill_value=0):
+def get_single_cell_data(df, raw_tile, display_tile, channels, cell_image_size=None):
+    if df is None:
+        return None
+
+    cell_boundary_channel = CH_SRC_CYTO + '_cell_boundary'
+    if cell_boundary_channel not in channels:
+        logger.warning('Cannot generate single cell images because extract does not contain cell boundary channel')
+        return None
+
+    # Fetch raw tile image with original channels, and extract cell boundaries
+    cell_tile = raw_tile[channels.index(cell_boundary_channel)].copy()
+
+    # Eliminate cell objects not in sample
+    cell_tile[~np.isin(cell_tile, df['id'].values)] = 0
+
+    logger.debug(
+        'Single cell tile shape = %s (%s), cell boundary image shape = %s (%s)',
+        raw_tile.shape, raw_tile.dtype, cell_tile.shape, cell_tile.dtype
+    )
+
+    # Extract regions in RGB image (display tile) corresponding to cell labelings
+    cell_data = extract_single_cell_data(
+        cell_tile, display_tile, is_boundary=True,
+        patch_shape=cell_image_size,
+        apply_mask=True, fill_value=0)
+
+    # Return list of dictionaries where each represents one cell (with at least an id and image)
+    return cell_data
+
+
+def extract_single_cell_data(cell_image, target_image, patch_shape=None, is_boundary=True,
+                             apply_mask=False, fill_value=0):
     """Extract single cell images from a target image
 
     Args:
-        cell_mask_image: 2D label image containing cell masks (each with different id)
+        cell_image: 2D label image containing cell objects (each with different id)
         target_image: Image from which to extract patches around cells; must be at least 2D
             in format HW[D1, D2, ...]
         patch_shape: Target shape of individual cell images; If None (default) no cropping/padding
             will occur but if set, this value should be a 2 item sequence [rows, cols] and cell image patches
             will be conformed to this shape by either cropping or padding out from the center
-        is_boundary: Whether or not cell image is of boundary or masks
+        is_boundary: Whether or not cell image is of boundary or masks (default True)
+        apply_mask: Whether or not to set pixels outside of cell binary image to `fill_value` (default False)
+        fill_value: Pixel values for parts of cell image outside cell object (default 0)
     """
-    from skimage.measure import regionprops
-
     if target_image.shape[:2] != cell_image.shape[:2]:
         raise ValueError(
             'Cell label image (shape = {}) must have same HW dimensions as target image (shape = {})'
@@ -126,7 +159,7 @@ def extract_single_cell_images(
         raise ValueError('Target patch shape should be a 2 item sequence (given = {})'.format(patch_shape))
 
     cells = []
-    props = regionprops(cell_image)
+    props = measure.regionprops(cell_image)
     for p in props:
 
         # Extract bounding box offsets for extraction
@@ -154,4 +187,3 @@ def extract_single_cell_images(
 
         cells.append(dict(id=p.label, properties=p, image=patch))
     return cells
-

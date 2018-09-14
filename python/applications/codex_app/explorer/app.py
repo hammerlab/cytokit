@@ -65,11 +65,15 @@ ac['flag']['clear_buffer'] = False
 
 
 def get_graph_axis_selections():
+    xscale = data.db.get('app', 'axis_x_scale') or 'linear'
+    yscale = data.db.get('app', 'axis_y_scale') or 'linear'
     return dict(
         xvar=data.db.get('app', 'axis_x_var'),
-        xscale=data.db.get('app', 'axis_x_scale') or 'linear',
+        xscale=xscale,
+        xtrans=lib.get_transform_by_name(xscale),
         yvar=data.db.get('app', 'axis_y_var'),
-        yscale=data.db.get('app', 'axis_y_scale') or 'linear'
+        yscale=yscale,
+        ytrans=lib.get_transform_by_name(yscale),
     )
 
 
@@ -128,6 +132,22 @@ def get_graph_figure():
     x = d['xvar'] if d is not None and 'xvar' in d else []
     y = d['yvar'] if d is not None and 'yvar' in d else []
 
+    selections = get_graph_axis_selections()
+    x = selections['xtrans'].apply(x)
+    y = selections['ytrans'].apply(y)
+
+    fig_layout = {
+        'margin': dict(t=25),
+        'title': '',
+        'titlefont': {'size': 12},
+        'xaxis': {
+            'title': (selections['xvar'] or '').upper()
+        },
+        'yaxis': {
+            'title': (selections['yvar'] or '').upper()
+        },
+        'dragmode': 'select'
+    }
     if len(y) > 0:
         fig_data = [
             dict(
@@ -136,7 +156,7 @@ def get_graph_figure():
                 # See: https://github.com/plotly/plotly.py/blob/master/plotly/colors.py
                 colorscale='Portland',
                 type='histogram2dcontour',
-                opacity=.8,
+                opacity=1,
                 contours={'coloring': 'fill'}
             ),
             dict(
@@ -144,31 +164,22 @@ def get_graph_figure():
                 y=y,
                 mode='markers',
                 marker={'opacity': cfg.graph_point_opacity, 'color': 'white'},
-                type='scattergl'
+                type='scattergl',
+                name='Cells'
             )
         ]
+        fig_layout['showlegend'] = True
+        fig_layout['legend'] = dict(
+            orientation='h',
+            font=dict(color='white'),
+            bgcolor='#3070A6',
+            bordercolor='#FFFFFF',
+            borderwidth=2
+        )
     else:
         fig_data = [
-            dict(x=x, type='histogram', marker={'color': '#0b64a2'})
+            dict(x=x, type='histogram', marker={'color': '#3070A6'})
         ]
-
-    selections = get_graph_axis_selections()
-    fig_layout = {
-        'margin': dict(t=25),
-        'title': '',
-        'titlefont': {'size': 12},
-        'xaxis': {
-            'title': (selections['xvar'] or '').upper(),
-            'autorange': True,
-            'type': selections['xscale']
-        },
-        'yaxis': {
-            'title': (selections['yvar'] or '').upper(),
-            'autorange': True,
-            'type': selections['yscale']
-        },
-        'dragmode': 'select'
-    }
 
     fig = dict(data=fig_data, layout=fig_layout)
     return fig
@@ -283,8 +294,9 @@ def get_axis_settings_layout(axis):
             html.Div(dcc.Dropdown(
                 id='axis_' + axis + '_scale',
                 options=[
-                    {'label': 'Log', 'value': 'log'},
-                    {'label': 'Linear', 'value': 'linear'}
+                    {'label': 'Linear', 'value': 'linear'},
+                    {'label': 'Log', 'value': 'log10'},
+                    {'label': 'Hyperbolic Sine', 'value': 'asinh'},
                 ],
                 value=scale,
                 searchable=False,
@@ -346,7 +358,7 @@ app.layout = html.Div([
                     className='four columns'
                 )
             ]),
-            style={'backgroundColor': '#0b64a2'}
+            style={'backgroundColor': '#3070A6'}
         ),
         html.Div([
                 html.Div(
@@ -405,7 +417,25 @@ app.layout = html.Div([
             className='row',
             children=[
                 html.Div(
-                    html.H4('Selected Cell Buffer', style={**TITLE_STYLE, **{'float': 'right'}}),
+                    html.Div([
+                            dcc.Checklist(
+                                options=[
+                                    {'label': '', 'value': 'enabled'}
+                                ],
+                                values=[],
+                                id='enable-buffer',
+                                style={
+                                    'display': 'inline-block', 'vertical-align': 'top',
+                                    'margin-top': '5px', 'margin-right': '5px'
+                                }
+                            ),
+                            html.H4(
+                                'Selected Cell Buffer',
+                                style={**TITLE_STYLE, **{'display': 'inline-block'}}
+                            )
+                        ],
+                        style={'float': 'right'}
+                    ),
                     className='six columns'
                 ),
                 html.Div([
@@ -525,7 +555,10 @@ def selection_type(selected_data):
 def _apply_axis_filter(axis, df, var_range):
     assert axis in ['x', 'y']
     axis_selections = get_graph_axis_selections()
-    return df[df[axis_selections[axis + 'var']].between(*var_range)]
+    vmin, vmax = var_range
+    vmin = axis_selections[axis + 'trans'].invert(vmin)
+    vmax = axis_selections[axis + 'trans'].invert(vmax)
+    return df[df[axis_selections[axis + 'var']].between(vmin, vmax)]
 
 
 def get_graph_data_selection():
@@ -868,9 +901,15 @@ def get_single_cell_data(coords=None):
         Input('clear-buffer-state', 'children'),
         Input('load-buffer-state', 'children')
     ],
-    [State('single-cells-buffer', 'children')]
+    [
+        State('single-cells-buffer', 'children'),
+        State('enable-buffer', 'values')
+    ]
 )
-def update_single_cell_buffer(new_children, _1, _2, current_children):
+def update_single_cell_buffer(new_children, _1, _2, current_children, enabled):
+    if not enabled:
+        return []
+
     if ac['flag']['clear_buffer']:
         ac['flag']['clear_buffer'] = False
         return []

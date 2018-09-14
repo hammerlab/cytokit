@@ -187,3 +187,60 @@ def extract_single_cell_data(cell_image, target_image, patch_shape=None, is_boun
 
         cells.append(dict(id=p.label, properties=p, image=patch))
     return cells
+
+
+def _apply_fn(fn, v):
+    if v is None:
+        return v
+    if np.isscalar(v):
+        return fn(np.array([v]))[0]
+    return fn(np.array(v))
+
+
+class Transform(object):
+
+    def apply(self, v):
+        return _apply_fn(self._apply, v)
+
+    def invert(self, v):
+        return _apply_fn(self._invert, v)
+
+
+class LinearTransform(Transform):
+
+    def _apply(self, v):
+        return v
+
+    def _invert(self, v):
+        return v
+
+
+class Log10Transform(Transform):
+
+    def _apply(self, v):
+        return np.log10(v)
+
+    def _invert(self, v):
+        return np.power(10, v)
+
+
+class AsinhTransform(Transform):
+
+    def _apply(self, v):
+        return np.arcsinh(v)
+
+    def _invert(self, v):
+        return np.sinh(v)
+
+
+TRANSFORMS = {
+    'linear': LinearTransform(),
+    'log10': Log10Transform(),
+    'asinh': AsinhTransform()
+}
+
+
+def get_transform_by_name(transform):
+    if transform not in TRANSFORMS:
+        raise ValueError('Transform "{}" is not valid (must be one of {})'.format(transform, list(TRANSFORMS.keys())))
+    return TRANSFORMS[transform]

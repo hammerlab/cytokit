@@ -18,6 +18,9 @@ ENV_APP_MAX_SINGLE_CELLS = 'APP_MAX_SINGLE_CELLS'
 ENV_APP_REGION_INDEX = 'APP_REGION_INDEX'
 ENV_APP_EXTRACT_NAME = 'APP_EXTRACT_NAME'
 ENV_APP_MONTAGE_NAME = 'APP_MONTAGE_NAME'
+ENV_APP_MONTAGE_CHANNEL_NAMES = 'APP_MONTAGE_CHANNEL_NAMES'
+ENV_APP_MONTAGE_CHANNEL_COLORS = 'APP_MONTAGE_CHANNEL_COLORS'
+ENV_APP_MONTAGE_CHANNEL_RANGES = 'APP_MONTAGE_CHANNEL_RANGES'
 ENV_APP_EXTRACT_BIT_DEPTH = 'APP_EXTRACT_BIT_DEPTH'
 ENV_APP_MONTAGE_CYCLE = 'MONTAGE_CYCLE '
 ENV_APP_MONTAGE_Z = 'MONTAGE_Z'
@@ -118,6 +121,25 @@ class AppConfig(object):
     @property
     def tile_shape(self):
         return self._exp_config.tile_height, self._exp_config.tile_width
+
+    @property
+    def montage_channel_names(self):
+        names = os.getenv(ENV_APP_MONTAGE_CHANNEL_NAMES)
+        return None if names is None else names.split(',')
+
+    @property
+    def montage_channel_colors(self):
+        colors = os.getenv(ENV_APP_MONTAGE_CHANNEL_COLORS)
+        return None if colors is None else colors.split(',')
+
+    @property
+    def montage_channel_ranges(self):
+        ranges = os.getenv(ENV_APP_MONTAGE_CHANNEL_RANGES)
+        # Split on command and separate into start and stop tuples
+        return None if ranges is None else [
+            (int(v.split('-')[0]), int(v.split('-')[1]))
+            for v in ranges.split(',')
+        ]
 
     @property
     def exp_name(self):

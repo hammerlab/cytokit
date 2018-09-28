@@ -6,8 +6,11 @@ DEFAULT_COLORS = OrderedDict([
     ('blue', [0, 0, 1]),
     ('cyan', [0, 1, 1]),
     ('magenta', [1, 0, 1]),
-    ('gray', [1, 1, 1])
+    ('gray', [1, 1, 1]),
+    ('none', [0, 0, 0])
 ])
+
+COLORS_PORTLAND = ['rgb(12,51,131)', 'rgb(10,136,186)', 'rgb(242,211,56)', 'rgb(242,143,56)', 'rgb(217,30,30)']
 
 
 def get_all_color_names():

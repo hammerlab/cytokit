@@ -2,7 +2,8 @@ from skimage.external.tifffile import imread
 from codex import io as codex_io
 from codex import config as codex_config
 from codex import data as codex_data
-from codex_app.explorer.config import cfg
+from codex_app.explorer.config import cfg, ENV_APP_MONTAGE_CHANNEL_NAMES
+from codex_app.explorer import color
 from collections import defaultdict
 from collections import OrderedDict
 import os
@@ -106,6 +107,37 @@ def _load_montage_data():
     img = img[cfg.montage_cycle, cfg.montage_z]
     labels = list(meta['structured_labels'][cfg.montage_cycle, cfg.montage_z])
 
+    ############################
+    # Montage Display Properties
+    ############################
+
+    channel_filter = cfg.montage_channel_names
+    if channel_filter is not None:
+        # Validate that all provided channel names exist
+        for c in channel_filter:
+            if c not in labels:
+                raise ValueError(
+                    'Configured montage channel name "{}" does not exist in montage image '
+                    '(available channels = {}); Fix or remove this channel name from the (comma-separated) environment '
+                    'variable "{}" and run again'
+                    .format(c, labels, ENV_APP_MONTAGE_CHANNEL_NAMES)
+                )
+
+        # Subset both the image and the labels to the channels provided (make sure order of arrays matches
+        # order of given channels -- which then matches to other montage options like color/range)
+        img = img[np.array([labels.index(c) for c in channel_filter])]
+        labels = channel_filter
+
+    ranges = cfg.montage_channel_ranges
+    colors = cfg.montage_channel_colors
+    # Map string color names to rgb multipliers
+    if colors is not None:
+        colors = [color.map(c) for c in colors]
+
+    ####################
+    # Montage Resampling
+    ####################
+
     logger.info('Loaded montage image with shape = %s, dtype = %s', img.shape, img.dtype)
     if img.dtype != np.uint8 and img.dtype != np.uint16:
         raise ValueError('Only 8 or 16 bit images are supported (image type = {})'.format(img.dtype))
@@ -121,6 +153,8 @@ def _load_montage_data():
     # Image is now (C, H, W)
     db.put('images', 'montage', img)
     db.put('channels', 'montage', labels)
+    db.put('colors', 'montage', colors)
+    db.put('ranges', 'montage', ranges)
 
 
 def get_montage_image():
@@ -129,6 +163,14 @@ def get_montage_image():
 
 def get_montage_image_channels():
     return db.get('channels', 'montage')
+
+
+def get_montage_image_colors():
+    return db.get('colors', 'montage')
+
+
+def get_montage_image_ranges():
+    return db.get('ranges', 'montage')
 
 
 def _tile_loaded():

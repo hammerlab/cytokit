@@ -52,7 +52,11 @@ def get_tile_nchannels():
 
 
 ac['shape']['montage'] = data.get_montage_image().shape
-ac['processor']['montage'] = lib.ImageProcessor(ac['shape']['montage'][0])
+ac['processor']['montage'] = lib.ImageProcessor(
+    n_channels=ac['shape']['montage'][0],
+    ranges=data.get_montage_image_ranges(),
+    colors=data.get_montage_image_colors()
+)
 ac['layouts']['montage'] = lib.get_interactive_image_layout(get_montage_image())
 
 ac['shape']['tile'] = data.get_tile_image().shape
@@ -116,7 +120,6 @@ def get_graph_data():
         if selections['yvar'] not in cols:
             cols += [selections['yvar']]
 
-    #df = get_base_data().copy()[cols]
     df = get_base_data().copy().filter(items=cols)
     for k, v in vars.items():
         df[k] = df[v]

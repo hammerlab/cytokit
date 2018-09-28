@@ -130,7 +130,7 @@ class DataCLI(CLI):
             op = list(config.keys())[0]
             if not hasattr(self, op):
                 raise ValueError('CLI function name "{}" is invalid'.format(op))
-            logging.info('Running operation "%s" with arguments "%s"', op, config[op])
+            logging.debug('Running operation "%s" with arguments "%s"', op, config[op])
             fn = getattr(self, op)
 
             # Extract kwargs relevant for this operation

@@ -158,7 +158,7 @@ class CodexDriftCompensator(CodexOp):
             # Convert image back to typical axis order
             img = np.moveaxis(img, -1, 1)
             if tile_subset.shape != img.shape:
-                raise ValueError(
+                raise AssertionError(
                     'Image after drift compensation application has shape {} instead of expected shape {}'
                     .format(img.shape, tile_subset.shape)
                 )
@@ -184,7 +184,7 @@ class CodexDriftCompensator(CodexOp):
 
         # Validate shape of result
         if res.shape != tile.shape:
-            raise ValueError(
+            raise AssertionError(
                 'Tile shape after drift compensation ({}) does not match input shape ({})'
                 .format(res.shape, tile.shape)
             )

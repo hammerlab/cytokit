@@ -10,11 +10,11 @@ def get_tile_montage(config, image_dir, hyperstack, icyc=0, iz=0, ich=0, ireg=0,
                      imread_fn=None):
     """Generate a montage image for a specific cycle, z-plane, channel, and region
 
-    This function supports both raw, flattened 2D images as well as consolidated, 5D 
+    This function supports both raw, flattened 2D images as well as consolidated, 5D
     hyperstacks (as determined by `hyperstack` argument)
     Args:
         config: Experiment configuration
-        image_dir: Location of tiled images; These should include all z-planes, cycles, and channels in 
+        image_dir: Location of tiled images; These should include all z-planes, cycles, and channels in
             individual tif files (e.g. the output of the pre-processing or segmentation pipelines)
         hyperstack: Flag indicating whether or not images are 5D hyperstacks or flattened 2D images:
             - Hyperstacks are typically results from any sort of processing or segmentation step

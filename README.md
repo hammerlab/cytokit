@@ -27,7 +27,7 @@ Cytokit pipelines can be configured to use any of the above and produce several 
 - *Adjacency Graph* - Identifiers of neighboring cells as well as sizes of shared boundaries (as a percentage of cell perimeter)
 - *Cell Morphology* - Size, diameter, solidity, eccentricity, etc.
 
-Additionally, Cytokit offers a UI for quality assurance and high-level analysis with a focus on visualization of the relationships between spatial properties of cells and signal intensities.  See the [Cytokit Explorer](python/applications/codex_app/explorer) docs for more details.
+Additionally, Cytokit offers a UI for quality assurance and high-level analysis with a focus on visualization of the relationships between spatial properties of cells and signal intensities.  See the [Cytokit Explorer](python/applications/cytokit_app/explorer) docs for more details.
 
 Installing and configuring Cytokit currently involves little more than installing [nvidia-docker](https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)) and building or downloading the Cytokit container image, but this inherently limits support to Linux operating systems only.  Additional limitations of Cytokit include:
 
@@ -187,7 +187,7 @@ Some features here include:
 - Extraction of single cell image patches (matching gates/filters)
 - Specification of custom logic for filtering
 
-See the [Cytokit Explorer](python/applications/codex_app/explorer/README.md) docs for more examples.
+See the [Cytokit Explorer](python/applications/cytokit_app/explorer/README.md) docs for more examples.
   
 ### Installation
 

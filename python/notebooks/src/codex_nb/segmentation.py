@@ -3,8 +3,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os.path as osp
-from codex import config as codex_config
-from codex import io as codex_io
+from cytokit import config as cytokit_config
+from cytokit import io as cytokit_io
 import pandas as pd
 from skimage.filters import rank
 from skimage.filters import threshold_local

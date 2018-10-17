@@ -11,9 +11,9 @@ with open('requirements.txt', 'r') as fd:
 
 if __name__ == '__main__':
     setup(
-        name='codex',
+        name='cytokit',
         version='0.0.1',
-        description="CODEX Data Processing Pipeline",
+        description="Microscopy Image Cytometry Toolkit",
         author="Eric Czech",
         author_email="eric@hammerlab.org",
         url="",
@@ -26,9 +26,12 @@ if __name__ == '__main__':
             'Topic :: Scientific/Engineering :: Bio-Informatics',
         ],
         install_requires=requires,
-        packages=['codex', 'codex.cli', 'codex.exec', 'codex.miq', 'codex.ops', 'codex.utils', 'codex.cytometry'],
+        packages=[
+            'cytokit', 'cytokit.cli', 'cytokit.exec', 'cytokit.miq',
+            'cytokit.ops', 'cytokit.utils', 'cytokit.cytometry', 'cytokit.function'
+        ],
         package_data={
-            'codex': ['configs/*/examples/*/*', 'configs/*/schema/*']
+            'cytokit': ['configs/*/examples/*/*', 'configs/*/schema/*']
         },
         include_package_data=True
     )

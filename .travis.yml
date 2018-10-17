@@ -2,14 +2,6 @@ sudo: false
 language: python
 python:
   - "3.6"
-
-#sudo: required
-#services:
-#  - docker
-#before_install:
-#  - docker build -t hammerlab/codex_app -f docker/Dockerfile
-#  - docker run -d -p 127.0.0.1:80:4567 hammerlab/codex_app /bin/bash -c "cd /root/sinatra; bundle exec foreman start;"
-
 install:
   # Example modified from https://conda.io/docs/user-guide/tasks/use-conda-with-travis-ci.html
   - sudo apt-get update
@@ -37,7 +29,7 @@ install:
   - pip install --progress-bar off .
   - pip install coveralls pylint
 script:
-  - nosetests -sv codex/ --with-coverage --cover-inclusive --cover-package=codex
+  - nosetests -sv cytokit/ --with-coverage --cover-inclusive --cover-package=cytokit
   - bash ./.lint.sh
 after_success:
   - coveralls

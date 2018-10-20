@@ -93,6 +93,7 @@ def _get_cytometry_data():
     path = cfg.cytometry_data_path
     if path is None:
         path = osp.join(cfg.exp_data_dir, cytokit_io.get_cytometry_agg_path('csv'))
+    logger.info('Loading cytometry data from path "%s"', path)
     return pd.read_csv(path)
 
 

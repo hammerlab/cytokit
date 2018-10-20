@@ -35,9 +35,6 @@ MODELS = {
 }
 
 
-# max_cells=250000
-# step_size = 10
-
 def _get_params(key, params, defaults):
     # Copy default values
     res = dict(defaults)

@@ -144,41 +144,43 @@ def get_graph_figure():
         'title': '',
         'titlefont': {'size': 12},
         'xaxis': {
-            'title': (selections['xvar'] or '').upper()
+            'title': (selections['xvar'] or '').upper(),
+            'showgrid': False,
+            'showline': True,
+            'zeroline': False
         },
         'yaxis': {
-            'title': (selections['yvar'] or '').upper()
+            'title': (selections['yvar'] or '').upper(),
+            'showgrid': False,
+            'showline': True,
+            'zeroline': False
         },
         'dragmode': 'select'
     }
     if len(y) > 0:
-        fig_data = [
-            dict(
-                x=x,
-                y=y,
-                # See: https://github.com/plotly/plotly.py/blob/master/plotly/colors.py
+        try:
+            fig_data = lib.get_density_scatter_plot_data(
+                x, y, cfg.max_kde_cells,
+                opacity=cfg.graph_point_opacity,
                 colorscale='Portland',
-                type='histogram2dcontour',
-                opacity=1,
-                contours={'coloring': 'fill'}
-            ),
-            dict(
-                x=x,
-                y=y,
-                mode='markers',
-                marker={'opacity': cfg.graph_point_opacity, 'color': 'white'},
-                type='scattergl',
-                name='Cells'
+                size=3
             )
-        ]
-        fig_layout['showlegend'] = True
-        fig_layout['legend'] = dict(
-            orientation='h',
-            font=dict(color='white'),
-            bgcolor='#3070A6',
-            bordercolor='#FFFFFF',
-            borderwidth=2
-        )
+            fig_layout['showlegend'] = False
+        except:
+            logger.warning(
+                'An error occurred computing KDE estimates for sample; '
+                'falling back on countour histogram overlay'
+            )
+            fig_data = lib.get_density_overlay_plot_data(
+                x, y, opacity=cfg.graph_point_opacity, color='white')
+            fig_layout['showlegend'] = True
+            fig_layout['legend'] = dict(
+                orientation='h',
+                font=dict(color='white'),
+                bgcolor='#3070A6',
+                bordercolor='#FFFFFF',
+                borderwidth=2
+            )
     else:
         fig_data = [
             dict(x=x, type='histogram', marker={'color': '#3070A6'})
@@ -747,6 +749,7 @@ def _get_tile_figure(relayout_data):
     df = get_tile_graph_data_selection()
 
     ac['counts']['tile']['n'] = 0
+    ac['layouts']['tile']['shapes'] = []
     if df is not None:
         # Downsample if necessary
         if len(df) > cfg.max_tile_cells:
@@ -757,15 +760,47 @@ def _get_tile_figure(relayout_data):
         tx, ty = ac['selection']['tile']['coords']
         logger.info('Number of cells found in tile (x=%s, y=%s): %s', tx + 1, ty + 1, len(df))
 
+        # fig_data = [{
+        #     'x': df['x'],
+        #     'y': cfg.tile_shape[0] - df['y'],
+        #     'mode': 'markers',
+        #     'text': df.apply(_get_tile_hover_text, axis=1),
+        #     'marker': {'opacity': 1., 'color': cfg.tile_point_color},
+        #     'type': 'scattergl',
+        #     'hoverinfo': 'text'
+        # }]
+
+
         fig_data = [{
             'x': df['x'],
             'y': cfg.tile_shape[0] - df['y'],
             'mode': 'markers',
             'text': df.apply(_get_tile_hover_text, axis=1),
-            'marker': {'opacity': 1., 'color': cfg.tile_point_color},
+            'marker': {'opacity': 0, 'color': cfg.tile_point_color},
             'type': 'scattergl',
             'hoverinfo': 'text'
         }]
+        cell_data, _ = get_single_cell_data(df=df, max_cells=np.inf)
+        shapes = []
+        for cell in cell_data:
+            prop = cell['properties']
+            if prop.area > 0:
+                # Sort coordinates counter-clockwise
+                cell_coords = lib.get_sorted_boundary_coords(prop)
+
+                # Coords in properties are (row, col) as they come from skimage.measure.regionprops
+                # but SVG paths are expected in xy format
+                cell_coords = ['{},{}'.format(r[1], cfg.tile_shape[0]-r[0]) for r in cell_coords]
+
+                shapes.append({
+                    'type': 'path',
+                    # Path example: M 3,7 L2,8 L2,9 L5,9 L5,8 L4,7 Z (from https://plot.ly/python/shapes/)
+                    'path': 'M {} {} Z'.format(cell_coords[0], ' '.join('L' + v for v in cell_coords[1:])),
+                    'fillcolor': 'rgba(255, 140, 184, 0.5)', #cfg.tile_point_color,
+                    'line': {'color': 'rgb(255, 140, 184)'}
+                })
+        ac['layouts']['tile']['shapes'] = shapes
+
     figure = dict(data=fig_data, layout=ac['layouts']['tile'])
     return _relayout(figure, relayout_data)
 
@@ -875,20 +910,22 @@ def create_cell_image(cell):
     )
 
 
-def get_single_cell_data(coords=None):
-    df = get_tile_graph_data_selection(coords=coords)
+def get_single_cell_data(df=None, coords=None, max_cells=None):
+    if df is None:
+        df = get_tile_graph_data_selection(coords=coords)
     if df is None:
         return None, None
 
     # Downsample if necessary
     n_cells_in_tile = len(df)
-    if len(df) > cfg.max_single_cells:
+    max_cells = max_cells or cfg.max_single_cells
+    if len(df) > max_cells:
         logger.info(
             'Sampling single cell data for %s cells down to %s records %s',
-            len(df), cfg.max_single_cells,
+            len(df), max_cells,
             '' if coords is None else '[tile = ' + str(coords) + ']'
         )
-        df = df.sample(n=cfg.max_single_cells, random_state=cfg.random_state)
+        df = df.sample(n=max_cells, random_state=cfg.random_state)
 
     raw_tile = get_tile_image(apply_display_settings=False, coords=coords)
     display_tile = get_tile_image(apply_display_settings=True, coords=coords)
@@ -925,7 +962,7 @@ def update_single_cell_buffer(new_children, _1, _2, current_children, enabled):
         tile_coords = get_tile_coordinates_in_selection()
         for i, coords in enumerate(tile_coords):
             logger.info('Extracting cells (for buffer) from tile %s (%s of %s)', coords, i+1, len(tile_coords))
-            cell_data, _ = get_single_cell_data(coords)
+            cell_data, _ = get_single_cell_data(coords=coords)
             if cell_data is not None:
                 res.extend([create_cell_image(cell) for cell in cell_data])
         return res

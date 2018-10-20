@@ -1,8 +1,10 @@
 from skimage import exposure
 from skimage import measure
 from skimage import morphology
+from scipy.stats import gaussian_kde
 from cytokit.cli.operator import CH_SRC_CYTO
 from PIL import Image
+import pandas as pd
 import numpy as np
 from io import BytesIO
 import base64
@@ -104,6 +106,25 @@ class ImageProcessor(object):
         return img
 
 
+def get_sorted_boundary_coords(prop):
+    """Returns coordinates of skimage measure region property sorted by angle from centroid
+
+    See: https://plot.ly/python/polygon-area (PolygonSort)
+    Args:
+        prop: Property for image object; must be for a BOUNDARY object already, not a filled object
+    Returns:
+        A 2D array like (row, col) with each entry sorted counterclockwise
+    """
+    cr, cc = prop.centroid
+    angles = []
+    coords = prop.coords
+    for r, c in coords:
+        angle = (np.arctan2(r - cr, c - cc) + 2.0 * np.pi) % (2.0 * np.pi)
+        angles.append(angle)
+    o = np.argsort(angles)
+    return coords[np.array(o)]
+
+
 def get_single_cell_data(df, raw_tile, display_tile, channels, cell_image_size=None):
     if df is None:
         return None
@@ -187,6 +208,75 @@ def extract_single_cell_data(cell_image, target_image, patch_shape=None, is_boun
 
         cells.append(dict(id=p.label, properties=p, image=patch))
     return cells
+
+
+def get_kde_estimate(x, y, max_cells=None, random_state=None):
+    """Return density estimate for X and Y vectors of a 2D scatterplot
+
+    Args:
+        x: 1D array-like
+        y: 1D array-like; same length as x
+        max_cells: Maximum number of cells to incorporate in estimation; defaults to no
+            limit though performance will suffer for samples larger than ~10k rows
+        random_state: Sampling random state; only applies when max_cells is not None and
+            length of X/Y vectors is greater than max_cells
+    """
+    if x.size != y.size:
+        raise ValueError('X and Y must be of same length for KDE estimation')
+
+    # Apply sampling if necessary
+    M = np.vstack([x, y])
+    S = M
+    if max_cells is not None and x.size > max_cells:
+        idx = pd.Series(np.arange(x.size)).sample(n=max_cells, random_state=random_state)
+        x = np.array(x)[idx.values]
+        y = np.array(y)[idx.values]
+        S = np.vstack([x, y])
+
+    # Compute density estimate for each row
+    return gaussian_kde(S)(M)
+
+
+def get_density_scatter_plot_data(x, y, max_kde_cells, asinh_color_scale=False, **kwargs):
+    """Get scatterplot with points colored by density"""
+    col = get_kde_estimate(x, y, max_cells=max_kde_cells, random_state=1)
+    if asinh_color_scale:
+        col = np.arcsinh(col)
+    fig_data = [
+        dict(
+            x=x,
+            y=y,
+            mode='markers',
+            marker={**kwargs, **{'color': col}},
+            type='scattergl',
+            name='Cells'
+        )
+    ]
+    return fig_data
+
+
+def get_density_overlay_plot_data(x, y, **kwargs):
+    """Get scatterplot (with uniform color) overlay on 2D contour histogram"""
+    fig_data = [
+        dict(
+            x=x,
+            y=y,
+            # See: https://github.com/plotly/plotly.py/blob/master/plotly/colors.py
+            colorscale='Portland',
+            type='histogram2dcontour',
+            opacity=1,
+            contours={'coloring': 'fill'}
+        ),
+        dict(
+            x=x,
+            y=y,
+            mode='markers',
+            marker=kwargs,
+            type='scattergl',
+            name='Cells'
+        )
+    ]
+    return fig_data
 
 
 def _apply_fn(fn, v):

@@ -125,11 +125,11 @@ def get_sorted_boundary_coords(prop):
     return coords[np.array(o)]
 
 
-def get_single_cell_data(df, raw_tile, display_tile, channels, cell_image_size=None):
+def get_single_cell_data(df, raw_tile, display_tile, channels, cell_image_size=None, object_type='cell_boundary'):
     if df is None:
         return None
 
-    cell_boundary_channel = CH_SRC_CYTO + '_cell_boundary'
+    cell_boundary_channel = CH_SRC_CYTO + '_' + object_type
     if cell_boundary_channel not in channels:
         logger.warning('Cannot generate single cell images because extract does not contain cell boundary channel')
         return None

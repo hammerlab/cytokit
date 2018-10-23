@@ -744,6 +744,50 @@ def get_tile_graph_data_selection(coords=None):
     return df.loc[[(tx, ty)]]
 
 
+def _get_tile_figure_data(df):
+    points_only = cfg.cell_marker_mode == 'point'
+
+    # Create a trace with points at centroid of cells in tile image
+    fig_data = [{
+        'x': df['x'],
+        'y': cfg.tile_shape[0] - df['y'],
+        'mode': 'markers',
+        'text': df.apply(_get_tile_hover_text, axis=1),
+        'marker': {
+            'opacity': 1 if points_only else 0,
+            'color': cfg.cell_marker_point_color if points_only else cfg.cell_marker_mask_color,
+            'size': cfg.cell_marker_point_size
+        },
+        'type': 'scattergl',
+        'hoverinfo': 'text'
+    }]
+    if points_only:
+        return fig_data, None
+
+    # If configured to mark cells with masks instead of centroids, extract cell masks
+    # from the raw labeled images and convert them to SVG paths
+    cell_data, _ = get_single_cell_data(df=df, max_cells=np.inf, object_type=cfg.cell_marker_mask_object + '_boundary')
+    shapes = []
+    for cell in cell_data:
+        prop = cell['properties']
+        if prop.area > 0:
+            # Sort coordinates counter-clockwise
+            cell_coords = lib.get_sorted_boundary_coords(prop)
+
+            # Coords in properties are (row, col) as they come from skimage.measure.regionprops
+            # but SVG paths are expected in xy format
+            cell_coords = ['{},{}'.format(r[1], cfg.tile_shape[0] - r[0]) for r in cell_coords]
+
+            shapes.append({
+                'type': 'path',
+                # Path example: M 3,7 L2,8 L2,9 L5,9 L5,8 L4,7 Z (from https://plot.ly/python/shapes/)
+                'path': 'M {} {} Z'.format(cell_coords[0], ' '.join('L' + v for v in cell_coords[1:])),
+                'fillcolor': cfg.cell_marker_mask_fill,
+                'line': {'color': cfg.cell_marker_mask_color}
+            })
+    return fig_data, shapes
+
+
 def _get_tile_figure(relayout_data):
     fig_data = [{'x': [], 'y': [], 'mode': 'markers', 'type': 'scattergl'}]
     df = get_tile_graph_data_selection()
@@ -760,46 +804,9 @@ def _get_tile_figure(relayout_data):
         tx, ty = ac['selection']['tile']['coords']
         logger.info('Number of cells found in tile (x=%s, y=%s): %s', tx + 1, ty + 1, len(df))
 
-        # fig_data = [{
-        #     'x': df['x'],
-        #     'y': cfg.tile_shape[0] - df['y'],
-        #     'mode': 'markers',
-        #     'text': df.apply(_get_tile_hover_text, axis=1),
-        #     'marker': {'opacity': 1., 'color': cfg.tile_point_color},
-        #     'type': 'scattergl',
-        #     'hoverinfo': 'text'
-        # }]
-
-
-        fig_data = [{
-            'x': df['x'],
-            'y': cfg.tile_shape[0] - df['y'],
-            'mode': 'markers',
-            'text': df.apply(_get_tile_hover_text, axis=1),
-            'marker': {'opacity': 0, 'color': cfg.tile_point_color},
-            'type': 'scattergl',
-            'hoverinfo': 'text'
-        }]
-        cell_data, _ = get_single_cell_data(df=df, max_cells=np.inf)
-        shapes = []
-        for cell in cell_data:
-            prop = cell['properties']
-            if prop.area > 0:
-                # Sort coordinates counter-clockwise
-                cell_coords = lib.get_sorted_boundary_coords(prop)
-
-                # Coords in properties are (row, col) as they come from skimage.measure.regionprops
-                # but SVG paths are expected in xy format
-                cell_coords = ['{},{}'.format(r[1], cfg.tile_shape[0]-r[0]) for r in cell_coords]
-
-                shapes.append({
-                    'type': 'path',
-                    # Path example: M 3,7 L2,8 L2,9 L5,9 L5,8 L4,7 Z (from https://plot.ly/python/shapes/)
-                    'path': 'M {} {} Z'.format(cell_coords[0], ' '.join('L' + v for v in cell_coords[1:])),
-                    'fillcolor': 'rgba(255, 140, 184, 0.5)', #cfg.tile_point_color,
-                    'line': {'color': 'rgb(255, 140, 184)'}
-                })
-        ac['layouts']['tile']['shapes'] = shapes
+        fig_data, shapes = _get_tile_figure_data(df)
+        if shapes:
+            ac['layouts']['tile']['shapes'] = shapes
 
     figure = dict(data=fig_data, layout=ac['layouts']['tile'])
     return _relayout(figure, relayout_data)
@@ -910,7 +917,7 @@ def create_cell_image(cell):
     )
 
 
-def get_single_cell_data(df=None, coords=None, max_cells=None):
+def get_single_cell_data(df=None, coords=None, max_cells=None, **kwargs):
     if df is None:
         df = get_tile_graph_data_selection(coords=coords)
     if df is None:
@@ -930,7 +937,11 @@ def get_single_cell_data(df=None, coords=None, max_cells=None):
     raw_tile = get_tile_image(apply_display_settings=False, coords=coords)
     display_tile = get_tile_image(apply_display_settings=True, coords=coords)
     channels = data.get_tile_image_channels()
-    cell_data = lib.get_single_cell_data(df, raw_tile, display_tile, channels, cell_image_size=cfg.cell_image_size)
+    cell_data = lib.get_single_cell_data(
+        df, raw_tile, display_tile, channels,
+        cell_image_size=cfg.cell_image_size,
+        **kwargs
+    )
     return cell_data, n_cells_in_tile
 
 

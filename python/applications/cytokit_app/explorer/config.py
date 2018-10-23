@@ -32,7 +32,13 @@ ENV_APP_CELL_IMAGE_HEIGHT = 'APP_CELL_IMAGE_HEIGHT'
 ENV_APP_CELL_IMAGE_DISPLAY_WIDTH = 'APP_CELL_IMAGE_DISPLAY_WIDTH'
 ENV_APP_GRAPH_POINT_OPACITY = 'APP_GRAPH_POINT_OPACITY'
 ENV_APP_MONTAGE_POINT_COLOR = 'APP_MONTAGE_POINT_COLOR'
-ENV_APP_TILE_POINT_COLOR = 'APP_TILE_POINT_COLOR'
+
+ENV_APP_CELL_MARKER_MODE = 'APP_CELL_MARKER_MODE'
+ENV_APP_CELL_MARKER_POINT_COLOR = 'APP_CELL_MARKER_POINT_COLOR'
+ENV_APP_CELL_MARKER_POINT_SIZE = 'APP_CELL_MARKER_POINT_SIZE'
+ENV_APP_CELL_MARKER_MASK_COLOR = 'APP_CELL_MARKER_MASK_COLOR'
+ENV_APP_CELL_MARKER_MASK_FILL = 'APP_CELL_MARKER_MASK_FILL'
+ENV_APP_CELL_MARKER_MASK_OBJECT = 'APP_CELL_MARKER_MASK_OBJECT'
 
 DEFAULT_APP_DATA_PATH = osp.join(cytokit_data.get_cache_dir(), 'app', 'explorer')
 DEFAULT_APP_HOST_IP = '0.0.0.0'
@@ -44,7 +50,12 @@ DEFAULT_CELL_IMAGE_HEIGHT = 64
 DEFAULT_CELL_IMAGE_WIDTH = 64
 DEFAULT_GRAPH_POINT_OPACITY = .8
 DEFAULT_APP_MONTAGE_POINT_COLOR = 'white'
-DEFAULT_APP_TILE_POINT_COLOR = 'white'
+DEFAULT_APP_CELL_MARKER_MODE = 'point'  # or 'mask'
+DEFAULT_APP_CELL_MARKER_POINT_COLOR = 'white'
+DEFAULT_APP_CELL_MARKER_POINT_SIZE = 6  # Plotly default
+DEFAULT_APP_CELL_MARKER_MASK_COLOR = 'rgba(255, 255, 255, 1)'
+DEFAULT_APP_CELL_MARKER_MASK_FILL = 'rgba(255, 255, 255, .75)'
+DEFAULT_APP_CELL_MARKER_MASK_OBJECT = 'cell'  # or 'nucleus'
 
 
 class AppConfig(object):
@@ -248,8 +259,40 @@ class AppConfig(object):
         return os.getenv(ENV_APP_MONTAGE_POINT_COLOR, DEFAULT_APP_MONTAGE_POINT_COLOR)
 
     @property
-    def tile_point_color(self):
-        return os.getenv(ENV_APP_TILE_POINT_COLOR, DEFAULT_APP_TILE_POINT_COLOR)
+    def cell_marker_mode(self):
+        mode = os.getenv(ENV_APP_CELL_MARKER_MODE, DEFAULT_APP_CELL_MARKER_MODE).lower()
+        if mode not in ['point', 'mask']:
+            raise ValueError(
+                'Cell marker mode must be "point" or "mask" not {} (env variable: {})'
+                .format(mode, ENV_APP_CELL_MARKER_MODE)
+            )
+        return mode
+
+    @property
+    def cell_marker_point_color(self):
+        return os.getenv(ENV_APP_CELL_MARKER_POINT_COLOR, DEFAULT_APP_CELL_MARKER_POINT_COLOR)
+
+    @property
+    def cell_marker_point_size(self):
+        return int(os.getenv(ENV_APP_CELL_MARKER_POINT_SIZE, DEFAULT_APP_CELL_MARKER_POINT_SIZE))
+
+    @property
+    def cell_marker_mask_color(self):
+        return os.getenv(ENV_APP_CELL_MARKER_MASK_COLOR, DEFAULT_APP_CELL_MARKER_MASK_COLOR)
+
+    @property
+    def cell_marker_mask_fill(self):
+        return os.getenv(ENV_APP_CELL_MARKER_MASK_FILL, DEFAULT_APP_CELL_MARKER_MASK_FILL)
+
+    @property
+    def cell_marker_mask_object(self):
+        obj = os.getenv(ENV_APP_CELL_MARKER_MASK_OBJECT, DEFAULT_APP_CELL_MARKER_MASK_OBJECT).lower()
+        if obj not in ['cell', 'nucleus']:
+            raise ValueError(
+                'Mask object must be "cell" or "nucleus" not {} (env variable: {})'
+                .format(obj, ENV_APP_CELL_MARKER_MASK_OBJECT)
+            )
+        return obj
 
 
 cfg = AppConfig()

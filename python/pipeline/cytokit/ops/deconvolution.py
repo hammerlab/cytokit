@@ -99,7 +99,10 @@ class CytokitDeconvolution(CytokitOp):
             )
 
         # Tile should have shape (cycles, z, channel, height, width)
-        ncyc, nz, nch, nh, nw = self.config.tile_dims
+        dims = self.config.tile_dims
+        if dims != tile.shape:
+            raise AssertionError('Given tile with shape {} does not match expected shape {}'.format(tile.shape, dims))
+        ncyc, nz, nch, nh, nw = dims
 
         img_cyc = []
         for icyc in range(ncyc):

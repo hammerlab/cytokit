@@ -143,9 +143,11 @@ class KerasCytometer2D(object):
             img = self._resize(img, self.input_shape[:2])
 
         # Ensure results agree with input in NHW dimensions
-        assert img.shape[:-1] == shape[:-1], \
-            'Prediction and input images do not have same NHW dimensions (input shape = {}, result shape = {})' \
-            .format(shape, img.shape)
+        if img.shape[:-1] != shape[:-1]:
+            raise AssertionError(
+                'Prediction and input images do not have same NHW dimensions (input shape = {}, result shape = {})'
+                .format(shape, img.shape)
+            )
 
         return img
 
@@ -434,7 +436,7 @@ class Cytometer2D(KerasCytometer2D):
         img_bin_memb = img_bin_memb | img_bin_nuci
         return img_bin_memb
 
-    def segment(self, img_nuc, img_memb=None, nucleus_dilation=4, min_size=12,
+    def segment(self, img_nuc, img_memb=None, nucleus_dilation=4, marker_dilation=1, min_size=12,
                 membrane_sigma=None, membrane_gamma=None,
                 batch_size=DEFAULT_BATCH_SIZE, return_masks=False):
         if not self.initialized:
@@ -471,7 +473,10 @@ class Cytometer2D(KerasCytometer2D):
             # Define the entire nucleus interior as a slight dilation of the markers noting that this
             # actually works better than using the union of predicted interiors and predicted boundaries
             # (which are often too thick)
-            img_bin_nuci = cv2.dilate(img_bin_nucm.astype(np.uint8), morphology.disk(1)).astype(np.bool)
+            img_bin_nuci = img_bin_nucm
+            if marker_dilation > 0:
+                img_bin_nuci = cv2.dilate(
+                    img_bin_nucm.astype(np.uint8), morphology.disk(marker_dilation)).astype(np.bool)
 
             # Label the markers and create the basin to segment over
             img_bin_nucm_label = morphology.label(img_bin_nucm)

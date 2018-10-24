@@ -67,6 +67,20 @@ DEFAULT_CYTOMETRY_2D_MODEL_URL = 'https://storage.googleapis.com/musc-codex/mode
 
 FF_DEFAULT = 'keyence_multi_cycle_v01'
 
+# Define the default layout for cytokit results on disk
+DEFAULT_PATH_FORMATS = dict(
+    best_focus_image='best_focus/tile/R{region:03d}_X{x:03d}_Y{y:03d}_Z{z:03d}.tif',
+    montage_image='montage/{name}/R{region:03d}.tif',
+    cyto_agg='cytometry/data.{extension}',
+    cyto_image='cytometry/tile/R{region:03d}_X{x:03d}_Y{y:03d}.tif',
+    cyto_stats='cytometry/statistics/R{region:03d}_X{x:03d}_Y{y:03d}.csv',
+    illum_func='illumination/function/R{region:03d}.tif',
+    proc_data='processor/data.json',
+    proc_exec='processor/execution/{date}.json',
+    proc_image='processor/tile/R{region:03d}_X{x:03d}_Y{y:03d}.tif',
+    extract_image='extract/{name}/R{region:03d}_X{x:03d}_Y{y:03d}.tif'
+)
+
 
 def get_path_formats():
     return os.getenv(ENV_PATH_FORMATS, FF_DEFAULT)

@@ -16,23 +16,10 @@ import cytokit
 import warnings
 import os.path as osp
 import numpy as np
+import cytokit
 from cytokit.utils import ij_utils
 from skimage import io as sk_io
 from tifffile import imread, imsave, TiffFile
-
-# Define the default layout for cytokit results on disk
-DEFAULT_FORMATS = dict(
-    best_focus_image='best_focus/tile/R{region:03d}_X{x:03d}_Y{y:03d}_Z{z:03d}.tif',
-    montage_image='montage/{name}/R{region:03d}.tif',
-    cyto_agg='cytometry/data.{extension}',
-    cyto_image='cytometry/tile/R{region:03d}_X{x:03d}_Y{y:03d}.tif',
-    cyto_stats='cytometry/statistics/R{region:03d}_X{x:03d}_Y{y:03d}.csv',
-    illum_func='illumination/function/R{region:03d}.tif',
-    proc_data='processor/data.json',
-    proc_exec='processor/execution/{date}.json',
-    proc_image='processor/tile/R{region:03d}_X{x:03d}_Y{y:03d}.tif',
-    extract_image='extract/{name}/R{region:03d}_X{x:03d}_Y{y:03d}.tif'
-)
 
 
 def _to_pd_sep(format):
@@ -41,7 +28,7 @@ def _to_pd_sep(format):
 
 
 def _get_def_path_formats(raw_image_format):
-    formats = {k: _to_pd_sep(v) for k, v in DEFAULT_FORMATS.items()}
+    formats = {k: _to_pd_sep(v) for k, v in cytokit.DEFAULT_PATH_FORMATS.items()}
     formats['raw_image'] = _to_pd_sep(raw_image_format)
     return formats
 

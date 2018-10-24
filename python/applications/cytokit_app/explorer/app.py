@@ -684,6 +684,7 @@ def update_montage(selected_data, click_data, relayout_data):
             # Get shape (rows, cols) of individual montage grid cell by dividing target shape
             # (e.g. 512x512) by the number of tiles expected in each dimension
             shape = np.array(cfg.montage_target_shape) / np.array(cfg.region_shape)
+
             shapes = []
             for row in range(cfg.region_shape[0]):
                 for col in range(cfg.region_shape[1]):
@@ -697,7 +698,7 @@ def update_montage(selected_data, click_data, relayout_data):
                     })
                     # Invert row indexer since plotly figure is bottom up and cytokit convention is top down
                     if (col, cfg.region_shape[0] - row - 1) == ac['selection']['tile']['coords']:
-                        shapes[-1]['fillcolor'] = 'rgba(0, 256, 0, .3)'
+                        shapes[-1]['fillcolor'] = cfg.montage_grid_color
 
             layout['shapes'] = shapes
 

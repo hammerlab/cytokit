@@ -161,7 +161,13 @@ class CytokitConfigV10(Config):
         if 'index_symlinks' in env:
             res[cytokit.ENV_RAW_INDEX_SYMLINKS] = str(env['index_symlinks'])
         if 'path_formats' in env:
-            res[cytokit.ENV_PATH_FORMATS] = str(env['path_formats'])
+            if not isinstance(env['path_formats'], str):
+                # Copy the default path formats and override with entries in config
+                path_formats = dict(cytokit.DEFAULT_PATH_FORMATS)
+                path_formats.update(env['path_formats'])
+            else:
+                path_formats = env['path_formats']
+            res[cytokit.ENV_PATH_FORMATS] = str(path_formats)
         if 'raw_file_type' in acq:
             res[cytokit.ENV_RAW_FILE_TYPE] = acq['raw_file_type']
 
@@ -309,6 +315,13 @@ class CytokitConfigV10(Config):
                 'to num_cycles * n_channels_per_cycle; '
                 'n expected channel names = {}, n actual channel names = {}'
                 .format(self._n_expected_channels, self._n_actual_channels)
+            )
+
+        if len(self.microscope_params.em_wavelength_nm) != self.n_channels_per_cycle:
+            raise ValueError(
+                'Configuration contains {} emission wavelength values but specifies {} '
+                'channels per cycle (these lists must be the same length)'
+                .format(len(self.microscope_params.em_wavelength_nm), self.n_channels_per_cycle)
             )
         return self
 

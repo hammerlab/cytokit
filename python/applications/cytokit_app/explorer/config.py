@@ -190,11 +190,11 @@ class AppConfig(object):
 
     @property
     def montage_cycle(self):
-        return int(os.getenv(ENV_APP_MONTAGE_CYCLE, '0'))
+        return int(os.getenv(ENV_APP_MONTAGE_CYCLE, 0))
 
     @property
     def montage_z(self):
-        return int(os.getenv(ENV_APP_MONTAGE_Z, '0'))
+        return int(os.getenv(ENV_APP_MONTAGE_Z, 0))
 
     @property
     def montage_grid_enabled(self):

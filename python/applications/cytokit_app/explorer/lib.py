@@ -125,7 +125,8 @@ def get_sorted_boundary_coords(prop):
     return coords[np.array(o)]
 
 
-def get_single_cell_data(df, raw_tile, display_tile, channels, cell_image_size=None, object_type='cell_boundary'):
+def get_single_cell_data(df, raw_tile, display_tile, channels, cell_image_size=None,
+                         object_type='cell_boundary', apply_mask=True):
     if df is None:
         return None
 
@@ -149,14 +150,14 @@ def get_single_cell_data(df, raw_tile, display_tile, channels, cell_image_size=N
     cell_data = extract_single_cell_data(
         cell_tile, display_tile, is_boundary=True,
         patch_shape=cell_image_size,
-        apply_mask=True, fill_value=0)
+        apply_mask=apply_mask, fill_value=0)
 
     # Return list of dictionaries where each represents one cell (with at least an id and image)
     return cell_data
 
 
 def extract_single_cell_data(cell_image, target_image, patch_shape=None, is_boundary=True,
-                             apply_mask=False, fill_value=0):
+                             apply_mask=True, fill_value=0):
     """Extract single cell images from a target image
 
     Args:
@@ -167,7 +168,7 @@ def extract_single_cell_data(cell_image, target_image, patch_shape=None, is_boun
             will occur but if set, this value should be a 2 item sequence [rows, cols] and cell image patches
             will be conformed to this shape by either cropping or padding out from the center
         is_boundary: Whether or not cell image is of boundary or masks (default True)
-        apply_mask: Whether or not to set pixels outside of cell binary image to `fill_value` (default False)
+        apply_mask: Whether or not to set pixels outside of cell binary image to `fill_value` (default True)
         fill_value: Pixel values for parts of cell image outside cell object (default 0)
     """
     if target_image.shape[:2] != cell_image.shape[:2]:

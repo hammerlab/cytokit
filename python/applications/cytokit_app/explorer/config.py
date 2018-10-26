@@ -32,6 +32,7 @@ ENV_APP_EXTRACT_Z = 'APP_EXTRACT_Z'
 ENV_APP_CELL_IMAGE_WIDTH = 'APP_CELL_IMAGE_WIDTH'
 ENV_APP_CELL_IMAGE_HEIGHT = 'APP_CELL_IMAGE_HEIGHT'
 ENV_APP_CELL_IMAGE_DISPLAY_WIDTH = 'APP_CELL_IMAGE_DISPLAY_WIDTH'
+ENV_APP_CELL_IMAGE_BACKGROUND = 'APP_CELL_IMAGE_BACKGROUND'
 ENV_APP_GRAPH_POINT_OPACITY = 'APP_GRAPH_POINT_OPACITY'
 ENV_APP_MONTAGE_POINT_COLOR = 'APP_MONTAGE_POINT_COLOR'
 
@@ -199,6 +200,10 @@ class AppConfig(object):
     @property
     def montage_grid_enabled(self):
         return os.getenv(ENV_APP_MONTAGE_GRID_ENABLED, 'true').lower() == 'true'
+
+    @property
+    def cell_image_background_enabled(self):
+        return os.getenv(ENV_APP_CELL_IMAGE_BACKGROUND, 'false').lower() == 'true'
 
     @property
     def montage_grid_color(self):

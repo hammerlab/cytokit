@@ -974,7 +974,7 @@ def update_single_cell_buffer(new_children, _1, _2, current_children, enabled):
         tile_coords = get_tile_coordinates_in_selection()
         for i, coords in enumerate(tile_coords):
             logger.info('Extracting cells (for buffer) from tile %s (%s of %s)', coords, i+1, len(tile_coords))
-            cell_data, _ = get_single_cell_data(coords=coords)
+            cell_data, _ = get_single_cell_data(coords=coords, apply_mask=not cfg.cell_image_background_enabled)
             if cell_data is not None:
                 res.extend([create_cell_image(cell) for cell in cell_data])
         return res
@@ -992,7 +992,7 @@ def update_single_cell_buffer(new_children, _1, _2, current_children, enabled):
     [Input('tile', 'figure')]
 )
 def update_single_cells(_):
-    cell_data, n_cells_in_tile = get_single_cell_data()
+    cell_data, n_cells_in_tile = get_single_cell_data(apply_mask=not cfg.cell_image_background_enabled)
     if cell_data is None:
         return get_single_cells_title()
 

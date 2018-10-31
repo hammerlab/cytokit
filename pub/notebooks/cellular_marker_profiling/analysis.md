@@ -1,25 +1,24 @@
----
-title: "R Notebook"
-output: github_document
----
+R Notebook
+================
 
-# Cellular Marker Profiling
+Cellular Marker Profiling
+=========================
 
 This notebook outlines the gating and visualization process for 4 experiments designed to test the ability of image cytometry to distinguish CD4+CD8- and CD4-CD8+ T cell population sizes in human samples (compared to flow cytometry).
 
-```{r, include=T, results='hide', warning=FALSE, message=FALSE}
+``` r
 library(tidyverse)
 library(flowCore)
 library(openCyto)
 library(ggcyto)
 ```
 
-## Load FCS Data
+Load FCS Data
+-------------
 
 Read in annotated FCS files exported from Cytokit as a single flowSet:
 
-```{r}
-
+``` r
 experiments <- c(
   '20180614_D22_RepA_Tcell_CD4-CD8-DAPI_5by5',
   '20180614_D22_RepB_Tcell_CD4-CD8-DAPI_5by5',
@@ -61,7 +60,25 @@ load_fcs <- function(path, donor, replicate) {
 # Generate list of flowFrames named by sample
 fsr <- gsm@data %>% select(path, donor, replicate) %>% 
   pmap(load_fcs) %>% set_names(gsm@data$sample)
+```
 
+    ## Removing 949 rows of 6631 for file /lab/data/20180614_D22_RepB_Tcell_CD4-CD8-DAPI_5by5/output/v00/cytometry/data.fcs
+
+    ## Removing 939 rows of 7794 for file /lab/data/20180614_D23_RepB_Tcell_CD4-CD8-DAPI_5by5/output/v00/cytometry/data.fcs
+
+    ## Removing 1219 rows of 8131 for file /lab/data/20180614_D22_RepB_Tcell_CD4-CD8-DAPI_5by5/output/v01/cytometry/data.fcs
+
+    ## Removing 976 rows of 8606 for file /lab/data/20180614_D23_RepB_Tcell_CD4-CD8-DAPI_5by5/output/v01/cytometry/data.fcs
+
+    ## Removing 950 rows of 6678 for file /lab/data/20180614_D22_RepB_Tcell_CD4-CD8-DAPI_5by5/output/v02/cytometry/data.fcs
+
+    ## Removing 945 rows of 7801 for file /lab/data/20180614_D23_RepB_Tcell_CD4-CD8-DAPI_5by5/output/v02/cytometry/data.fcs
+
+    ## Removing 1206 rows of 7992 for file /lab/data/20180614_D22_RepB_Tcell_CD4-CD8-DAPI_5by5/output/v03/cytometry/data.fcs
+
+    ## Removing 982 rows of 8613 for file /lab/data/20180614_D23_RepB_Tcell_CD4-CD8-DAPI_5by5/output/v03/cytometry/data.fcs
+
+``` r
 # Create flowSet from list and attach phenoData
 fsr <- flowSet(fsr)
 sampleNames(fsr) <- gsm@data$sample
@@ -70,10 +87,15 @@ phenoData(fsr) <- gsm
 fsr
 ```
 
-## Transformation and Gating
+    ## A flowSet with 16 experiments.
+    ## 
+    ##   column names:
+    ##   regionindex tileindex tilex tiley rid rx ry id x y z cellsize celldiameter cellperimeter cellcircularity cellsolidity nucleussize nucleusdiameter nucleusperimeter nucleuscircularity nucleussolidity ciDAPI ciCD4 ciCD8 niDAPI niCD4 niCD8 cgnneighbors cgadjbgpct
 
-```{r, results='hide'}
+Transformation and Gating
+-------------------------
 
+``` r
 # Apply biexp transform to CD4 and CD8 signals
 chnl <- c("ciCD4", "ciCD8")
 trans <- transformList(chnl, biexponentialTransform())
@@ -81,17 +103,51 @@ fst <- transform(fsr, trans)
 
 # Initialize a new gating set
 gs <- GatingSet(fst)
+```
+
+    ## ................done!
+
+``` r
 markernames(gs) <- fsr@colnames %>% set_names(fsr@colnames)
 
 # Apply static gates (determined in Explorer) on nuclear channel intensity, cell size/shape,
 # and level of isolation (to ignore cells in large clumps)
 add(gs, rectangleGate("ciDAPI"=c(50, 150), filterId='dapi'), parent='root')
-add(gs, rectangleGate("celldiameter"=c(3, 15), filterId='celldiameter'), parent='dapi')
-add(gs, rectangleGate("nucleusdiameter"=c(3, 15), filterId='nucleusdiameter'), parent='celldiameter')
-add(gs, rectangleGate("cellcircularity"=c(80, Inf), filterId='cellcircularity'), parent='nucleusdiameter')
-add(gs, rectangleGate("nucleuscircularity"=c(80, Inf), filterId='nucleuscircularity'), parent='cellcircularity')
-add(gs, rectangleGate("cgnneighbors"=c(-Inf, 3.5), filterId='neighbors'), parent='nucleuscircularity')
+```
 
+    ## replicating filter 'dapi' across samples!
+
+``` r
+add(gs, rectangleGate("celldiameter"=c(3, 15), filterId='celldiameter'), parent='dapi')
+```
+
+    ## replicating filter 'celldiameter' across samples!
+
+``` r
+add(gs, rectangleGate("nucleusdiameter"=c(3, 15), filterId='nucleusdiameter'), parent='celldiameter')
+```
+
+    ## replicating filter 'nucleusdiameter' across samples!
+
+``` r
+add(gs, rectangleGate("cellcircularity"=c(80, Inf), filterId='cellcircularity'), parent='nucleusdiameter')
+```
+
+    ## replicating filter 'cellcircularity' across samples!
+
+``` r
+add(gs, rectangleGate("nucleuscircularity"=c(80, Inf), filterId='nucleuscircularity'), parent='cellcircularity')
+```
+
+    ## replicating filter 'nucleuscircularity' across samples!
+
+``` r
+add(gs, rectangleGate("cgnneighbors"=c(-Inf, 3.5), filterId='neighbors'), parent='nucleuscircularity')
+```
+
+    ## replicating filter 'neighbors' across samples!
+
+``` r
 # Apply dynamic gates for CD4/CD8, as determined by mindensity2
 for (i in 1:length(gs)){
   gh <- gs[[i]]
@@ -104,15 +160,19 @@ for (i in 1:length(gs)){
 recompute(gs)
 ```
 
-```{r}
+    ## ................done!
+
+``` r
 # Plot the gating hierarchy
 plot(gs)
 ```
 
-## Merge Statistics w/ Flow Cytometry Results
+![](analysis_files/figure-markdown_github/unnamed-chunk-4-1.png)
 
-```{r}
+Merge Statistics w/ Flow Cytometry Results
+------------------------------------------
 
+``` r
 # Extract long form population percentages/counts from gating set
 df_ck <- getPopStats(gs, statistic='freq', format='long') %>%
   dplyr::filter(str_detect(Population, 'CD')) %>%
@@ -150,7 +210,24 @@ df_stats <- df_ck %>% inner_join(df_flow, by = c('donor', 'population')) %>%
 
 df_stats
 ```
-```{r}
+
+    ## # A tibble: 48 x 10
+    ##    sample donor population replicate variant count raw_percent_ck
+    ##    <chr>  <chr> <chr>      <chr>     <chr>   <int>          <dbl>
+    ##  1 D22_R… D22   CD4-CD8+   RepA      v00       348          11.6 
+    ##  2 D22_R… D22   CD4+CD8+   RepA      v00        45           1.51
+    ##  3 D22_R… D22   CD4+CD8-   RepA      v00      1884          63.0 
+    ##  4 D22_R… D22   CD4-CD8+   RepB      v00       274           9.15
+    ##  5 D22_R… D22   CD4+CD8+   RepB      v00       167           5.57
+    ##  6 D22_R… D22   CD4+CD8-   RepB      v00      1962          65.5 
+    ##  7 D23_R… D23   CD4-CD8+   RepA      v00       961          25.3 
+    ##  8 D23_R… D23   CD4+CD8+   RepA      v00       136           3.58
+    ##  9 D23_R… D23   CD4+CD8-   RepA      v00      1695          44.6 
+    ## 10 D23_R… D23   CD4-CD8+   RepB      v00      1048          26.4 
+    ## # ... with 38 more rows, and 3 more variables: raw_percent_flow <dbl>,
+    ## #   norm_percent_flow <dbl>, norm_percent_ck <dbl>
+
+``` r
 # Determine correlation of expected vs actual percentages
 df_stats_corr <- df_stats %>% group_by(variant) %>% 
   summarise(
@@ -161,14 +238,28 @@ df_stats_corr <- df_stats %>% group_by(variant) %>%
 # Select best processing variant
 variant_name <- df_stats_corr %>% arrange(p) %>% head(1) %>% .$variant
 cat('Best variant: ', variant_name)
+```
+
+    ## Best variant:  v00
+
+``` r
 df_stats_corr
 ```
 
-## Visualization
+    ## # A tibble: 4 x 3
+    ##   variant   cor        p
+    ##   <chr>   <dbl>    <dbl>
+    ## 1 v00     0.994 7.03e-11
+    ## 2 v01     0.984 7.63e- 9
+    ## 3 v02     0.992 3.24e-10
+    ## 4 v03     0.989 1.35e- 9
+
+Visualization
+-------------
 
 Show the CD4/CD8 scatterplots for each sample along with gate determined for each dimension:
 
-```{r}
+``` r
 get_density <- function(x, y){
   d <- densCols(x, y, colramp=colorRampPalette(c("black", "white")))
   as.numeric(col2rgb(d)[1,] + 1L)
@@ -217,9 +308,11 @@ p_xy <- df %>%
 p_xy
 ```
 
+![](analysis_files/figure-markdown_github/unnamed-chunk-7-1.png)
+
 Plot the relative sizes of each cell population from both sources, and across both imaging replicates:
 
-```{r}
+``` r
 p_stat <- bind_rows(
     df_stats %>% dplyr::filter(variant==variant_name) %>%
       group_by(donor, population, replicate) %>% 
@@ -259,9 +352,12 @@ p_stat <- bind_rows(
 p_stat
 ```
 
+![](analysis_files/figure-markdown_github/unnamed-chunk-8-1.png)
 
 Side-by-side plot of the above (for annotation cleanup):
 
-```{r}
+``` r
 gridExtra::marrangeGrob(list(p_xy, p_stat), nrow=1, ncol=2)
 ```
+
+![](analysis_files/figure-markdown_github/unnamed-chunk-9-1.png)

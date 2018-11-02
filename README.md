@@ -176,7 +176,7 @@ After processing an experiment, the Explorer UI application can be run within th
 for fast visualization of the relationship between spatial features of cells and fluorescent signal 
 intensities:
 
-![ExplorerScreencast](https://storage.googleapis.com/cytokit/docs/images/explorer_screencast.gif)
+<img src="https://storage.googleapis.com/cytokit/docs/images/explorer_screencast.gif" width="100%"/>
 
 [High-Res Version](https://storage.googleapis.com/cytokit/docs/images/explorer_screencast_720p.mp4)
 

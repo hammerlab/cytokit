@@ -146,22 +146,27 @@ class CytokitDriftCompensator(CytokitOp):
         img_cyc = []
         for icyc in range(ncyc):
             # Assign translation if processing non-reference cycle (otherwise use noop translation)
-            translation = np.zeros(2) if icyc == self.drift_cycle else next(translation_iter)
+            translation = None if icyc == self.drift_cycle else next(translation_iter)
             logger.debug('Applying translation {} to cycle {}'.format(translation, icyc))
 
-            # Extract image from tile (ncyc, nz, nch, ny, nx) as (nz, ny, nx, nch) to comply
-            # with TensorFlow image translation function
+            # Apply translation, if not currently on the reference cycle
             tile_subset = tile[icyc]
-            img = np.moveaxis(tile_subset, 1, -1)
-            img = self.applier.run(img, translation)['result']
+            if translation is None:
+                img = tile_subset.astype(np.float32)
+            else:
+                # Transform tile from (nz, nch, ny, nx) as (nz, ny, nx, nch) to comply
+                # with TensorFlow image translation function
+                img = np.moveaxis(tile_subset, 1, -1)
 
-            # Convert image back to typical axis order
-            img = np.moveaxis(img, -1, 1)
-            if tile_subset.shape != img.shape:
-                raise AssertionError(
-                    'Image after drift compensation application has shape {} instead of expected shape {}'
-                    .format(img.shape, tile_subset.shape)
-                )
+                # Run translation and convert axes back to original order
+                img = self.applier.run(img, translation)['result']
+                img = np.moveaxis(img, -1, 1)
+
+                if tile_subset.shape != img.shape:
+                    raise AssertionError(
+                        'Image after drift compensation application has shape {} instead of expected shape {}'
+                        .format(img.shape, tile_subset.shape)
+                    )
             img_cyc.append(img)
 
         # Re-stack along cycle axis

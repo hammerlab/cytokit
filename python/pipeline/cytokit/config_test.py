@@ -1,6 +1,5 @@
 import unittest
 import cytokit
-from cytokit import config
 import os.path as osp
 
 
@@ -12,11 +11,6 @@ class TestConfig(unittest.TestCase):
         return cytokit.config.load(conf_dir)
 
     def test_load_conf(self):
-        # Load json configuration
-        conf = self._get_example_conf(file_type='json')
-        self.assertTrue(len(conf.channel_names) > 0)
-
-        # Load yaml configuration
         conf = self._get_example_conf(file_type='yaml')
         self.assertTrue(len(conf.channel_names) > 0)
 

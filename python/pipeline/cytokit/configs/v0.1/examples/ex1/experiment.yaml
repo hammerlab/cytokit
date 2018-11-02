@@ -1,30 +1,16 @@
-name: 'TestExperiment'
+name: 'Mock Multi-Cycle Experiment'
 date: '2018-01-01 00:00:00'
-environment:
-  index_symlinks:
-    channel: {3: 4}
-  path_formats:
-    best_focus_image: 'best_focus/tile/R{region:03d}_X{x:03d}_Y{y:03d}_Z{z:03d}.tif'
-    montage_image: 'montage/{source}/R{region:03d}_montage.tif'
-    cyto_agg: 'cytometry/data.{extension}'
-    cyto_image: 'cytometry/tile/R{region:03d}_X{x:03d}_Y{y:03d}.tif'
-    cyto_stats: 'cytometry/statistics/R{region:03d}_X{x:03d}_Y{y:03d}.csv'
-    proc_data: 'processor/data.json'
-    proc_exec: 'processor/execution/{date}.json'
-    proc_image: 'processor/tile/R{region:03d}_X{x:03d}_Y{y:03d}.tif'
-    extract_image: 'extract/{name}/R{region:03d}_X{x:03d}_Y{y:03d}.tif'
-    raw_image: '1_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'
 acquisition:
+  per_cycle_channel_names: [DAPI, FITC, TRITC, Cy5]
+  channel_names: [DAPI, CD8, CD3, CD4, DAPI2, CD40, CD25, CD19]
+  emission_wavelengths: [425, 525, 595, 670]
   axial_resolution: 1000.0
-  channel_names: [DAPI, CD4, CD8]
-  emission_wavelengths: [425, 525, 670]
   lateral_resolution: 377.442
   magnification: 20
-  num_cycles: 1
-  num_z_planes: 33
+  num_cycles: 2
+  num_z_planes: 10
   numerical_aperture: 0.75
   objective_type: air
-  per_cycle_channel_names: [CH1, CH2, CH4]
   region_height: 5
   region_names: [Region1]
   region_width: 5
@@ -33,14 +19,30 @@ acquisition:
   tile_overlap_y: 432
   tile_width: 1344
   tiling_mode: snake
+operator:
+  - extract:
+      name: best_z_segm
+      channels:
+        - proc_DAPI
+        - proc_CD3
+        - proc_CD4
+        - proc_CD8
+        - cyto_cell_boundary
+        - cyto_nucleus_boundary
+  - montage: {name: best_z_segm, extract_name: best_z_segm}
 analysis:
-  cytometry_statistics_aggregation: {enabled: true, mode: best_z_plane}
-  processor_data_summary: {enabled: false}
-operation:
+  - aggregate_cytometry_statistics: {mode: best_z_plane}
+processor:
+  args:
+    gpus: [0,1]
+    run_cytometry: true
+    run_best_focus: true
+    run_drift_comp: true
+    run_deconvolution: true
   best_focus: {channel: DAPI}
   deconvolution: {n_iter: 10, scale_factor: 0.5}
   drift_compensation: {channel: DAPI}
   tile_generator: {raw_file_type: keyence_rgb}
   cytometry:
     nuclei_channel_name: DAPI
-    segmentation_params: {proba_threshold: .7, nucleus_dilation: 8}
+    segmentation_params: {nucleus_dilation: 8}

@@ -176,18 +176,11 @@ After processing an experiment, the Explorer UI application can be run within th
 for fast visualization of the relationship between spatial features of cells and fluorescent signal 
 intensities:
 
-![ExplorerScreenshot](docs/images/explorer_gfp_pos_image.jpg)
+<img src="https://storage.googleapis.com/cytokit/docs/images/explorer_screencast.gif" width="100%"/>
 
+[High-Res Version](https://storage.googleapis.com/cytokit/docs/images/explorer_screencast_720p.mp4)
 
-Some features here include:
-
-- Lasso or box gates on 1 or 2D signals
-- Projection of selected cells onto montage images of entire experiments
-- Interactive highlighting of cells within individual images 
-- Extraction of single cell image patches (matching gates/filters)
-- Specification of custom logic for filtering
-
-See the [Cytokit Explorer](python/applications/cytokit_app/explorer/README.md) docs for more examples.
+See the [Cytokit Explorer](python/applications/cytokit_app/explorer/README.md) docs for more details.
   
 ### Installation
 

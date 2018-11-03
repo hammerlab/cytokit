@@ -51,6 +51,12 @@ class TranslationCalculator(TensorFlowOp):
         return inputs, outputs
 
     def args(self, reference_image, offset_image):
+        """Get arguments for translation calculation
+
+        Args:
+            reference_image: Reference image with rank equal to `n_dims` specified on instantiation
+            offset_image: Image to calculation translation from reference image for; must have same shape
+        """
         return dict(reference_image=reference_image, offset_image=offset_image)
 
 

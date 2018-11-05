@@ -2,13 +2,24 @@
 
 The purpose of this application is to provide some high-level analysis of a sample through 
 filtering operations on cell subsets.  This is most helpful for identifying unexpected global patterns, 
-checking segmentation accuracy, or informing a deeper analysis by characterizing the phenotype of cells
-in question visually.  
+checking segmentation accuracy, or informing a more programmatic analysis.
 
 As a [Dash](https://plot.ly/products/dash/) application, it can support visualization of tens of 
 thousands of cells with little latency, a noticable latency with hundreds of thousands of cells, and
 is inoperable with millions of cells (though configurable sampling rates are provided to ensure
-that everything is snappy by default).
+that everything is fairly snappy by default).
+
+Configuration for the app currently involves setting environment variables, with at least values for the following variables set:
+
+```bash
+export APP_EXP_NAME="20180101_codex_spleen"
+export APP_EXP_DATA_DIR=/lab/data/20180101_codex_spleen/output/v01
+export APP_EXP_CONFIG_PATH=/lab/data/20180101_codex_spleen/output/v01/config
+```
+
+See [config.py](https://github.com/hammerlab/cytokit/blob/54d56880413f1a89000056a1f2b9af1c590cf43e/python/applications/cytokit_app/explorer/config.py) for some other properties
+
+\*TODO: Move configs to yaml and document properties
 
 ### Examples
 

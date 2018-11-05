@@ -93,6 +93,25 @@ class ConfigEditor(object):
         m[keys[-1]] = value
         return self
 
+    def add(self, property, value):
+        """Add a value to an existing list of properties
+
+        :param property: String name of property, delimited by '.' for nested properties; Must result to a location
+            in the configuration object that is either null or a list
+        :param value: Value to add to string
+        """
+        keys = self._keys(property)
+        if not keys:
+            logger.error('Cannot assign value for empty property string (action will be ignored)')
+            return self
+
+        # Make addition or list creation for property after recursive fetch
+        m = self._get(keys[:-1])
+        if keys[-1] not in m:
+            m[keys[-1]] = []
+        m[keys[-1]].append(value)
+        return self
+
     def save_variant(self, path):
         """Save current state of configuration as a variant within experiment output directory
 

@@ -1,0 +1,148 @@
+name: '20180101_codex_mouse_spleen_balbc_slide1'
+date: '2018-01-01 00:00:00'
+environment:
+  path_formats:
+    proc_image: 'processor/tile/BALBc-1_X{x:02d}_Y{y:02d}.tif'
+acquisition:
+  # Imaging was performed in Keyence BZ-X710 fluorescent microscope configured with 3 fluorescent channels
+  # (FITC, Cy3, Cy5) and equipped with Nikon PlanFluor 40x NA 1.3 oil immersion lens
+  per_cycle_channel_names: [FITC, Cy3, Cy5]
+  channel_names:
+    - CD45
+    - Ly6C
+    - TCR
+    - CD45cyc2
+    - Ly6G
+    - CD19
+    - CD45cyc3
+    - CD169
+    - CD106
+    - CD45cyc4
+    - CD3
+    - CD16_32
+    - CD45cyc5
+    - CD8a
+    - CD90
+    - CD45cyc6
+    - F4_80
+    - CD11c
+    - CD45cyc7
+    - Ter119
+    - CD11b
+    - CD45cyc8
+    - IgD
+    - CD27
+    - CD45cyc9
+    - CD5
+    - CD79b
+    - CD45cyc10
+    - CD71
+    - CD31
+    - CD45cyc11
+    - CD4
+    - IgM
+    - CD45cyc12
+    - B220
+    - ERTR7
+    - CD45cyc13
+    - MHCII
+    - CD35
+    - CD45cyc14
+    - CD21_35
+    - CD44
+    - CD45cyc15
+    - blank_Cy3_cyc15
+    - blank_Cy5_cyc15
+    - CD45cyc16
+    - blank_Cy3_cyc16
+    - blank_Cy5_cyc16
+    - CD45cyc17
+    - blank_Cy3_cyc17
+    - nucl
+    - CD45cyc18
+    - NKp46
+    - blank_Cy5_cyc18
+  # These are incorrect, since deconvolution isn't really necessary
+  # but there have to be as many of them as there are filters
+  emission_wavelengths: [595,595,595]
+  # Each tissue was imaged with a 40x oil immersion objective in a 7x9 tiled acquisition at 1386x1008 pixels per
+  # tile and 188 nm/pixel resolution and 11 z-planes per tile (axial resolution 900 nm)
+  axial_resolution: 900.0
+  lateral_resolution: 188.0
+  magnification: 40
+  num_cycles: 18
+  # Paper says 11 z-planes were used but data contains 15 planes
+  num_z_planes: 15
+  numerical_aperture: 1.3
+  objective_type: oil
+  region_names: [Region1]
+  region_height: 9
+  region_width: 7
+  tile_height: 1008
+  tile_overlap_x: 576
+  tile_overlap_y: 432
+  tile_width: 1344
+  tiling_mode: snake
+operator:
+  - extract:
+      name: segm
+      channels:
+        - proc_nucl
+        - proc_CD45
+        - cyto_cell_boundary
+        - cyto_nucleus_boundary
+      z: all
+  - montage: {name: segm, extract_name: segm}
+  - extract:
+      name: figureset1
+      channels:
+        - proc_B220
+        - proc_CD11c
+        - proc_CD169
+        - proc_CD4
+        - proc_CD45
+        - proc_CD5
+        - proc_CD8a
+        - proc_CD90
+        - proc_F4_80
+        - proc_IgD
+        - proc_MHCII
+        - proc_TCR
+        - proc_nucl
+        - cyto_cell_boundary
+        - cyto_nucleus_boundary
+  - montage: {name: figureset1, extract_name: figureset1}
+  - extract:
+      name: cy5
+      channels:
+        - proc_CD27
+        - proc_CD31
+        - proc_CD35
+        - proc_TCR
+        - proc_CD11c
+        - proc_nucl
+        - cyto_cell_boundary
+        - cyto_nucleus_boundary
+  - montage: {name: cy5, extract_name: cy5}
+analysis:
+  - aggregate_cytometry_statistics: {mode: best_z_plane}
+processor:
+  args:
+    gpus: [0,1]
+    # Tiles are already assembled
+    run_crop: false
+    run_tile_generator: false
+    run_drift_comp: false
+    run_cytometry: true
+    run_best_focus: true
+  best_focus: {channel: nucl}
+  drift_compensation: {channel: CD45}
+  # Note: Raw data is already deconvolved
+  deconvolution: {n_iter: 25, scale_factor: .5}
+  tile_generator: {raw_file_type: keyence_rgb}
+  cytometry:
+    # Downsample by half to get segmentation near 20x
+    target_shape: [504, 672]
+    nuclei_channel_name: nucl
+    segmentation_params: {nucleus_dilation: 8, min_size: 12, membrane_sigma: 5, membrane_gamma: .25, marker_dilation: 3}
+    quantification_params: {include_nucleus_intensity: true, include_cell_graph: true}

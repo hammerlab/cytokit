@@ -1006,5 +1006,8 @@ def update_single_cells(_):
     ]
 
 
+def run():
+    app.run_server(debug=cfg.debug, port=cfg.app_port, host=cfg.app_host_ip)
+
 if __name__ == '__main__':
-    app.run_server(debug=True, port=cfg.app_port, host=cfg.app_host_ip)
+    run()

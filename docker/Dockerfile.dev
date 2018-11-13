@@ -24,7 +24,8 @@ RUN pip --no-cache-dir install \
     seaborn \
     keras \
     fcswrite \
-    tifffile
+    tifffile \
+    centrosome
 
 # Install Dash and per their instructions, reference specific verions
 # See: https://dash.plot.ly/getting-started

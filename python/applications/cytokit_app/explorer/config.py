@@ -12,6 +12,7 @@ ENV_APP_EXP_DATA_DIR = 'APP_EXP_DATA_DIR'
 ENV_APP_DATA_DIR = 'APP_DATA_DIR'
 ENV_APP_PORT = 'APP_PORT'
 ENV_APP_HOST_IP = 'APP_HOST_IP'
+ENV_APP_DEBUG = 'APP_DEBUG'
 ENV_APP_MAX_MONTAGE_CELLS = 'APP_MAX_MONTAGE_CELLS'
 ENV_APP_MAX_TILE_CELLS = 'APP_MAX_TILE_CELLS'
 ENV_APP_MAX_SINGLE_CELLS = 'APP_MAX_SINGLE_CELLS'
@@ -96,6 +97,10 @@ class AppConfig(object):
     def __init__(self):
         self._exp_config = cytokit_config.load(self.exp_config_path)
         self._exp_config.register_environment()
+
+    @property
+    def debug(self):
+        return os.getenv(ENV_APP_DEBUG, 'true').lower() == 'true'
 
     @property
     def exp_name(self):

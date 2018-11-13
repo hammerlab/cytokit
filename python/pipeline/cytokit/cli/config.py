@@ -45,7 +45,9 @@ class ConfigEditor(object):
         # Recursively fetch target dictionary
         if keys:
             for k in keys:
-                m = m.get(k, {})
+                if k not in m:
+                    m[k] = {}
+                m = m[k]
         return m
 
     def reset(self):

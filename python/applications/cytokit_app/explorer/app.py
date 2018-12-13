@@ -13,9 +13,9 @@ from cytokit_app.explorer import data as data
 from cytokit_app.explorer.data import cache as ac
 from cytokit_app.explorer import lib as lib
 from cytokit_app.explorer.config import cfg
-from cytokit_app.explorer import color
 from cytokit.cytometry.cytometer import DEFAULT_PREFIXES
 from collections import OrderedDict
+from cvutils import color
 import pandas as pd
 import numpy as np
 import logging
@@ -219,7 +219,7 @@ def get_image_settings_layout(id_format, channel_names, class_name, type='tile')
 
     colors = data.db.get('app', type + '_channel_colors')
     if colors is None or len(colors) != len(channel_names):
-        colors = color.get_defaults(len(channel_names))
+        colors = color.get_colors(len(channel_names))
 
     def get_value_range(i):
         if values:
@@ -241,7 +241,7 @@ def get_image_settings_layout(id_format, channel_names, class_name, type='tile')
                 ),
                 html.Div(dcc.Dropdown(
                     id=id_format.format(str(i) + '-color'),
-                    options=[{'label': c.title(), 'value': c} for c in color.get_all_color_names()],
+                    options=[{'label': c.title(), 'value': c} for c in color.get_color_names()],
                     value=colors[i],
                     clearable=False,
                     searchable=False

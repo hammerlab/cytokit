@@ -1,0 +1,5 @@
+"0","plot(gs)
+"
+"2","Error in (function (which = dev.cur())  : 
+  QuartzBitmap_Output - unable to open file '/Volumes/eczech/repos/cell-image-analysis/analysis/experiments/cellular-marker/.Rproj.user/shared/notebooks/-analysis/1/s/cgsrg26qbwph1_t/_rs_chunk_plot_001.png'
+"

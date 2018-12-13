@@ -12,12 +12,8 @@ from cytokit import io as cytokit_io
 from cytokit import cli
 from cytokit.function import core
 from cytokit.function import data as function_data
+from cytokit.cli import CH_SRC_RAW, CH_SRC_PROC, CH_SRC_CYTO, CH_SOURCES
 import logging
-
-CH_SRC_RAW = 'raw'
-CH_SRC_PROC = 'proc'
-CH_SRC_CYTO = 'cyto'
-CH_SOURCES = [CH_SRC_RAW, CH_SRC_PROC, CH_SRC_CYTO]
 
 PATH_FMT_MAP = {
     CH_SRC_RAW: None,

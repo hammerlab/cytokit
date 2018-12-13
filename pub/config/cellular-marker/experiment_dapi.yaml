@@ -1,0 +1,52 @@
+date: '2018-06-14 00:00:00'
+environment:
+  index_symlinks:
+    channel: {3: 4}
+  path_formats: keyence_single_cycle_v01
+acquisition:
+  per_cycle_channel_names: [CH1, CH2, CH4]
+  channel_names: [DAPI, CD4, CD8]
+  emission_wavelengths: [425, 525, 670]
+  axial_resolution: 500.0
+  lateral_resolution: 377.442
+  magnification: 20
+  num_cycles: 1
+  numerical_aperture: 0.75
+  objective_type: air
+  region_names: [Region1]
+  region_height: 5
+  region_width: 5
+  tile_height: 1008
+  tile_overlap_x: 576
+  tile_overlap_y: 432
+  tile_width: 1344
+  tiling_mode: snake
+operator:
+  - extract:
+      name: best_z_segm
+      channels: [proc_dapi, proc_cd4, proc_cd8, cyto_cell_boundary, cyto_nucleus_boundary]
+  - montage: {name: best_z_segm, extract_name: best_z_segm}
+analysis:
+  - aggregate_cytometry_statistics: {mode: best_z_plane}
+processor:
+  args:
+    gpus: [0,1]
+    run_deconvolution: false
+    run_illumination_correction: false
+    run_cytometry: true
+    run_best_focus: true
+  tile_generator: {raw_file_type: keyence_rgb}
+  best_focus: {channel: DAPI}
+  deconvolution: {n_iter: 10, scale_factor: 0.5}
+  illumination_correction:
+    channel_mapping: {DAPI: DAPI, CD4: CD4, CD8: CD8}
+    filter_range: [0, 1]
+    feature_params:
+      index: {degree: 4, type: 'polynomial'}
+      region: null
+      tile: null
+    model_params: {type: ls}
+  cytometry:
+    nuclei_channel_name: DAPI
+    segmentation_params: {memb_min_dist: 6}
+    quantification_params: {include_nucleus_intensity: true, include_cell_graph: true}

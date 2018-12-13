@@ -8,6 +8,7 @@ from skimage import measure
 from skimage import filters
 from skimage import exposure
 from skimage import transform
+from skimage import img_as_float
 from skimage.future import graph as label_graph
 from centrosome import propagate
 from scipy import ndimage
@@ -420,9 +421,10 @@ class Cytometer2D(KerasCytometer2D):
         return cytokit_data.download_file_from_google_drive(unet_model.WEIGHTS_FILE_ID, path, name='UNet Weights')
 
     def get_segmentation_mask(self, img_bin_nuc, img_memb=None,
-                              min_dist=None, max_dist=None, hole_radius=None,
-                              method='li', sigma=None):
+                              min_dist=None, max_dist=None, hole_size=None,
+                              method='li', sigma=None, gamma=None):
         # Determine mask image for minimum distance from nuclei
+        img_bin_min = img_bin_nuc
         if min_dist:
             img_bin_min = cv2.dilate(
                 img_bin_nuc.astype(np.uint8),
@@ -435,19 +437,24 @@ class Cytometer2D(KerasCytometer2D):
 
         # Construct mask as threshold on membrane image OR binary nucleus mask
         if sigma:
-            img_memb = filters.gaussian(img_memb, sigma=sigma)
+            # Image from gaussian filter is float with original image range
+            img_memb = filters.gaussian(img_memb, sigma=sigma, preserve_range=True)
+        if gamma is not None:
+            # Gamma adjustment preserves data type and range
+            img_memb = exposure.adjust_gamma(img_memb, gamma=gamma)
+
         threshold_fn = getattr(filters, 'threshold_' + method)
         img_bin_memb = img_memb > threshold_fn(img_memb)
         img_bin_memb = img_bin_memb | img_bin_min
+
+        # Fill small holes in mask based on given area threshold
+        if hole_size:
+            img_bin_memb = morphology.remove_small_holes(img_bin_memb, hole_size)
 
         # Eliminate mask pixels more than max_dist pixels from nuclei
         if max_dist:
             img_dist = ndimage.distance_transform_edt(~img_bin_nuc)
             img_bin_memb[img_dist > max_dist] = False
-
-        # Fill small holes in mask
-        if hole_radius:
-            img_bin_memb = ndimage.binary_fill_holes(img_bin_memb, morphology.disk(hole_radius))
 
         assert img_bin_memb.dtype == np.bool, \
             'Segmentation mask should be boolean not {}'.format(img_bin_memb.dtype)
@@ -455,8 +462,8 @@ class Cytometer2D(KerasCytometer2D):
 
     def segment(self, img_nuc, img_memb=None,
                 marker_dilation=1, marker_min_size=16,
-                memb_min_dist=5, memb_max_dist=10, memb_hole_radius=5,
-                memb_sigma=1, memb_tresh_method='li', memb_propagation_regularization=.05,
+                memb_min_dist=5, memb_max_dist=10, memb_hole_size=16,
+                memb_sigma=1, memb_gamma=None, memb_tresh_method='li', memb_propagation_regularization=.05,
                 batch_size=DEFAULT_BATCH_SIZE, return_masks=False):
         if not self.initialized:
             self.initialize()
@@ -508,8 +515,8 @@ class Cytometer2D(KerasCytometer2D):
             # or if possible, using the given cell membrane image
             img_bin_mask = self.get_segmentation_mask(
                 img_bin_nuci, img_memb=img_memb[i] if img_memb is not None else None,
-                min_dist=memb_min_dist, max_dist=memb_max_dist, hole_radius=memb_hole_radius,
-                method=memb_tresh_method, sigma=memb_sigma)
+                min_dist=memb_min_dist, max_dist=memb_max_dist, hole_size=memb_hole_size,
+                method=memb_tresh_method, sigma=memb_sigma, gamma=memb_gamma)
 
             # Label the nuclei markers (which determines number of cells to output)
             # *Note: It is important to keep this separate from nuclei interior as single or double pixel
@@ -522,8 +529,12 @@ class Cytometer2D(KerasCytometer2D):
                 img_basin = -1 * ndimage.distance_transform_edt(img_bin_nucm)
                 img_cell_seg = segmentation.watershed(img_basin, img_bin_nucm_label, mask=img_bin_mask)
             else:
+                # Before running propagation segmentation, make sure that the input image is 0-1 float
+                # as the regularization threshold is calibrated to work only with data in that range
                 img_cell_seg, _ = propagate.propagate(
-                    img_memb[i], img_bin_nucm_label, img_bin_mask, memb_propagation_regularization)
+                    img_as_float(img_memb[i]), img_bin_nucm_label,
+                    img_bin_mask, memb_propagation_regularization
+                )
 
             # Generate nucleus segmentation based on cell segmentation and nucleus mask
             # and relabel nuclei objections using corresponding cell labels

@@ -10,6 +10,11 @@ import pandas as pd
 
 LOG_FORMAT = '%(asctime)s:%(levelname)s:%(process)d:%(name)s: %(message)s'
 
+CH_SRC_RAW = 'raw'
+CH_SRC_PROC = 'proc'
+CH_SRC_CYTO = 'cyto'
+CH_SOURCES = [CH_SRC_RAW, CH_SRC_PROC, CH_SRC_CYTO]
+
 
 def get_config(config_path):
     """Load experiment configuration

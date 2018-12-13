@@ -1,0 +1,17 @@
+File,Donor,State,Replicate,Concentration,Live percent,Avg size
+20181023-d38-act1.tiff,Donor 38,Activated (7 days),R1,2.05E+06,0.39,11.38
+20181023-d38-act2.tiff,Donor 38,Activated (7 days),R2,2.24E+06,0.32,11.49
+20181023-d38-unstim1.tiff,Donor 38,Unstimulated,R1,3.20E+06,0.8,10.18
+20181023-d38-unstim2.tiff,Donor 38,Unstimulated,R2,3.74E+06,0.8,10.22
+20181023-d39-act1.tiff,Donor 39,Activated (7 days),R1,2.83E+06,0.3,9.95
+20181023-d39-act2.tiff,Donor 39,Activated (7 days),R2,3.52E+06,0.34,10.45
+20181023-d39-us1.tiff,Donor 39,Unstimulated,R1,4.29E+06,0.85,10.6
+20181023-d39-us2.tiff,Donor 39,Unstimulated,R2,4.29E+06,0.82,10.27
+20181023-jurkat1.tiff,Jurkat,Unstimulated,R1,8.09E+05,0.91,14.48
+20181023-jurkat2.tiff,Jurkat,Unstimulated,R2,7.27E+05,0.94,14.4
+20181023-jurkat3.tiff,Jurkat,Unstimulated,R3,8.56E+05,0.95,13.53
+20181023-jurkat4.tiff,Jurkat,Unstimulated,R4,7.62E+05,0.98,14.21
+20181025-pmel-act1.tiff,Pmel mouse,Activated (3 days),R1,1.90E+06,0.64,13.38
+20181025-pmel-act2.tiff,Pmel mouse,Activated (3 days),R2,1.76E+06,0.61,12.08
+20181025-pmel-us1.tiff,Pmel mouse,Unstimulated,R1,1.25E+06,0.57,8.26
+20181025-pmel-us2.tiff,Pmel mouse,Unstimulated,R2,1.51E+06,0.49,7.6

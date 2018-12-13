@@ -1,31 +1,18 @@
 #!/usr/bin/env bash
-# bash -e /lab/repos/cytokit/pub/analysis/cell-size/pipeline_execution.sh
+# cd /lab/repos/cytokit/pub/analysis/cell-size; bash -e pipeline_execution.sh
 
-EXPERIMENTS=(
-"20181024-d38-act-20X-5by5;1000;29;20x"
-"20181024-d38-unstim-20X-5by5;1000;25;20x"
-"20181024-d39-act-20x-5by5;500;33;20x"
-"20181024-d39-unstim-20x-5by5;500;25;20x"
-"20181024-jurkat-20X-5by5;2000;23;20x"
-"20181024-jurkat2-20X-5by5;500;25;20x"
-"20181026-pmel-act-20x-5by5;1000;23;20x"
-"20181026-pmel-us-20x-5by5;1000;25;20x"
-"20181026-pmel-act-60x-5b5;500;22;60x"
-)
-# EXPERIMENTS=(
-# "20181024-jurkat-20X-5by5;2000;23"
-# "20181024-jurkat2-20X-5by5;500;25"
-# )
-# EXPERIMENTS=(
-# "20181026-pmel-act-60x-5b5;500;22;60x"
-# )
+EXPERIMENTS=`cat experiments.csv | tail -n +2`
+# EXPERIMENTS="
+# 20181024-jurkat-20X-5by5;2000;23
+# 20181024-jurkat2-20X-5by5;500;25
+# "
 
-for EXP in "${EXPERIMENTS[@]}"
+for EXP in $EXPERIMENTS
 do
-    EXP_NAME=`echo $EXP | cut -d';' -f 1`
-    EXP_STEPZ=`echo $EXP | cut -d';' -f 2`
-    EXP_NUMZ=`echo $EXP | cut -d';' -f 3`
-    EXP_MAG=`echo $EXP | cut -d';' -f 4`
+    EXP_NAME=`echo $EXP | cut -d',' -f 1`
+    EXP_STEPZ=`echo $EXP | cut -d',' -f 2`
+    EXP_NUMZ=`echo $EXP | cut -d',' -f 3`
+    EXP_MAG=`echo $EXP | cut -d',' -f 4`
     DATA_DIR=$CYTOKIT_DATA_DIR/cytokit/cell-size/20181024/$EXPNAME
     BASE_CONF=$CYTOKIT_REPO_DIR/pub/config/cell-size/experiment_${EXP_MAG}.yaml
     

@@ -1,0 +1,41 @@
+date: '2018-10-24 00:00:00'
+environment:
+  path_formats: keyence_single_cycle_v01
+acquisition:
+  per_cycle_channel_names: [CH1, CH2, CH3]
+  channel_names: [DAPI, MEMB, BF]
+  emission_wavelengths: [425, 525, 525]
+  axial_resolution: 1000.0
+  lateral_resolution: 377.442
+  magnification: 20
+  num_cycles: 1
+  numerical_aperture: 0.75
+  objective_type: air
+  region_names: [Region1]
+  region_height: 5
+  region_width: 5
+  tile_height: 1008
+  tile_overlap_x: 576
+  tile_overlap_y: 432
+  tile_width: 1344
+  tiling_mode: snake
+operator:
+  - extract:
+      name: best_z_segm
+      channels: [proc_DAPI, proc_MEMB, proc_BF, cyto_cell_boundary, cyto_nucleus_boundary]
+  - montage: {name: best_z_segm, extract_name: best_z_segm}
+analysis:
+  - aggregate_cytometry_statistics: {mode: best_z_plane}
+processor:
+  args:
+    gpus: [0,1]
+    run_cytometry: true
+    run_best_focus: true
+  best_focus: {channel: DAPI}
+  deconvolution: {n_iter: 10, scale_factor: 1.0}
+  tile_generator: {raw_file_type: keyence_mixed}
+  cytometry:
+    nuclei_channel_name: DAPI
+    membrane_channel_name: MEMB
+    segmentation_params: {memb_min_dist: 1}
+    quantification_params: {include_nucleus_intensity: true, include_cell_graph: true}

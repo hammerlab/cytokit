@@ -23,8 +23,9 @@ install:
   - source activate test-environment
   # Upgrade pip to make it possible to disable progress bars
   - pip install -U pip>=10.0.1
-  # Install flowdec from repo directly until published
+  # Install flowdec and cvutils from repo directly until published
   - pip install --progress-bar off -e "git+https://github.com/hammerlab/flowdec.git#egg=flowdec&subdirectory=python"
+  - pip install --progress-bar off -e "git+https://github.com/hammerlab/cvutils.git#egg=cvutils&subdirectory=python"
   - cd python/pipeline
   - pip install --progress-bar off .
   - pip install coveralls pylint

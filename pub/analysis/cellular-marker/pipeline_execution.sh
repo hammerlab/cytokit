@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
 # bash -e /lab/repos/cell-image-analysis/analysis/experiments/cellular-marker/pipeline_execution.sh
 
-# EXPERIMENTS="
-# 20180614_D22_RepA_Tcell_CD4-CD8-DAPI_5by5;dapi;35
-# 20180614_D22_RepB_Tcell_CD4-CD8-DAPI_5by5;dapi;35
-# 20180614_D23_RepA_Tcell_CD4-CD8-DAPI_5by5;dapi;35
-# 20180614_D23_RepB_Tcell_CD4-CD8-DAPI_5by5;dapi;33
-# 20181116-d40-r1-20x-5by5;pha;25
-# 20181116-d40-r2-20x-5by5;pha;25
-# 20181116-d41-r1-20x-5by5;pha;25
-# 20181116-d41-r2-20x-5by5;pha;25
-# "
 EXPERIMENTS="
+20180614_D22_RepA_Tcell_CD4-CD8-DAPI_5by5;dapi;35
+20180614_D22_RepB_Tcell_CD4-CD8-DAPI_5by5;dapi;35
+20180614_D23_RepA_Tcell_CD4-CD8-DAPI_5by5;dapi;35
+20180614_D23_RepB_Tcell_CD4-CD8-DAPI_5by5;dapi;33
 20181116-d40-r1-20x-5by5;pha;25
 20181116-d40-r2-20x-5by5;pha;25
 20181116-d41-r1-20x-5by5;pha;25

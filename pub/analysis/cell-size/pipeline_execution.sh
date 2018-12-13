@@ -26,7 +26,7 @@ do
     EXP_STEPZ=`echo $EXP | cut -d';' -f 2`
     EXP_NUMZ=`echo $EXP | cut -d';' -f 3`
     EXP_MAG=`echo $EXP | cut -d';' -f 4`
-    DATA_DIR=$CYTOKIT_DATA_DIR/cytokit/cellsize/20181024/$EXPNAME
+    DATA_DIR=$CYTOKIT_DATA_DIR/cytokit/cell-size/20181024/$EXPNAME
     BASE_CONF=$CYTOKIT_REPO_DIR/pub/config/cell-size/experiment_${EXP_MAG}.yaml
     
     echo "Clearing results for experiment $EXP_NAME at $DATA_DIR/output/*"

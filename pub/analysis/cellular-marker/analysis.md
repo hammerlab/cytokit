@@ -307,3 +307,67 @@ gridExtra::grid.arrange(grobs=list(p_xy, p_stat, p_scat), layout_matrix=rbind(c(
 ```
 
 ![](analysis_files/figure-markdown_github/unnamed-chunk-13-1.png)
+
+Session
+-------
+
+``` r
+sessionInfo()
+```
+
+    ## R version 3.5.1 (2018-07-02)
+    ## Platform: x86_64-apple-darwin15.6.0 (64-bit)
+    ## Running under: macOS High Sierra 10.13.3
+    ## 
+    ## Matrix products: default
+    ## BLAS: /Library/Frameworks/R.framework/Versions/3.5/Resources/lib/libRblas.0.dylib
+    ## LAPACK: /Library/Frameworks/R.framework/Versions/3.5/Resources/lib/libRlapack.dylib
+    ## 
+    ## locale:
+    ## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+    ## 
+    ## attached base packages:
+    ## [1] parallel  stats     graphics  grDevices utils     datasets  methods  
+    ## [8] base     
+    ## 
+    ## other attached packages:
+    ##  [1] bindrcpp_0.2.2            ggcyto_1.10.0            
+    ##  [3] openCyto_1.20.0           flowWorkspace_3.30.0     
+    ##  [5] ncdfFlow_2.28.0           BH_1.66.0-1              
+    ##  [7] RcppArmadillo_0.9.200.4.0 flowCore_1.48.0          
+    ##  [9] forcats_0.3.0             stringr_1.3.1            
+    ## [11] dplyr_0.7.8               purrr_0.2.5              
+    ## [13] readr_1.1.1               tidyr_0.8.2              
+    ## [15] tibble_1.4.2              ggplot2_3.1.0            
+    ## [17] tidyverse_1.2.1           knitr_1.20               
+    ## 
+    ## loaded via a namespace (and not attached):
+    ##  [1] nlme_3.1-137        matrixStats_0.54.0  lubridate_1.7.4    
+    ##  [4] RColorBrewer_1.1-2  httr_1.3.1          rprojroot_1.3-2    
+    ##  [7] Rgraphviz_2.26.0    tools_3.5.1         backports_1.1.2    
+    ## [10] R6_2.3.0            KernSmooth_2.23-15  lazyeval_0.2.1     
+    ## [13] BiocGenerics_0.28.0 colorspace_1.3-2    withr_2.1.2        
+    ## [16] tidyselect_0.2.5    gridExtra_2.3       mnormt_1.5-5       
+    ## [19] compiler_3.5.1      graph_1.60.0        cli_1.0.1          
+    ## [22] rvest_0.3.2         Biobase_2.42.0      flowClust_3.20.0   
+    ## [25] xml2_1.2.0          labeling_0.3        flowStats_3.40.0   
+    ## [28] scales_1.0.0        DEoptimR_1.0-8      hexbin_1.27.2      
+    ## [31] mvtnorm_1.0-8       robustbase_0.93-3   RBGL_1.58.0        
+    ## [34] digest_0.6.18       rmarkdown_1.10      R.utils_2.7.0      
+    ## [37] rrcov_1.4-7         pkgconfig_2.0.2     htmltools_0.3.6    
+    ## [40] highr_0.7           rlang_0.3.0.1       readxl_1.1.0       
+    ## [43] rstudioapi_0.8      bindr_0.1.1         jsonlite_1.5       
+    ## [46] gtools_3.8.1        mclust_5.4.1        R.oo_1.22.0        
+    ## [49] magrittr_1.5        Matrix_1.2-15       Rcpp_1.0.0         
+    ## [52] munsell_0.5.0       R.methodsS3_1.7.1   stringi_1.2.4      
+    ## [55] yaml_2.2.0          MASS_7.3-51.1       zlibbioc_1.28.0    
+    ## [58] plyr_1.8.4          grid_3.5.1          crayon_1.3.4       
+    ## [61] lattice_0.20-38     splines_3.5.1       haven_1.1.2        
+    ## [64] hms_0.4.2           pillar_1.3.0        fda_2.4.8          
+    ## [67] corpcor_1.6.9       stats4_3.5.1        XML_3.98-1.16      
+    ## [70] glue_1.3.0          evaluate_0.12       latticeExtra_0.6-28
+    ## [73] data.table_1.11.8   modelr_0.1.2        cellranger_1.1.0   
+    ## [76] gtable_0.2.0        clue_0.3-56         assertthat_0.2.0   
+    ## [79] ks_1.11.3           broom_0.5.0         IDPmisc_1.1.18     
+    ## [82] pcaPP_1.9-73        flowViz_1.46.0      ellipse_0.4.1      
+    ## [85] cluster_2.0.7-1

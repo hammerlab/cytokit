@@ -108,3 +108,4 @@ ENV/
 .vscode
 
 .DS_Store
+.Rproj.user

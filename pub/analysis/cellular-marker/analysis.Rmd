@@ -278,7 +278,11 @@ gridExtra::grid.arrange(grobs=list(p_xy, p_stat, p_scat), layout_matrix=rbind(c(
 
 
 
+## Session
 
+```{r}
+sessionInfo()
+```
 
 
 

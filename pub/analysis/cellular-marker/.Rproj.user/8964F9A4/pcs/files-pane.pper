@@ -1,9 +1,0 @@
-{
-    "path" : "~/repos/hammer/cell-image-analysis/analysis/experiments/cellular-marker",
-    "sortOrder" : [
-        {
-            "ascending" : true,
-            "columnIndex" : 2
-        }
-    ]
-}

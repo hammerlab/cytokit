@@ -1,10 +1,10 @@
-exp,stepz,numz,mag
-20181024-d38-act-20X-5by5,1000,29,20x
-20181024-d38-unstim-20X-5by5,1000,25,20x
-20181024-d39-act-20x-5by5,500,33,20x
-20181024-d39-unstim-20x-5by5,500,25,20x
-20181024-jurkat-20X-5by5,2000,23,20x
-20181024-jurkat2-20X-5by5,500,25,20x
-20181026-pmel-act-20x-5by5,1000,23,20x
-20181026-pmel-us-20x-5by5,1000,25,20x
-20181026-pmel-act-60x-5b5,500,22,60x
+exp,stepz,numz,mag,label,type
+20181024-d38-act-20X-5by5,1000,29,20x,D38 Activated,Primary T
+20181024-d38-unstim-20X-5by5,1000,25,20x,D38 Unstimulated,Primary T
+20181024-d39-act-20x-5by5,500,33,20x,D39 Activated,Primary T
+20181024-d39-unstim-20x-5by5,500,25,20x,D39 Unstimulated,Primary T
+20181024-jurkat-20X-5by5,2000,23,20x,Jurkat R1,Jurkat
+20181024-jurkat2-20X-5by5,500,25,20x,Jurkat R2,Jurkat
+20181026-pmel-act-20x-5by5,1000,23,20x,Activated PMEL (20x),PMEL
+20181026-pmel-act-60x-5b5,500,22,60x,Activated PMEL (60x),PMEL
+20181026-pmel-us-20x-5by5,1000,25,20x,Unstimulated PMEL,PMEL

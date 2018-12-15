@@ -1,6 +1,7 @@
 import unittest
 from cytokit import tiling
 
+
 class TestTiling(unittest.TestCase):
 
     def _to_coordinates(self, index, tiler, w, h):

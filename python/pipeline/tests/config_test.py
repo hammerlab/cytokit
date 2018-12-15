@@ -1,5 +1,6 @@
 import unittest
 import cytokit
+from cytokit import config as cytokit_config
 import os.path as osp
 
 
@@ -8,7 +9,7 @@ class TestConfig(unittest.TestCase):
     def _get_example_conf(self, file_type='yaml'):
         cytokit.set_config_default_filename('experiment.' + file_type)
         conf_dir = osp.join(cytokit.conf_dir, 'v0.1', 'examples', 'ex1')
-        return cytokit.config.load(conf_dir)
+        return cytokit_config.load(conf_dir)
 
     def test_load_conf(self):
         conf = self._get_example_conf(file_type='yaml')

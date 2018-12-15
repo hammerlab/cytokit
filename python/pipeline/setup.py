@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 import os
 
 if os.getenv('TF_GPU', 'false') == 'true':
@@ -26,10 +26,7 @@ if __name__ == '__main__':
             'Topic :: Scientific/Engineering :: Bio-Informatics',
         ],
         install_requires=requires,
-        packages=[
-            'cytokit', 'cytokit.cli', 'cytokit.exec', 'cytokit.miq',
-            'cytokit.ops', 'cytokit.utils', 'cytokit.cytometry', 'cytokit.function'
-        ],
+        packages=find_packages(exclude=('tests',)),
         package_data={
             'cytokit': ['configs/*/examples/*/*', 'configs/*/schema/*']
         },

@@ -12,7 +12,7 @@ class TestConfigCLI(unittest.TestCase):
         return cytokit_config.load(conf_dir)
 
     def test_add_value(self):
-        # TODO: extend this to test cli as sytem commands instead
+        # TODO: extend this to test cli as system commands instead
         # Example command:
         # cytokit config editor --base-config-path=/lab/repos/cytokit/python/pipeline/cytokit/configs/ - \
         # add operator '{extract: {name:test, channels: [c1,c2]} }' show

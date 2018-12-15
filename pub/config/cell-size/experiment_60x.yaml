@@ -38,5 +38,9 @@ processor:
     target_shape: [336, 448]
     nuclei_channel_name: DAPI
     membrane_channel_name: MEMB
-    segmentation_params: {memb_min_dist: 1}
+    segmentation_params:
+      memb_min_dist: 1
+      memb_hole_size: 48
+      memb_max_dist: null
+      memb_propagation_regularization: .25
     quantification_params: {include_nucleus_intensity: true, include_cell_graph: true}

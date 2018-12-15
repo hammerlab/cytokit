@@ -13,7 +13,7 @@ do
     EXP_STEPZ=`echo $EXP | cut -d',' -f 2`
     EXP_NUMZ=`echo $EXP | cut -d',' -f 3`
     EXP_MAG=`echo $EXP | cut -d',' -f 4`
-    DATA_DIR=$CYTOKIT_DATA_DIR/cytokit/cell-size/20181024/$EXPNAME
+    DATA_DIR=$CYTOKIT_DATA_DIR/cytokit/cell-size/20181024/$EXP_NAME
     BASE_CONF=$CYTOKIT_REPO_DIR/pub/config/cell-size/experiment_${EXP_MAG}.yaml
     
     echo "Clearing results for experiment $EXP_NAME at $DATA_DIR/output/*"
@@ -23,17 +23,15 @@ do
     set name $EXP_NAME \
     set acquisition.axial_resolution $EXP_STEPZ \
     set acquisition.num_z_planes $EXP_NUMZ \
-    set processor.cytometry.segmentation_params.memb_min_dist 1 \
-    set processor.cytometry.segmentation_params.memb_max_dist 25 \
-    set processor.cytometry.segmentation_params.memb_sigma 1 \
+    set processor.cytometry.segmentation_params.memb_sigma 2 \
     save_variant v00/config \
-    set processor.cytometry.segmentation_params.memb_sigma 5 \
+    set processor.cytometry.segmentation_params.memb_sigma 4 \
     save_variant v01/config \
-    set processor.cytometry.segmentation_params.memb_sigma 9 \
+    set processor.cytometry.segmentation_params.memb_sigma 8 \
     save_variant v02/config \
     exit
 
-    for VARIANT in v00 v01 v02 #v03
+    for VARIANT in v00 v01 v02 
     do
         OUTPUT_DIR=$DATA_DIR/output/$VARIANT
         CONFIG_DIR=$OUTPUT_DIR/config

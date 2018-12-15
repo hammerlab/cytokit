@@ -131,4 +131,5 @@ def get_raw_file_type():
 
 pkg_dir = osp.abspath(osp.dirname(__file__))
 conf_dir = osp.normpath(osp.join(pkg_dir, 'configs'))
+test_data_dir = osp.normpath(osp.join(pkg_dir, '..', 'tests', 'data'))
 nb_dir = osp.normpath(osp.join(pkg_dir, '..', '..', 'notebooks'))

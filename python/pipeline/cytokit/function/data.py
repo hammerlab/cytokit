@@ -14,13 +14,17 @@ from cvutils import ops as cvops
 CYTOMETRY_STATS_AGG_MODES = ['best_z_plane', 'all']
 
 
+def get_processor_data(output_dir):
+    processor_data_filepath = osp.join(output_dir, cytokit_io.get_processor_data_path())
+    return exec.read_processor_data(processor_data_filepath)
+
+
 def get_best_focus_data(output_dir):
     """Get precomputed best focus plane information
 
     Note that this will return a data frame with references to 0-based region/tile indexes
     """
-    processor_data_filepath = osp.join(output_dir, cytokit_io.get_processor_data_path())
-    processor_data = exec.read_processor_data(processor_data_filepath)
+    processor_data = get_processor_data(output_dir)
     best_focus_op = CytokitOp.get_op_for_class(best_focus.CytokitFocalPlaneSelector)
     if best_focus_op not in processor_data:
         raise ValueError(
@@ -33,6 +37,7 @@ def get_best_focus_data(output_dir):
 
 
 def get_best_focus_coord_map(output_dir):
+    """Get map of best z planes as (region_index, tile_x, tile_y) -> best_z (all zero-based)"""
     return get_best_focus_data(output_dir).set_index(['region_index', 'tile_x', 'tile_y'])['best_z'].to_dict()
 
 

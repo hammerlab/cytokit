@@ -12,12 +12,12 @@ class TestConfig(unittest.TestCase):
 
     def test_experiement_01(self):
         out_dir = tempfile.mkdtemp(prefix='cytokit_pipeline_test')
-        logger.info('Experiment temporary output directory: %s', out_dir)
         proc = processor.Processor(
             data_dir=osp.join(cytokit.test_data_dir, 'experiment', 'cellular-marker-small', 'raw'),
             config_path=osp.join(cytokit.test_data_dir, 'experiment', 'cellular-marker-small', 'config')
         )
         proc.run_all(output_dir=out_dir)
+        logger.info('Experiment results saved to output directory: %s', out_dir)
 
         df = ck_fn.get_processor_data(out_dir)['drift_compensator']
         # Expect one drift comp record since there are two cycles and one is the reference

@@ -15,7 +15,7 @@ class TestConfig(unittest.TestCase):
             config_path=osp.join(cytokit.test_data_dir, 'experiment', 'cellular-marker-small', 'config')
         )
         proc.run_all(output_dir=out_dir)
-        print('Experiment 01 results saved to output directory: %s', out_dir)
+        print('Experiment 01 results saved to output directory:', out_dir)
 
         df = ck_fn.get_processor_data(out_dir)['drift_compensator']
         # Expect one drift comp record since there are two cycles and one is the reference

@@ -9,7 +9,7 @@ import numpy as np
 from io import BytesIO
 import base64
 import dash_core_components as dcc
-from cvutils import ops as cvops
+from cytokit.image import ops as cvops
 import logging
 
 logger = logging.getLogger(__name__)

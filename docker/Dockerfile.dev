@@ -4,7 +4,6 @@ ARG SIM_DIR=/lab/sim
 ARG REPO_DIR=/lab/repos
 ARG DATA_DIR=/lab/data
 ARG CYTOKIT_REPO_DIR=$REPO_DIR/cytokit
-ARG CVUTILS_REPO_DIR=$REPO_DIR/cvutils
 
 RUN mkdir -p $LAB_DIR $REPO_DIR $DATA_DIR $SIM_DIR
 
@@ -56,15 +55,13 @@ RUN cd $SIM_DIR && \
 RUN mkdir -p $(python -m site --user-site) && \
     echo "$CYTOKIT_REPO_DIR/python/pipeline" > $(python -m site --user-site)/local.pth && \
     echo "$CYTOKIT_REPO_DIR/python/notebooks/src" >> $(python -m site --user-site)/local.pth && \
-    echo "$CYTOKIT_REPO_DIR/python/applications" >> $(python -m site --user-site)/local.pth && \
-    echo "$CVUTILS_REPO_DIR/python" >> $(python -m site --user-site)/local.pth
+    echo "$CYTOKIT_REPO_DIR/python/applications" >> $(python -m site --user-site)/local.pth
 
 WORKDIR "/lab"
 
 ENV CYTOKIT_SIM_DIR $SIM_DIR
 ENV CYTOKIT_DATA_DIR $DATA_DIR
 ENV CYTOKIT_REPO_DIR $CYTOKIT_REPO_DIR
-ENV CVUTILS_REPO_DIR $CVUTILS_REPO_DIR
 ENV SHELL /bin/bash
 
 # Eliminate these warnings globally: FutureWarning: Conversion of the second argument of issubdtype from

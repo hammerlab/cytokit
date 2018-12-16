@@ -2,8 +2,8 @@ from skimage.external.tifffile import imread
 from cytokit import io as cytokit_io
 from cytokit import config as cytokit_config
 from cytokit import data as cytokit_data
+from cytokit.image import color
 from cytokit_app.explorer.config import cfg, ENV_APP_MONTAGE_CHANNEL_NAMES
-from cvutils import color
 from collections import defaultdict
 from collections import OrderedDict
 import os

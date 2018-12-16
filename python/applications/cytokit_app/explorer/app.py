@@ -14,8 +14,8 @@ from cytokit_app.explorer.data import cache as ac
 from cytokit_app.explorer import lib as lib
 from cytokit_app.explorer.config import cfg
 from cytokit.cytometry.cytometer import DEFAULT_PREFIXES
+from cytokit.image import color
 from collections import OrderedDict
-from cvutils import color
 import pandas as pd
 import numpy as np
 import logging

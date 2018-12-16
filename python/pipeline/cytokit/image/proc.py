@@ -1,5 +1,5 @@
-from cvutils import ops as cvops
-from cvutils import color as cvcolor
+from cytokit.image import ops as cvops
+from cytokit.image import color as cvcolor
 import numpy as np
 from collections import OrderedDict
 
@@ -34,7 +34,7 @@ def get_image_processor(channels, ranges=None, colors=None):
             values with lower and upper boundaries on channel values; if not given, channel values will
             be constrained
         colors: Dictionary (order does not matter) containing channel names as keys and 3-item list-like
-            values with either color names as strings (see cvutils.color) or RGB fractions in [0, 1]
+            values with either color names as strings (see cytokit.image.color) or RGB fractions in [0, 1]
             (i.e. [1, 0, 0] corresponds to red); if not given, colors will be assigned arbitrarily
     """
 

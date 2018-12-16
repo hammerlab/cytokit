@@ -7,9 +7,9 @@ from cytokit import exec
 from cytokit import io as cytokit_io
 from cytokit.ops import best_focus
 from cytokit.ops.op import CytokitOp
-from cytokit import image as cytokit_image
+from cytokit.image import proc as cvproc
+from cytokit.image import ops as cvops
 from cytokit.cli import CH_SRC_CYTO
-from cvutils import ops as cvops
 
 CYTOMETRY_STATS_AGG_MODES = ['best_z_plane', 'all']
 
@@ -101,7 +101,7 @@ def get_single_cell_image_data(output_dir, df, extract, ranges=None, colors=None
         img, meta = cytokit_io.read_tile(path, return_metadata=True)
         img = img[cycle, z]
         channels = list(meta['structured_labels'][cycle, z])
-        processor = cytokit_image.get_image_processor(channels, ranges=ranges, colors=colors)
+        processor = cvproc.get_image_processor(channels, ranges=ranges, colors=colors)
 
         # Get the cell image data frame containing the original cell id, cell image based on processed
         # raw image, and associated cell image properties

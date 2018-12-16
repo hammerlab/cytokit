@@ -14,9 +14,10 @@ from cvutils import ops as cvops
 CYTOMETRY_STATS_AGG_MODES = ['best_z_plane', 'all']
 
 
-def get_processor_data(output_dir):
-    processor_data_filepath = osp.join(output_dir, cytokit_io.get_processor_data_path())
-    return exec.read_processor_data(processor_data_filepath)
+def get_processor_data(output_dir, return_path=False):
+    path = osp.join(output_dir, cytokit_io.get_processor_data_path())
+    df = exec.read_processor_data(path)
+    return df, path if return_path else df
 
 
 def get_best_focus_data(output_dir):
@@ -24,13 +25,13 @@ def get_best_focus_data(output_dir):
 
     Note that this will return a data frame with references to 0-based region/tile indexes
     """
-    processor_data = get_processor_data(output_dir)
+    processor_data, path = get_processor_data(output_dir, return_path=True)
     best_focus_op = CytokitOp.get_op_for_class(best_focus.CytokitFocalPlaneSelector)
     if best_focus_op not in processor_data:
         raise ValueError(
             'No focal plane statistics found in statistics file "{}".  '
             'Are you sure the processor.py app was run with `run_best_focus`=True?'
-            .format(processor_data_filepath)
+            .format(path)
         )
     return processor_data[best_focus_op][['region_index', 'tile_index', 'tile_x', 'tile_y', 'best_z']] \
         .dropna().drop_duplicates().astype(int)

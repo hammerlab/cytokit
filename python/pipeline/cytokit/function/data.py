@@ -93,8 +93,38 @@ def get_extract_image_meta(output_dir, extract):
     return meta
 
 
-def get_single_cell_image_data(output_dir, df, extract, ranges=None, colors=None, cycle=0, z=0, image_size=None):
-    """Add single cell images and properties (based on an extract) to a cytometry data frame"""
+def get_single_cell_image_data(output_dir, df, extract, ranges=None, colors=None, image_size=None, **kwargs):
+    """Add single cell images and properties (based on an extract) to a cytometry data frame
+
+    Args:
+        df: Cytometry data frame
+        extract: Name of extract from which to extract single cell data; must contain the channel `cyto_cell_boundary`
+        ranges: Dictionary mapping extract channel names to min/max value ranges (to control contrast); Example:
+            ```
+            ranges = {
+                'proc_DAPI': [0, 255],
+                'proc_CD3': [0, 150],
+                'cyto_nucleus_boundary': [0, 1],
+                'cyto_cell_boundary': [0, 1]
+            }
+            ```
+        colors: Dictionary mapping extract channel names to color names or RGB colors as floats (
+            see cytokit.image.color for list of all named colors); Example:
+            ```
+            colors = {
+                'proc_DAPI': 'blue',
+                'proc_CD3': 'green',
+                'proc_DAPI2': 'none', # channel is hidden ([0, 0, 0] also works for this)
+                'cyto_nucleus_boundary': [1., 0., 0.], # red
+                'cyto_cell_boundary': [1., 1., 0.] # orange
+            }
+            ```
+        image_size: Size of individual cell images; default is None which returns images of varying sizes necessary
+            to fit bounding box of each cell object.  If given (e.g. image_size=(64,64)), images are resized
+            to the target 2D shape WITHOUT resampling -- instead the image is cropped around the center or padded
+            with zeros to ensure that the resulting images have the same scale (this ensures that cell images
+            are comparable on the same image scale).
+    """
 
     def add_cell_images(g):
         reg, tx, ty = g.iloc[0][['region_index', 'tile_x', 'tile_y']]
@@ -102,8 +132,9 @@ def get_single_cell_image_data(output_dir, df, extract, ranges=None, colors=None
         # Extract the relevant 2D image to be used for both cell object isolation and cell image display
         path = osp.join(output_dir, cytokit_io.get_extract_image_path(reg, tx, ty, extract))
         img, meta = cytokit_io.read_tile(path, return_metadata=True)
-        img = img[cycle, z]
-        channels = list(meta['structured_labels'][cycle, z])
+        icyc, iz = kwargs.get('cycle', 0), kwargs.get('z', 0)
+        img = img[icyc, iz]
+        channels = list(meta['structured_labels'][icyc, iz])
         processor = cvproc.get_image_processor(channels, ranges=ranges, colors=colors)
 
         # Get the cell image data frame containing the original cell id, cell image based on processed

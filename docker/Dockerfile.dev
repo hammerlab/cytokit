@@ -21,11 +21,11 @@ RUN pip --no-cache-dir install \
     bokeh==1.0.1 \
     keras==2.2.4 \
     centrosome==1.1.5 \
+    plotnine==0.4.0 \
     papermill \
     fcswrite \
     tifffile \
     fire \
-    plotnine \
     seaborn
 
 # Install Dash and per their instructions, freezing specific versions

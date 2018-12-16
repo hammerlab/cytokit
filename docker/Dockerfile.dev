@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git vim wget
 RUN pip --no-cache-dir install \
     jupyterlab \
     scikit-image==0.14.0 \
+    scikit-learn==0.20.1 \
     opencv-python==3.4.3.18 \
     pandas==0.22.0 \
     requests==2.20.1 \

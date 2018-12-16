@@ -10,14 +10,14 @@ import logging
 import numpy as np
 logger = logging.getLogger(__name__)
 
-VOLUME_CYCLE = 0
+MASK_CYCLE = 0
 BOUNDARY_CYCLE = 1
 
 CHANNEL_COORDINATES = {
     # Map channel names to (cycle, channel) coordinates
-    'cell_volume': (VOLUME_CYCLE, cytometer.CELL_CHANNEL),
+    'cell_mask': (MASK_CYCLE, cytometer.CELL_CHANNEL),
     'cell_boundary': (BOUNDARY_CYCLE, cytometer.CELL_CHANNEL),
-    'nucleus_volume': (VOLUME_CYCLE, cytometer.NUCLEUS_CHANNEL),
+    'nucleus_mask': (MASK_CYCLE, cytometer.NUCLEUS_CHANNEL),
     'nucleus_boundary': (BOUNDARY_CYCLE, cytometer.NUCLEUS_CHANNEL),
 }
 
@@ -30,16 +30,6 @@ def get_channel_coordinates(channel):
             .format(channel, list(CHANNEL_COORDINATES.keys()))
         )
     return CHANNEL_COORDINATES[channel]
-
-
-# def _default_model_path():
-#     return osp.join(cytokit_data.get_cache_dir(), 'cytometry', 'model', 'nuclei_2d_model.h5')
-#
-#
-# def get_model_path():
-#     path = os.getenv(cytokit.ENV_CYTOMETRY_2D_MODEL_PATH, _default_model_path())
-#     url = os.getenv(cytokit.ENV_CYTOMETRY_2D_MODEL_URL, cytokit.DEFAULT_CYTOMETRY_2D_MODEL_URL)
-#     return cytokit_data.download(url, path)
 
 
 def set_keras_session(op):
@@ -189,7 +179,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
         assert img_boundary.ndim == 4, 'Expecting 4D image, got shape {}'.format(img_boundary.shape)
 
         # Stack labeled volumes to 5D tiles and convert to uint16
-        # * Note that this ordering should align to VOLUME_CYCLE and BOUNDARY_CYCLE constants
+        # * Note that this ordering should align to MASK_CYCLE and BOUNDARY_CYCLE constants
         img_label = np.stack([img_seg, img_boundary], axis=0).astype(np.uint16)
 
         return img_label, stats

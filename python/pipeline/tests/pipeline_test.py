@@ -6,6 +6,7 @@ from cytokit.cli import processor, analysis, operator
 from cytokit.function import data as ck_fn
 from cytokit import config as ck_config
 from cytokit import io as ck_io
+from skimage import io as sk_io
 
 
 class TestConfig(unittest.TestCase):
@@ -15,7 +16,9 @@ class TestConfig(unittest.TestCase):
         print('Initialized output dir {} for pipeline test 01'.format(out_dir))
 
         raw_dir = osp.join(cytokit.test_data_dir, 'experiment', 'cellular-marker-small', 'raw')
+        val_dir = osp.join(cytokit.test_data_dir, 'experiment', 'cellular-marker-small', 'validation')
         config_dir = osp.join(cytokit.test_data_dir, 'experiment', 'cellular-marker-small', 'config')
+        config = ck_config.load(config_dir)
 
         # Run processor and extractions/aggregations
         processor.Processor(data_dir=raw_dir, config_path=config_dir).run_all(output_dir=out_dir)
@@ -41,7 +44,6 @@ class TestConfig(unittest.TestCase):
         # ##################### #
         # Cytometry Stats Check #
         # ##################### #
-        config = ck_config.load(config_dir)
         df = ck_fn.get_cytometry_data(out_dir, config, mode='best_z_plane')
 
         # Verify that the overall cell count and size found are in the expected ranges
@@ -69,11 +71,33 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(df['image'].iloc[0].shape, (64, 64, 3))
         self.assertTrue(df['image'].notnull().all())
 
+        # ################## #
+        # Segmentation Check #
+        # ################## #
+        # Load extract with object masks
+        img, meta = ck_io.read_tile(
+            osp.join(out_dir, ck_io.get_extract_image_path(ireg=0, tx=0, ty=0, name='best_z_segm')),
+            return_metadata=True
+        )
+        # Ensure that the 8 channels set for extraction showed up in the resulting hyperstack
+        self.assertEqual(len(meta['labels']), 8)
+
+        # Verify that IoU for both nuclei and cell masks vs ground-truth is > 80%
+        img_seg_cell = img[0, 0, meta['labels'].index('cyto_cell_mask')]
+        img_seg_nucl = img[0, 0, meta['labels'].index('cyto_nucleus_mask')]
+        img_val_cell = sk_io.imread(osp.join(val_dir, 'cells.tif'))
+        img_val_nucl = sk_io.imread(osp.join(val_dir, 'nuclei.tif'))
+
+        def iou(im1, im2):
+            return ((im1 > 0) & (im2 > 0)).sum() / ((im1 > 0) | (im2 > 0)).sum()
+        self.assertGreater(iou(img_seg_cell, img_val_cell), .8)
+        self.assertGreater(iou(img_seg_nucl, img_val_nucl), .8)
+
         # ############# #
         # Montage Check #
         # ############# #
-
-        # TODO:
-        # - load and check segmented cells using CELL1 channel IoU comparison to cyto_cell_boundary
-        # - check meta data in tile and montage image
-        # - validate FCS reading
+        # Load montage and check that it has the same dimensions as the extract image above,
+        # since there is only one tile in this case
+        img_mntg = ck_io.read_tile(osp.join(out_dir, ck_io.get_montage_image_path(ireg=0, name='best_z_segm')))
+        self.assertEqual(img.shape, img_mntg.shape)
+        self.assertEqual(img.dtype, img_mntg.dtype)

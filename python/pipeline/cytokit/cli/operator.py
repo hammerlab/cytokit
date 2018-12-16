@@ -104,7 +104,7 @@ class Operator(cli.DataCLI):
             name: Name of extraction to be created; This will be used to construct result path like
                 EXP_DIR/output/extract/`name`
             channels: List of strings indicating channel names (case-insensitive) prefixed by source for that
-                channel (e.g. proc_DAPI, raw_CD4, cyto_NUCLEUS_BOUNDARY); Available sources are:
+                channel (e.g. proc_DAPI, raw_CD4, cyto_nucleus_boundary); Available sources are:
                 - "raw": Raw data images
                 - "proc": Data generated as a results of preprocessing
                 - "cyto": Cytometric object data (nuclei and cell boundaries)

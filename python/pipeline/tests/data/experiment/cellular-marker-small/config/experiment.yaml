@@ -24,7 +24,15 @@ acquisition:
 operator:
   - extract:
       name: best_z_segm
-      channels: [proc_DAPI1, proc_MEMB, proc_DAPI2, proc_CELL, cyto_cell_boundary, cyto_nucleus_boundary]
+      channels:
+        - proc_DAPI1
+        - proc_MEMB
+        - proc_DAPI2
+        - proc_CELL
+        - cyto_cell_boundary
+        - cyto_nucleus_boundary
+        - cyto_cell_mask
+        - cyto_nucleus_mask
   - montage: {name: best_z_segm, extract_name: best_z_segm}
 analysis:
   - aggregate_cytometry_statistics: {mode: best_z_plane}

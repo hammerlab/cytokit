@@ -24,5 +24,9 @@ class Cytokit(object):
         return download.Download
 
 
-if __name__ == '__main__':
+def main():
     fire.Fire(Cytokit)
+
+
+if __name__ == '__main__':
+    main()

@@ -3,15 +3,16 @@
 import fire
 import logging
 from cytokit import data
+from cytokit import cli
 
 
 class Download(cli.CLI):
 
     def models(self):
-        logging.info('Download best focus classifier files')
+        logging.info('Downloading best focus classifier files')
         data.initialize_best_focus_model()
 
-        logging.info('Download cytometry model files')
+        logging.info('Downloading cytometry model files')
         data.initialize_cytometry_2d_model()
 
         logging.info('Model downloads complete')

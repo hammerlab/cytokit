@@ -33,7 +33,7 @@ def download(url, path):
     import urllib.request
     if not osp.exists(path):
         os.makedirs(osp.dirname(path), exist_ok=True)
-        logger.debug('Downloading url "{}" to local path "{}"'.format(url, path))
+        logger.info('Downloading url "{}" to local path "{}"'.format(url, path))
         urllib.request.urlretrieve(url, path)
     return path
 
@@ -43,7 +43,7 @@ def download_file_from_google_drive(id, path, name=None):
 
     if not osp.exists(path):
         os.makedirs(osp.dirname(path), exist_ok=True)
-        logger.debug('Downloading google drive file "{}" to local path "{}"'.format(name or id, path))
+        logger.info('Downloading google drive file "{}" to local path "{}"'.format(name or id, path))
 
         session = requests.Session()
         response = session.get(url, params={'id': id}, stream=True)

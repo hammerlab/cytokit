@@ -30,5 +30,6 @@ if __name__ == '__main__':
         package_data={
             'cytokit': ['configs/*/examples/*/*', 'configs/*/schema/*']
         },
-        include_package_data=True
+        include_package_data=True,
+        entry_points={'console_scripts': ['cytokit = cytokit.cli.main:main']}
     )

@@ -13,21 +13,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends git vim wget
 RUN pip --no-cache-dir install \
     jupyterlab \
     scikit-image==0.14.0 \
-    matplotlib \
-    pandas \
-    requests \
-    fire \
-    dask[distributed] \
-    bokeh \
+    opencv-python==3.4.3.18 \
+    pandas==0.22.0 \
+    requests==2.20.1 \
+    matplotlib==2.2.2 \
+    dask[distributed]==0.20.1 \
+    bokeh==1.0.1 \
+    keras==2.2.4 \
+    centrosome==1.1.5 \
     papermill \
-    plotnine \
-    seaborn \
-    keras \
     fcswrite \
     tifffile \
-    centrosome
+    fire \
+    plotnine \
+    seaborn
 
-# Install Dash and per their instructions, reference specific verions
+# Install Dash and per their instructions, freezing specific versions
 # See: https://dash.plot.ly/getting-started
 RUN pip install dash==0.21.1  \
     dash-renderer==0.13.0 \
@@ -37,7 +38,7 @@ RUN pip install dash==0.21.1  \
 
 # OpenCV / Imgaug installation
 RUN apt-get install -y libsm6 libxext6 libfontconfig1 libxrender1
-RUN pip install opencv-python imgaug
+RUN pip install imgaug
 
 # Install Flowdec
 ENV TF_GPU true

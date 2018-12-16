@@ -16,8 +16,11 @@ CYTOMETRY_STATS_AGG_MODES = ['best_z_plane', 'all']
 
 def get_processor_data(output_dir, return_path=False):
     path = osp.join(output_dir, cytokit_io.get_processor_data_path())
-    df = exec.read_processor_data(path)
-    return df, path if return_path else df
+    proc_data = exec.read_processor_data(path)
+    if return_path:
+        return proc_data, path
+    else:
+        return proc_data
 
 
 def get_best_focus_data(output_dir):

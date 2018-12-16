@@ -3,7 +3,6 @@ import numpy as np
 
 DEFAULT_CONV_ARGS = {'activation': 'relu', 'padding': 'same'}
 DEFAULT_BN_ARGS = {'momentum': 0.9}
-WEIGHTS_FILE_ID = '1I9j4oABbcV8EnvO_ufACXP9e4KyfHMtE'
 
 
 def get_model_core(n_class, input_shape, ks=(3, 3),

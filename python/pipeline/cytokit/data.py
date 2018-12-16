@@ -2,13 +2,12 @@ import os
 import requests
 from os import path as osp
 import logging
+import cytokit
 logger = logging.getLogger(__name__)
 
 DEFAULT_CACHE_DIR = osp.join('.cytokit', 'cache')
 ENV_CACHE_DIR = 'CYTOKIT_CACHE_DIR'
 ENV_DATA_DIR = 'CYTOKIT_DATA_DIR'
-
-BEST_FOCUS_MODEL = "https://storage.googleapis.com/microscope-image-quality/static/model/model.ckpt-1000042"
 
 
 def get_data_dir():
@@ -82,3 +81,13 @@ def initialize_best_focus_model():
 
     # Return path to checkpoint, to be fed directory to tensorflow restore operations
     return osp.join(model_path, osp.basename(REMOTE_MODEL_CHECKPOINT_PATH))
+
+
+def initialize_cytometry_2d_model():
+    from cytokit import cytometry
+    default_path = _resolve_cache_path(osp.join('cytometry', 'model', 'unet_v2_weights.h5'))
+    path = os.getenv(cytokit.ENV_CYTOMETRY_2D_MODEL_PATH, default_path)
+    file_id = os.getenv(cytokit.ENV_CYTOMETRY_2D_MODEL_FILE_ID, cytometry.CYTOMETRY_UNET_V2_WEIGHTS_FILE_ID)
+
+    # Return path to model h5 file
+    return download_file_from_google_drive(file_id, path, name='UNet Weights')

@@ -415,10 +415,7 @@ class Cytometer2D(KerasCytometer2D):
         return unet_model.get_model(3, input_shape)
 
     def _get_weights_path(self):
-        # Load this as late as possible to avoid premature keras backend initialization
-        from cytokit.cytometry.models import unet_v2 as unet_model
-        path = osp.join(cytokit_data.get_cache_dir(), 'cytometry', 'unet_v2_weights.h5')
-        return cytokit_data.download_file_from_google_drive(unet_model.WEIGHTS_FILE_ID, path, name='UNet Weights')
+        return cytokit_data.initialize_cytometry_2d_model()
 
     def get_segmentation_mask(self, img_bin_nuc, img_memb=None,
                               min_dist=None, max_dist=None, hole_size=None,

@@ -2,7 +2,13 @@ sudo: false
 language: python
 python:
   - "3.6"
+env:
+  - CYTOKIT_CACHE_DIR=${TRAVIS_BUILD_DIR}/cache
+cache:
+  directories:
+    - cache
 install:
+  - env
   # Example modified from https://conda.io/docs/user-guide/tasks/use-conda-with-travis-ci.html
   - sudo apt-get update
   # We do this conditionally because it saves us some downloading if the

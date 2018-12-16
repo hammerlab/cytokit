@@ -32,14 +32,14 @@ def get_channel_coordinates(channel):
     return CHANNEL_COORDINATES[channel]
 
 
-def _default_model_path():
-    return osp.join(cytokit_data.get_cache_dir(), 'cytometry', 'model', 'nuclei_2d_model.h5')
-
-
-def get_model_path():
-    path = os.getenv(cytokit.ENV_CYTOMETRY_2D_MODEL_PATH, _default_model_path())
-    url = os.getenv(cytokit.ENV_CYTOMETRY_2D_MODEL_URL, cytokit.DEFAULT_CYTOMETRY_2D_MODEL_URL)
-    return cytokit_data.download(url, path)
+# def _default_model_path():
+#     return osp.join(cytokit_data.get_cache_dir(), 'cytometry', 'model', 'nuclei_2d_model.h5')
+#
+#
+# def get_model_path():
+#     path = os.getenv(cytokit.ENV_CYTOMETRY_2D_MODEL_PATH, _default_model_path())
+#     url = os.getenv(cytokit.ENV_CYTOMETRY_2D_MODEL_URL, cytokit.DEFAULT_CYTOMETRY_2D_MODEL_URL)
+#     return cytokit_data.download(url, path)
 
 
 def set_keras_session(op):

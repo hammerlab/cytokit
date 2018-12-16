@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import fire
-from cytokit.cli import analysis, operator, processor, application, config
+from cytokit.cli import analysis, operator, processor, application, config, download
 
 
 class Cytokit(object):
@@ -19,6 +19,9 @@ class Cytokit(object):
     
     def config(self):
         return config.Config
+
+    def download(self):
+        return download.Download
 
 
 if __name__ == '__main__':

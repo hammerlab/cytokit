@@ -4,12 +4,15 @@ import cytokit
 import tempfile
 from cytokit.cli import processor
 from cytokit.function import data as ck_fn
+import logging
+logger = logging.getLogger(__name__)
 
 
 class TestConfig(unittest.TestCase):
 
     def test_experiement_01(self):
         out_dir = tempfile.mkdtemp(prefix='cytokit_pipeline_test')
+        logger.info('Experiment temporary output directory: %s', out_dir)
         proc = processor.Processor(
             data_dir=osp.join(cytokit.test_data_dir, 'experiment', 'cellular-marker-small', 'raw'),
             config_path=osp.join(cytokit.test_data_dir, 'experiment', 'cellular-marker-small', 'config')

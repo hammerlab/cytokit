@@ -14,4 +14,4 @@ tifffile
 fire
 plotnine
 seaborn
-git+https://github.com/hammerlab/cvutils.git#egg=cvutils&subdirectory=python
+git+git://github.com/hammerlab/cvutils.git#egg=cvutils&subdirectory=python

@@ -23,7 +23,7 @@ Installing and configuring Cytokit currently involves little more than installin
 ### Example
 
 One of the goals of Cytokit is to make it as easy as possible to reproduce complicated workflows on big image datasets and to that end, the majority of the logic that drives how Cytokit functions is determined by json/yaml configurations.  
-Starting from template configurations like this sample [Test Experiment](cytokit/pipeline/tests/data/experiment/cellular-marker-small/config/experiment.yaml) and more realistically, this [CODEX BALBc1](pub/config/codex-spleen/experiment.yaml) configuration, pipelines are meant to work as bash scripts executing small variants on these parameterizations for evaluation against one another.  Here is a bash script demonstrating how this often works:
+Starting from template configurations like this sample [Test Experiment](python/pipeline/tests/data/experiment/cellular-marker-small/config/experiment.yaml) and more realistically, this [CODEX BALBc1](pub/config/codex-spleen/experiment.yaml) configuration, pipelines are meant to work as bash scripts executing small variants on these parameterizations for evaluation against one another.  Here is a bash script demonstrating how this often works:
 
 ```bash
 EXPERIMENT_DATA_DIR=/lab/data/201801-codex-lung

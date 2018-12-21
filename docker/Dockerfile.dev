@@ -8,6 +8,7 @@ ARG CYTOKIT_REPO_DIR=$REPO_DIR/cytokit
 RUN mkdir -p $LAB_DIR $REPO_DIR $DATA_DIR $SIM_DIR
 
 RUN apt-get update && apt-get install -y --no-install-recommends git vim wget
+RUN pip install --upgrade pip
 
 RUN pip --no-cache-dir install \
     jupyterlab \

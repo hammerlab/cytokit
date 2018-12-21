@@ -11,7 +11,7 @@ For more information, see: [Cytokit: A single-cell analysis toolkit for high dim
   
 ### Installation and Requirements
 
-Installing and configuring Cytokit currently involves little more than installing [nvidia-docker](https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)) and building or downloading the Cytokit container image (not on Docker Hub yet), but this inherently limits support to Linux operating systems.  Additional limitations include:
+Installing and configuring Cytokit currently involves little more than installing [nvidia-docker](https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)) and building or downloading the Cytokit container image (not on Docker Hub yet), but this inherently limits support to Linux operating systems for GPU-acceleration.  Additional limitations include:
 
 - There is currently no CPU-only docker image 
 - Generating and running pipelines requires working knowledge of JupyterLab and a little tolerance for yaml/json files as well as command lines
@@ -22,7 +22,8 @@ Installing and configuring Cytokit currently involves little more than installin
 
 ### Example
 
-One of the goals of Cytokit is to make it as easy as possible to reproduce complicated workflows on big image datasets and to that end, the majority of the logic that drives how Cytokit functions is determined by json/yaml configurations.  Starting from template configurations like this sample [Test Experiment] and more realistically, this [CODEX BALBc1] configuration, pipelines are meant to work as bash scripts executing small variants on these parameterizations for evaluation against one another.  Here is a bash script demonstrating how this often works:
+One of the goals of Cytokit is to make it as easy as possible to reproduce complicated workflows on big image datasets and to that end, the majority of the logic that drives how Cytokit functions is determined by json/yaml configurations.  
+Starting from template configurations like this sample [Test Experiment](cytokit/pipeline/tests/data/experiment/cellular-marker-small/config/experiment.yaml) and more realistically, this [CODEX BALBc1](pub/config/codex-spleen/experiment.yaml) configuration, pipelines are meant to work as bash scripts executing small variants on these parameterizations for evaluation against one another.  Here is a bash script demonstrating how this often works:
 
 ```bash
 EXPERIMENT_DATA_DIR=/lab/data/201801-codex-lung

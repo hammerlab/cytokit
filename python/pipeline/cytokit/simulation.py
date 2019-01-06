@@ -19,7 +19,7 @@ def load_celegans_experiment(**kwargs):
 
 
 def get_example_config(example_name='ex1'):
-    path = osp.join(cytokit.conf_dir, 'v0.1', 'examples', example_name)
+    path = osp.join(cytokit.test_data_dir, 'configs', 'v0.1', 'examples', example_name)
     return cytokit_config.load(path)
 
 

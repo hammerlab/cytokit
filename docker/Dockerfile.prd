@@ -1,5 +1,5 @@
 FROM tensorflow/tensorflow:1.8.0-gpu-py3
-ARG FLOWDEC_REPO_URL="https://github.com/hammerlab/flowdec.git"
+ARG CYTOKIT_REPO_URL="https://github.com/hammerlab/cytokit.git"
 ARG SIM_DIR=/lab/sim
 ARG REPO_DIR=/lab/repos
 ARG DATA_DIR=/lab/data
@@ -31,27 +31,23 @@ RUN pip --no-cache-dir install \
 
 # Install Dash and per their instructions, freezing specific versions
 # See: https://dash.plot.ly/getting-started
-RUN pip install dash==0.21.1  \
+RUN pip --no-cache-dir install dash==0.21.1  \
     dash-renderer==0.13.0 \
     dash-html-components==0.11.0 \
     dash-core-components==0.23.0 \
     plotly
 
-# Imgaug installation
-RUN apt-get install -y libsm6 libxext6 libfontconfig1 libxrender1
-RUN pip install imgaug
-
-# Install Flowdec
+# Set env variable for flowdec installation
 ENV TF_GPU true
-RUN cd $REPO_DIR && \
-    git clone $FLOWDEC_REPO_URL && \
-    cd flowdec/python && \
-    pip install .
+RUN pip --no-cache-dir install flowdec
 
 # Download simulation data for testing
 RUN cd $SIM_DIR && \
     wget https://storage.googleapis.com/musc-codex/datasets/simulations/sim-exp-01.zip && \
     unzip -q sim-exp-01.zip
+
+# Clone cytokit repo
+RUN cd $REPO_DIR && git clone $CYTOKIT_REPO_URL
 
 # Add any source directories for development to python search path
 RUN mkdir -p $(python -m site --user-site) && \

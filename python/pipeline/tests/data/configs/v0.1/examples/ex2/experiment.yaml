@@ -4,8 +4,6 @@ environment:
   path_formats:
     proc_image: 'processor/tile/BALBc-1_X{x:02d}_Y{y:02d}.tif'
 acquisition:
-  # Imaging was performed in Keyence BZ-X710 fluorescent microscope configured with 3 fluorescent channels
-  # (FITC, Cy3, Cy5) and equipped with Nikon PlanFluor 40x NA 1.3 oil immersion lens
   per_cycle_channel_names: [FITC, Cy3, Cy5]
   channel_names:
     - CD45

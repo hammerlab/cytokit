@@ -6,13 +6,16 @@ import os.path as osp
 
 class TestConfig(unittest.TestCase):
 
-    def _get_example_conf(self, file_type='yaml'):
+    def _get_example_conf(self, file_type='yaml', ex='ex1'):
         cytokit.set_config_default_filename('experiment.' + file_type)
-        conf_dir = osp.join(cytokit.conf_dir, 'v0.1', 'examples', 'ex1')
+        conf_dir = osp.join(cytokit.test_data_dir, 'configs', 'v0.1', 'examples', ex)
         return cytokit_config.load(conf_dir)
 
     def test_load_conf(self):
-        conf = self._get_example_conf(file_type='yaml')
+        conf = self._get_example_conf(file_type='yaml', ex='ex1')
+        self.assertTrue(len(conf.channel_names) > 0)
+
+        conf = self._get_example_conf(file_type='yaml', ex='ex2')
         self.assertTrue(len(conf.channel_names) > 0)
 
     def test_get_region_point_coordinates(self):

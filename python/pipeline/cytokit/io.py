@@ -88,15 +88,30 @@ def save_csv(file, df, **kwargs):
     df.to_csv(file, **kwargs)
 
 
+def _set_tiff_warning_filters():
+    # Ignore warnings known to occur under normal conditions when reading files via tifffile
+    warnings.filterwarnings(
+        'ignore', category=UserWarning,
+        message='unpack: string size must be a multiple of element size'
+    )
+    warnings.filterwarnings(
+        'ignore', category=RuntimeWarning,
+        message='py_decodelzw encountered unexpected end of stream'
+    )
+
+
 def read_image(file, return_metadata=False):
-    # Use skimage io if metadata not necessary
-    if not return_metadata:
-        return sk_io.imread(file)
-    # Otherwise, read extract metatdata using tifffile
-    else:
-        with TiffFile(file) as tif:
-            res = tif.asarray()
-            return res, _get_tif_metadata(tif, shape=res.shape)
+    with warnings.catch_warnings():
+        _set_tiff_warning_filters()
+
+        # Use skimage io if metadata not necessary
+        if not return_metadata:
+            return sk_io.imread(file)
+        # Otherwise, read file metatdata using tifffile
+        else:
+            with TiffFile(file) as tif:
+                res = tif.asarray()
+                return res, _get_tif_metadata(tif, shape=res.shape)
 
 
 def read_tile(file, return_metadata=False):
@@ -106,36 +121,37 @@ def read_tile(file, return_metadata=False):
     saved using tifffile lose unit length dimensions.  To deal with this fact, the metadata in the image
     is parsed here to ensure that missing dimensions are added back.
     """
-
     # The "imagej_metadata" attribute looks like this for a 5D image with no unit-length dimensions
     # and original shape cycles=2, z=25, channels=2:
     # {'ImageJ': '1.11a', 'axes': 'TZCYX', 'channels': 2, 'frames': 2, 'hyperstack': True,
     # 'images': 100, 'mode': 'grayscale', 'slices': 25}
     # However, if a unit-length dimension was dropped it simply does not show up in this dict
-    with TiffFile(file) as tif:
-        tags = dict(tif.imagej_metadata)
-        if 'axes' not in tags:
-            warnings.warn('ImageJ tags do not contain "axes" property (file = {}, tags = {})'.format(file, tags))
-        else:
-            if tags['axes'] != 'TZCYX':
-                warnings.warn(
-                    'Image has tags indicating that it was not saved in TZCYX format.  '
-                    'The file should have been saved with this property explicitly set and further '
-                    'processing of it may be unsafe (file = {})'.format(file)
-                )
-        slices = [
-            slice(None) if 'frames' in tags else None,
-            slice(None) if 'slices' in tags else None,
-            slice(None) if 'channels' in tags else None,
-            slice(None),
-            slice(None)
-        ]
-        res = tif.asarray()[slices]
+    with warnings.catch_warnings():
+        _set_tiff_warning_filters()
+        with TiffFile(file) as tif:
+            tags = dict(tif.imagej_metadata)
+            if 'axes' not in tags:
+                warnings.warn('ImageJ tags do not contain "axes" property (file = {}, tags = {})'.format(file, tags))
+            else:
+                if tags['axes'] != 'TZCYX':
+                    warnings.warn(
+                        'Image has tags indicating that it was not saved in TZCYX format.  '
+                        'The file should have been saved with this property explicitly set and further '
+                        'processing of it may be unsafe (file = {})'.format(file)
+                    )
+            slices = [
+                slice(None) if 'frames' in tags else None,
+                slice(None) if 'slices' in tags else None,
+                slice(None) if 'channels' in tags else None,
+                slice(None),
+                slice(None)
+            ]
+            res = tif.asarray()[slices]
 
-        if return_metadata:
-            return res, _get_tif_metadata(tif, shape=res.shape)
-        else:
-            return res
+            if return_metadata:
+                return res, _get_tif_metadata(tif, shape=res.shape)
+            else:
+                return res
 
 
 def _get_tif_metadata(tif, shape=None):

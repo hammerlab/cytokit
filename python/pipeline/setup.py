@@ -22,14 +22,13 @@ if __name__ == '__main__':
             'Environment :: Console',
             'Operating System :: OS Independent',
             'Intended Audience :: Science/Research',
-            'Programming Language :: Python',
             'Topic :: Scientific/Engineering :: Bio-Informatics',
+            'License :: OSI Approved :: Apache Software License',
+            'Programming Language :: Python :: 3.6'
         ],
         install_requires=requires,
         packages=find_packages(exclude=('tests',)),
-        package_data={
-            'cytokit': ['configs/*/examples/*/*', 'configs/*/schema/*']
-        },
+        package_data={},
         include_package_data=True,
         entry_points={'console_scripts': ['cytokit = cytokit.cli.main:main']}
     )

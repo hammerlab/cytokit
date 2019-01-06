@@ -10,6 +10,9 @@ RUN mkdir -p $LAB_DIR $REPO_DIR $DATA_DIR $SIM_DIR
 RUN apt-get update && apt-get install -y --no-install-recommends git vim wget
 RUN pip install --upgrade pip
 
+# OpenCV package dependencies
+RUN apt-get install -y libsm6 libxext6 libfontconfig1 libxrender1
+
 RUN pip --no-cache-dir install \
     jupyterlab \
     scikit-image==0.14.0 \

@@ -156,7 +156,7 @@ def get_single_cell_image_data(output_dir, df, extract, ranges=None, colors=None
 
 
 def extract_single_cell_image_data(df, raw_tile, display_tile, channels, image_size=None,
-                         object_type='cell_boundary', apply_mask=True):
+                         object_type='cell_boundary', apply_mask=True, fill_value=0):
     if df is None:
         return None
 
@@ -190,7 +190,7 @@ def extract_single_cell_image_data(df, raw_tile, display_tile, channels, image_s
         is_boundary=True,
         patch_shape=image_size,
         apply_mask=apply_mask,
-        fill_value=0
+        fill_value=fill_value
     )
 
     # Return list of dictionaries where each represents one cell (with at least an id and image)

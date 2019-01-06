@@ -2,14 +2,14 @@ import unittest
 import os.path as osp
 import cytokit
 from cytokit import config as cytokit_config
+from cytokit import simulation as cytokit_simulation
 from cytokit.cli.config import ConfigEditor
 
 
 class TestConfigCLI(unittest.TestCase):
 
     def _get_example_conf(self):
-        conf_dir = osp.join(cytokit.conf_dir, 'v0.1', 'examples', 'ex1')
-        return cytokit_config.load(conf_dir)
+        return cytokit_simulation.get_example_config(example_name='ex1')
 
     def test_add_value(self):
         # TODO: extend this to test cli as system commands instead

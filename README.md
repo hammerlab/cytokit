@@ -9,9 +9,11 @@ datasets with a focus on those generated from multiplexed staining protocols.  T
 For more information, see: [Cytokit: A single-cell analysis toolkit for high dimensional fluorescent microscopy imaging](https://www.biorxiv.org/content/early/2018/11/04/460980)
   
   
-### Installation and Requirements
+### Quick Start
 
-Installing and configuring Cytokit currently involves little more than installing [nvidia-docker](https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)) and building or downloading the Cytokit container image (not on Docker Hub yet), but this inherently limits support to Linux operating systems for GPU-acceleration.  Additional limitations include:
+Installing and configuring Cytokit currently involves little more than installing [nvidia-docker](https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)) 
+and building or downloading the Cytokit container image, but this inherently limits support to Linux operating 
+systems for GPU-acceleration.  Additional limitations include:
 
 - There is currently no CPU-only docker image 
 - Generating and running pipelines requires working knowledge of JupyterLab and a little tolerance for yaml/json files as well as command lines
@@ -19,6 +21,22 @@ Installing and configuring Cytokit currently involves little more than installin
 - Deconvolution requires manual configuration of microscope attributes like filter wavelengths, immersion media, and numerical aperture (though support to infer much of this based on the imaging platform may be added in the future)
 - 3 dimensional images are supported but cell segmentation and related outputs are currently 2 dimensional 
 - General system requirements include at least 24G RAM and 8G of GPU memory (per GPU)
+
+Once nvidia-docker is installed, the container can be launched and used as follows:
+
+```bash
+nvidia-docker pull hammerlab/cytokit:latest
+
+# Run the container with an attached volume to contain raw images and results  
+nvidia-docker run --rm -ti -p 8888:8888 -p 8787:8787 -p 8050:8050 \
+-v $LOCAL_IMAGE_DATA_DIR:/lab/data \
+hammerlab/cytokit
+```
+
+This will launch JupyterLab on port 8888.  After navigating to localhost:8888 and entering the access token 
+printed on the command line following ```nvidia-docker run```, you can then run an example notebook 
+like [cellular_marker_profiling_example](python/notebooks/examples/marker_profiling_example.ipynb), which can be found 
+at ```/lab/repos/cytokit/python/notebooks/examples``` in the JupyterLab file navigator. 
 
 ### Example
 

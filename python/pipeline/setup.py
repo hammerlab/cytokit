@@ -1,11 +1,6 @@
 from setuptools import setup, find_packages
 import os
 
-if os.getenv('TF_GPU', 'false') == 'true':
-    requires = ['tensorflow-gpu>=1.7.0']
-else:
-    requires = ['tensorflow>=1.7.0']
-
 with open('requirements.txt', 'r') as fd:
     requires += [l.strip() for l in fd.readlines()]
 
@@ -27,6 +22,10 @@ if __name__ == '__main__':
             'Programming Language :: Python :: 3.6'
         ],
         install_requires=requires,
+        extras_require={
+            "tf": ["tensorflow>=1.7.0"],
+            "tf_gpu": ["tensorflow-gpu>=1.7.0"],
+        },
         packages=find_packages(exclude=('tests',)),
         package_data={},
         include_package_data=True,

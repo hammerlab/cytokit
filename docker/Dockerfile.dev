@@ -43,7 +43,7 @@ RUN pip install dash==0.21.1  \
 # Imgaug installation
 RUN pip install imgaug
 
-# Install Flowdec
+# Install Flowdec for deconvolution
 RUN cd $REPO_DIR && \
     git clone $FLOWDEC_REPO_URL && \
     cd flowdec/python && \

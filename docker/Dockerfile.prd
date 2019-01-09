@@ -40,7 +40,7 @@ RUN pip --no-cache-dir install dash==0.21.1  \
     dash-core-components==0.23.0 \
     plotly
 
-# Set env variable for flowdec installation
+# Install Flowdec for deconvolution
 RUN pip --no-cache-dir install flowdec
 
 # Download simulation data for testing

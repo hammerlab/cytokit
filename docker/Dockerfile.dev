@@ -44,7 +44,6 @@ RUN pip install dash==0.21.1  \
 RUN pip install imgaug
 
 # Install Flowdec
-ENV TF_GPU true
 RUN cd $REPO_DIR && \
     git clone $FLOWDEC_REPO_URL && \
     cd flowdec/python && \

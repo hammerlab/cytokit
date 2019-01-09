@@ -5,7 +5,7 @@ acquisition:
   per_cycle_channel_names: [DAPI, FITC, TRITC, Cy5]
   channel_names: [DAPI, CD4, CD8, PHA]
   emission_wavelengths: [425, 525, 595, 670]
-  axial_resolution: 1000.0
+  axial_resolution: 500.0
   lateral_resolution: 377.442
   magnification: 20
   num_cycles: 1

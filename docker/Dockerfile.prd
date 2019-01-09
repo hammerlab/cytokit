@@ -41,7 +41,6 @@ RUN pip --no-cache-dir install dash==0.21.1  \
     plotly
 
 # Set env variable for flowdec installation
-ENV TF_GPU true
 RUN pip --no-cache-dir install flowdec
 
 # Download simulation data for testing

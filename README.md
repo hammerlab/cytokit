@@ -25,13 +25,15 @@ systems for GPU-acceleration.  Additional limitations include:
 Once nvidia-docker is installed, the container can be launched and used as follows:
 
 ```bash
-nvidia-docker pull hammerlab/cytokit:latest
+nvidia-docker pull eczech/cytokit:latest
 
 # Run the container with an attached volume to contain raw images and results  
 nvidia-docker run --rm -ti -p 8888:8888 -p 8787:8787 -p 8050:8050 \
 -v $LOCAL_IMAGE_DATA_DIR:/lab/data \
-hammerlab/cytokit
+eczech/cytokit
 ```
+
+*TODO*: Move docker build to hammerlab org instead of user 
 
 This will launch JupyterLab on port 8888.  After navigating to localhost:8888 and entering the access token 
 printed on the command line following ```nvidia-docker run```, you can then run an example notebook 

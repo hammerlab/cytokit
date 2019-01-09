@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 import os
 
 with open('requirements.txt', 'r') as fd:
-    requires += [l.strip() for l in fd.readlines()]
+    requires = [l.strip() for l in fd.readlines()]
 
 if __name__ == '__main__':
     setup(

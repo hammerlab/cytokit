@@ -37,6 +37,7 @@ install:
   - pip install --progress-bar off .[tf]
   - pip install coveralls pylint
 script:
+  - pip freeze
   - nosetests --exe -sv tests/ --with-coverage --cover-inclusive --cover-package=cytokit
   - bash ./.lint.sh
 after_success:

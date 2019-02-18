@@ -34,6 +34,7 @@ install:
   - mkdir -p $(python -m site --user-site)
   - echo "$(pwd)/python/applications" >> $(python -m site --user-site)/local.pth
   - cd python/pipeline
+  - pip install numpy==1.14.2
   - pip install --progress-bar off .[tf]
   - pip install coveralls pylint
 script:

@@ -48,16 +48,17 @@ class TestConfig(unittest.TestCase):
 
         # Verify that the overall cell count and size found are in the expected ranges
         self.assertTrue(20 <= len(df) <= 25, 'Expecting between 20 and 25 cells, found {} instead'.format(len(df)))
-        nuc_diam, cell_diam = df['nucleus_diameter'].mean(), df['cell_diameter'].mean()
+        nuc_diam, cell_diam = df['nm:diameter'].mean(), df['cm:diameter'].mean()
         self.assertTrue(4 < nuc_diam < 6,
                         'Expecting mean nucleus diameter in [4, 6] um, found {} instead'.format(nuc_diam))
         self.assertTrue(8 < cell_diam < 10,
                         'Expecting mean cell diameter in [8, 10] um, found {} instead'.format(cell_diam))
 
-        # The drift align dapi channels should be nearly identical across cycles, but in this case there are border
+        # The drift aligned dapi channels should be nearly identical across cycles, but in this case there are border
         # cells that end up with dapi=0 for cval=0 in drift compensation translation function so make the check
         # on a threshold (the ratio is < .5 with no drift compensation)
-        dapi_ratio = df['ni:DAPI2'].mean() / df['ni:DAPI1'].mean()
+        print(config.cytometry_params)
+        dapi_ratio = df['ni:DAPI2:mean'].mean() / df['ni:DAPI1:mean'].mean()
         self.assertTrue(.8 < dapi_ratio <= 1,
                         'Expecting cycle 2 DAPI averages to be similar to cycle 1 DAPI after drift compensation, '
                         'found ratio {} (not in (.8, 1])'.format(dapi_ratio))

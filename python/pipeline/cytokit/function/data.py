@@ -132,7 +132,7 @@ def get_single_cell_image_data(output_dir, df, extract, ranges=None, colors=None
         # Extract the relevant 2D image to be used for both cell object isolation and cell image display
         path = osp.join(output_dir, cytokit_io.get_extract_image_path(reg, tx, ty, extract))
         img, meta = cytokit_io.read_tile(path, return_metadata=True)
-        icyc, iz = kwargs.get('cycle', 0), kwargs.get('z', 0)
+        icyc, iz = kwargs.pop('cycle', 0), kwargs.pop('z', 0)
         img = img[icyc, iz]
         channels = list(meta['structured_labels'][icyc, iz])
         processor = cvproc.get_image_processor(channels, ranges=ranges, colors=colors)
@@ -140,7 +140,7 @@ def get_single_cell_image_data(output_dir, df, extract, ranges=None, colors=None
         # Get the cell image data frame containing the original cell id, cell image based on processed
         # raw image, and associated cell image properties
         cell_data = pd.DataFrame(extract_single_cell_image_data(
-            g, img, processor.run(img), channels, image_size=image_size
+            g, img, processor.run(img), channels, image_size=image_size, **kwargs
         ))
 
         # Verify that the only shared field between the two datasets is 'id'

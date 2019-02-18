@@ -131,7 +131,8 @@ class DataCLI(CLI):
     def run_all(self, **kwargs):
         for config in self._get_function_configs():
             if len(config) != 1:
-                raise ValueError('Processing function configuration "{}" is not valid (should only have 1 key)'.format(config))
+                raise ValueError(
+                    'Processing function configuration "{}" is not valid (should only have 1 key)'.format(config))
             op = list(config.keys())[0]
             if not hasattr(self, op):
                 raise ValueError('CLI function name "{}" is invalid'.format(op))

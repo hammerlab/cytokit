@@ -122,6 +122,8 @@ def get_graph_data():
 
     df = get_base_data().copy().filter(items=cols)
     for k, v in vars.items():
+        if v not in df:
+            raise ValueError('Column "{}" not present in data frame (cols = {})'.format(v, df.columns.tolist()))
         df[k] = df[v]
 
     ac['counts']['graph_data']['n'] = len(df)
@@ -163,7 +165,7 @@ def get_graph_figure():
                 x, y, cfg.max_kde_cells,
                 opacity=cfg.graph_point_opacity,
                 colorscale='Portland',
-                size=3
+                size=cfg.graph_point_size
             )
             fig_layout['showlegend'] = False
         except:
@@ -274,8 +276,7 @@ def get_axis_settings_layout(axis):
 
     # Add list of possible field values based on "base" dataset, which may
     # include features for different cell components
-    regex = '|'.join(DEFAULT_PREFIXES)
-    for c in get_base_data().filter(regex=regex).columns.tolist():
+    for c in get_base_data().columns.tolist():
         # Only add the raw field name if it is not in the pre-mapped field list
         if c not in field_names:
             field_names[c] = c

@@ -35,6 +35,7 @@ ENV_APP_CELL_IMAGE_HEIGHT = 'APP_CELL_IMAGE_HEIGHT'
 ENV_APP_CELL_IMAGE_DISPLAY_WIDTH = 'APP_CELL_IMAGE_DISPLAY_WIDTH'
 ENV_APP_CELL_IMAGE_BACKGROUND = 'APP_CELL_IMAGE_BACKGROUND'
 ENV_APP_GRAPH_POINT_OPACITY = 'APP_GRAPH_POINT_OPACITY'
+ENV_APP_GRAPH_POINT_SIZE = 'APP_GRAPH_POINT_SIZE'
 ENV_APP_MONTAGE_POINT_COLOR = 'APP_MONTAGE_POINT_COLOR'
 
 ENV_APP_CELL_MARKER_MODE = 'APP_CELL_MARKER_MODE'
@@ -53,6 +54,7 @@ DEFAULT_MAX_SINGLE_CELLS = 50
 DEFAULT_CELL_IMAGE_HEIGHT = 64
 DEFAULT_CELL_IMAGE_WIDTH = 64
 DEFAULT_GRAPH_POINT_OPACITY = .8
+DEFAULT_GRAPH_POINT_SIZE = 3
 DEFAULT_APP_MONTAGE_POINT_COLOR = 'white'
 DEFAULT_APP_MONTAGE_GRID_COLOR = 'rgba(0, 256, 0, .3)'
 DEFAULT_APP_CELL_MARKER_MODE = 'point'  # or 'mask'
@@ -66,14 +68,6 @@ DEFAULT_APP_CELL_MARKER_MASK_OBJECT = 'cell'  # or 'nucleus'
 class AppConfig(object):
 
     CYTO_FIELDS = OrderedDict([
-        ('cell_diameter', 'Cell Diameter'),
-        ('nucleus_diameter', 'Nucleus Diameter'),
-        ('cell_size', 'Cell Size'),
-        ('cell_solidity', 'Cell Solidity'),
-        ('cell_circularity', 'Cell Circularity'),
-        ('nucleus_size', 'Nucleus Size'),
-        ('nucleus_solidity', 'Nucleus Solidity'),
-        ('nucleus_circularity', 'Nucleus Circularity'),
         ('region_index', 'Region Index'),
         ('tile_x', 'Tile X'),
         ('tile_y', 'Tile Y'),
@@ -83,13 +77,21 @@ class AppConfig(object):
         ('ry', 'Cell Y (In Region)'),
         ('x', 'Cell X (In Tile)'),
         ('y', 'Cell Y (In Tile)'),
+        ('cm:diameter', 'Cell Diameter'),
+        ('cm:size', 'Cell Size'),
+        ('cm:solidity', 'Cell Solidity'),
+        ('cm:circularity', 'Cell Circularity'),
+        ('nm:diameter', 'Nucleus Diameter'),
+        ('nm:size', 'Nucleus Size'),
+        ('nm:solidity', 'Nucleus Solidity'),
+        ('nm:circularity', 'Nucleus Circularity'),
         ('cg:n_neighbors', 'Cell Num Neighbors (w/ Shared Boundary)'),
         ('cg:adj_bg_pct', 'Cell Percent Bordering Background'),
     ])
     CYTO_HOVER_FIELDS = [
         'id',
-        'nucleus_diameter', 'nucleus_solidity',
-        'cell_diameter', 'cell_size',
+        'nm:diameter', 'nm:solidity',
+        'çm:diameter', 'cm:size',
         'cg:n_neighbors', 'cg:adj_bg_pct'
     ]
     CYTO_INT_FIELDS = ['id', 'rid', 'x', 'y', 'rx', 'ry', 'tile_x', 'tile_y', 'region_index', 'cg:n_neighbors']
@@ -266,6 +268,10 @@ class AppConfig(object):
     @property
     def graph_point_opacity(self):
         return float(os.getenv(ENV_APP_GRAPH_POINT_OPACITY, DEFAULT_GRAPH_POINT_OPACITY))
+
+    @property
+    def graph_point_size(self):
+        return int(os.getenv(ENV_APP_GRAPH_POINT_SIZE, DEFAULT_GRAPH_POINT_SIZE))
 
     @property
     def random_state(self):

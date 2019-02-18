@@ -34,20 +34,24 @@ def _map_channels(config, channels):
     res = []
     for channel in channels:
         src = _get_channel_source(channel)
-        if src is None:
-            raise ValueError(
-                'Channel with name "{}" is not valid.  Must start with one of the following: {}'
-                .format(channel, [c + '_' for c in CH_SOURCES])
-            )
-        channel = '_'.join(channel.split('_')[1:])
-        if src == CH_SRC_RAW or src == CH_SRC_PROC:
-            coords = config.get_channel_coordinates(channel)
-            res.append([channel, src, coords[0], coords[1]])
-        elif src == CH_SRC_CYTO:
-            coords = cytometry.get_channel_coordinates(channel)
-            res.append([channel, src, coords[0], coords[1]])
-        else:
-            raise AssertionError('Source "{}" is invalid'.format(src))
+        try:
+            if src is None:
+                raise ValueError(
+                    'Channel with name "{}" is not valid.  Must start with one of the following: {}'
+                    .format(channel, [c + '_' for c in CH_SOURCES])
+                )
+            channel = '_'.join(channel.split('_')[1:])
+            if src == CH_SRC_RAW or src == CH_SRC_PROC:
+                coords = config.get_channel_coordinates(channel)
+                res.append([channel, src, coords[0], coords[1]])
+            elif src == CH_SRC_CYTO:
+                alias, coords = cytometry.get_channel_coordinates(channel)
+                res.append([alias, src, coords[0], coords[1]])
+            else:
+                raise AssertionError('Source "{}" is invalid'.format(src))
+        except Exception:
+            logging.error('Failed to parse channel "%s" into name and coordinates', channel)
+            raise
     return pd.DataFrame(res, columns=['channel_name', 'source', 'cycle_index', 'channel_index'])
 
 

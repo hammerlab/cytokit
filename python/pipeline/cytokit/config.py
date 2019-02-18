@@ -4,6 +4,7 @@ import cytokit
 from cytokit import tiling
 from os import path as osp
 from collections import namedtuple
+import importlib
 
 
 TILING_MODE_SNAKE = 'snake'
@@ -27,6 +28,14 @@ def _load_config(data_dir, filename):
 
 def _load_experiment_config(data_dir, filename):
     return _load_config(data_dir, filename)
+
+
+def get_implementation_instance(config, name, **kwargs):
+    for k in ['module', 'class', 'args']:
+        if k not in config:
+            raise ValueError('Custom {} implementations must contain key "{}"'.format(name, k))
+    args = {**kwargs, **config['args']}
+    return getattr(importlib.import_module(config['module']), config['class'])(**args)
 
 
 TileDims = namedtuple('TileDims', ['cycles', 'z', 'channels', 'height', 'width'])

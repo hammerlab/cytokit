@@ -2,10 +2,6 @@
 # cd /lab/repos/cytokit/pub/analysis/cell-size; bash -e pipeline_execution.sh
 
 EXPERIMENTS=`cat experiments.csv | tail -n +2`
-# EXPERIMENTS="
-# 20181024-jurkat-20X-5by5;2000;23
-# 20181024-jurkat2-20X-5by5;500;25
-# "
 
 for EXP in $EXPERIMENTS
 do

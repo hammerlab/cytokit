@@ -164,14 +164,42 @@ def constrain_image_channels(img, dtype=None, ranges=None):
         )
 
     # Apply clip to each channel and restack
+    def prep_img(img, minv, maxv):
+        img = img.clip(minv, maxv)
+        # Check max=min to avoid division by zero warning from rescale_intensity
+        if img.min() == img.max():
+            img = (img * 0)
+        else:
+            img = rescale_intensity(img, in_range='image', out_range=dtype)
+        return img.astype(dtype)
+
     return np.stack([
-        rescale_intensity(
-            img[i].clip(
-                -np.inf if ranges[i, 0] is None else ranges[i, 0],
-                np.inf if ranges[i, 1] is None else ranges[i, 1]
-            ),
-            in_range='image',
-            out_range=dtype
-        ).astype(dtype)
+        prep_img(
+            img[i],
+            -np.inf if ranges[i, 0] is None else ranges[i, 0],
+            np.inf if ranges[i, 1] is None else ranges[i, 1]
+        )
         for i in range(img.shape[0])
     ])
+
+
+def filter_label_image(img, df, config):
+    """Filter label image to match objects in a data frame
+
+    Args:
+        img: Integer label image (2D)
+        df: Data frame containing id of each object as well as tile x and y coordinates
+        config: Experiment configuration
+    """
+    assert img.ndim == 2, 'Expecting 2D image but got image with shape {}'.format(img.shape)
+    res = img.copy()
+    nr, nc = config.region_height, config.region_width
+    sr, sc = config.tile_height, config.tile_width
+    for tile_y in range(nr):
+        for tile_x in range(nc):
+            ids = df[(df['tile_x'] == tile_x) & (df['tile_y'] == tile_y)]['id'].unique()
+            rs = slice(tile_y * sr, (tile_y + 1) * sr)
+            cs = slice(tile_x * sc, (tile_x + 1) * sc)
+            im = res[rs, cs]
+            im[~np.isin(im, ids)] = 0
+    return res

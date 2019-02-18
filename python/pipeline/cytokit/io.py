@@ -27,21 +27,21 @@ def _to_pd_sep(format):
     return format.replace('/', os.sep)
 
 
-def _get_def_path_formats(raw_image_format):
+def get_default_path_formats(raw_image_format):
     formats = {k: _to_pd_sep(v) for k, v in cytokit.DEFAULT_PATH_FORMATS.items()}
     formats['raw_image'] = _to_pd_sep(raw_image_format)
     return formats
 
 
 PATH_FORMATS = dict(
-    keyence_single_cycle_v01=_get_def_path_formats('1_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
-    keyence_single_cycle_v02=_get_def_path_formats('1_{tile:05d}_Z{z:03d}_CH{channel:d}.jpg'),
-    keyence_single_cycle_v03=_get_def_path_formats('1_XY01_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
-    keyence_multi_cycle_v01=_get_def_path_formats(
+    keyence_single_cycle_v01=get_default_path_formats('1_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
+    keyence_single_cycle_v02=get_default_path_formats('1_{tile:05d}_Z{z:03d}_CH{channel:d}.jpg'),
+    keyence_single_cycle_v03=get_default_path_formats('1_XY01_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
+    keyence_multi_cycle_v01=get_default_path_formats(
         'Cyc{cycle:d}_reg{region:d}/{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
-    keyence_multi_cycle_v02=_get_def_path_formats(
+    keyence_multi_cycle_v02=get_default_path_formats(
         'Cyc{cycle:d}_Reg{region:d}/{region:d}_{tile:05d}_Z{z:03d}_CH{channel:d}.tif'),
-    keyence_multi_cycle_v03=_get_def_path_formats(
+    keyence_multi_cycle_v03=get_default_path_formats(
         'Cyc{cycle:d}_reg{region:d}/Image_{tile:05d}_Z{z:03d}_CH{channel:d}.tif')
 )
 

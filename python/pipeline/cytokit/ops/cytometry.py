@@ -3,7 +3,9 @@ from cytokit.cytometry import cytometer
 from cytokit import io as cytokit_io
 from cytokit import math as cytokit_math
 from cytokit import data as cytokit_data
+from cytokit import config as cytokit_config
 import os
+import re
 import os.path as osp
 import cytokit
 import logging
@@ -24,12 +26,22 @@ CHANNEL_COORDINATES = {
 
 def get_channel_coordinates(channel):
     channel = channel.lower().strip()
-    if channel not in CHANNEL_COORDINATES:
+
+    if channel in CHANNEL_COORDINATES:
+        return channel, CHANNEL_COORDINATES[channel]
+
+    # If not a pre-defined coordinate, assume coordinate is either invalid or specified directly
+    # Example: "mychannel(0,1)" -> name "mychannel", cycle 0, channel 1 in segmentation result
+    coords = re.search(r'^([a-zA-Z0-9_.\-:;]+)\(([0-9 ]+),([0-9 ]+)\)$', channel)
+    if not coords or len(coords.groups()) != 3:
         raise ValueError(
-            'Cytometry channel "{}" is not valid.  Must be one of {}'
+            'Cytometry channel specification "{}" is not valid.  Must be one of {} or name+cycle+channel '
+            'coordinates as `[name]([cycle],[channel])` (where cycle and channel are 0-based integer indices'
+            'and name is the name associated with the channel)'
             .format(channel, list(CHANNEL_COORDINATES.keys()))
         )
-    return CHANNEL_COORDINATES[channel]
+    groups = coords.groups()
+    return groups[0], tuple(map(int, groups[1:]))
 
 
 def set_keras_session(op):
@@ -61,7 +73,7 @@ def get_op(config):
 
 class Cytometry2D(cytokit_op.CytokitOp):
 
-    def __init__(self, config, z_plane='best', target_shape=None, segmentation_params=None, quantification_params=None):
+    def __init__(self, config, z_plane='best', cytometer_type='2D', target_shape=None, segmentation_params=None, quantification_params=None):
         super().__init__(config)
 
         params = config.cytometry_params
@@ -78,12 +90,25 @@ class Cytometry2D(cytokit_op.CytokitOp):
         self.mem_channel_coords = None if 'membrane_channel_name' not in params else \
             config.get_channel_coordinates(params['membrane_channel_name'])
 
-        self.input_shape = (config.tile_height, config.tile_width, 1)
+        self.cytometer_type = params.get('type', cytometer_type)
         self.cytometer = None
+        self.input_shape = (config.tile_height, config.tile_width, 1)
 
         _validate_z_plane(self.z_plane)
 
     def initialize(self):
+
+        if hasattr(self.cytometer_type, 'keys'):
+            self.cytometer = cytokit_config.get_implementation_instance(
+                self.cytometer_type, 'Cytometer',
+                input_shape=self.input_shape, target_shape=self.target_shape
+            )
+            self.cytometer.initialize()
+            return self
+
+        if self.cytometer_type not in ['2D']:
+            raise ValueError('Cytometer type "{}" is not valid'.format(self.cytometer_type))
+
         # Set the Keras session to have the same TF configuration as other operations
         set_keras_session(self)
 
@@ -94,6 +119,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
             'Initializing cytometry model for input shape = %s (target shape = %s)',
             self.input_shape, self.target_shape
         )
+
         self.cytometer = cytometer.Cytometer2D(
             self.input_shape, target_shape=self.target_shape, weights_path=weights_path)
         self.cytometer.initialize()
@@ -137,7 +163,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
             img_memb = tile[memb_cycle, z_slice, memb_channel]
 
         # Fetch segmentation volume as ZCHW where C = 2 and C1 = cell and C2 = nucleus
-        img_seg = self.cytometer.segment(img_nuc, img_memb=img_memb, **self.segmentation_params)[0]
+        img_seg = self.cytometer.segment(img_nuc, img_memb=img_memb, **self.segmentation_params)
 
         # If using a specific z-plane, conform segmented volume to typical tile
         # shape by adding empty z-planes
@@ -164,11 +190,8 @@ class Cytometry2D(cytokit_op.CytokitOp):
         # Run cell cytometry calculations (results given as data frame)
         stats = self.cytometer.quantify(tile, img_seg, **self.quantification_params)
 
-        # Convert size measurements to more meaningful scales and add diameter
-        resolution_um = self.config.microscope_params.res_lateral_nm / 1000.
-        for c in ['cell', 'nucleus']:
-            stats[c + '_size'] = cytokit_math.pixel_area_to_squared_um(stats[c + '_size'].values, resolution_um)
-            stats[c + '_diameter'] = stats[c + '_diameter'] * resolution_um
+        # Add any statistics or transformations that require the experimental context
+        stats = self.cytometer.augment(stats, self.config)
 
         # Create overlay image of nucleus channel and boundaries and convert to 5D
         # shape to conform with usual tile convention

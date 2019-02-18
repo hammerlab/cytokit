@@ -6,7 +6,7 @@ from cytokit import io as cytokit_io
 class TestIo(unittest.TestCase):
 
     def test_raw_img_paths(self):
-        cytokit.set_file_format_version(cytokit.FF_V01)
+        cytokit.set_path_formats(cytokit.FF_DEFAULT)
 
         # Test raw image path generation with default settings
         path = cytokit_io.get_raw_img_path(ireg=0, itile=0, icyc=0, ich=0, iz=0)

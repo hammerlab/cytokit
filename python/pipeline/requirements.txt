@@ -4,7 +4,7 @@ opencv-python==3.4.3.18
 pandas==0.22.0
 requests==2.20.1
 matplotlib==2.2.2
-dask[distributed]==0.20.1
+dask[distributed]==1.0.0
 bokeh==1.0.1
 keras==2.2.4
 centrosome==1.1.5

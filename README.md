@@ -109,6 +109,25 @@ intensities:
 
 See the [Cytokit Explorer](python/applications/cytokit_app/explorer/README.md) docs for more details.
 
+
+### Messaging Caveats
+
+There are two messages that commonly accompany successful pipelines and appear to be errors.  In other words, 
+if you see either one of these "errors" in the processor logs then they are not really a problem:
+
+- **GPU Assignment Error**: When using multiple GPUs, it is not uncommon to see an error like this once a thread 
+associated with one GPU finishes.  While this can happen, it has yet to be seen to indicate any sort of real problem:
+
+```
+2019-02-17 07:03:06,706:INFO:6060:cytokit.exec.pipeline: Processing complete [tile 4 of 4 (100.00%) | reg/x/y = 1/3/3]
+Using TensorFlow backend.
+2019-02-17 07:03:07.543460: F tensorflow/core/common_runtime/gpu/gpu_id_manager.cc:45] Check failed: cuda_gpu_id.value() == result.first->second (0 vs. 1)Mapping the same TfGpuId to a different CUDA GPU id. TfGpuId: 0 Existing mapped CUDA GPU id: 1 CUDA GPU id being tried to map to: 0
+```
+
+- **tornado.iostream.StreamClosedError: Stream is closed**: These often follow the completion of successful
+pipeline runs.  These can hopefully be eliminated in the future with a dask upgrade but for now they can simply
+be ignored.
+ 
 #### CODEX Backport
 
 As a small piece of standalone functionality, instructions can be found here for how to

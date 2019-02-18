@@ -2,6 +2,10 @@ import cv2
 import numpy as np
 import pandas as pd
 import os.path as osp
+from abc import ABC, abstractmethod
+from collections.abc import Iterable
+from scipy import ndimage
+from centrosome import propagate
 from skimage import segmentation
 from skimage import morphology
 from skimage import measure
@@ -10,18 +14,23 @@ from skimage import exposure
 from skimage import transform
 from skimage import img_as_float
 from skimage.future import graph as label_graph
-from centrosome import propagate
-from scipy import ndimage
 from cytokit import math as cytokit_math
 from cytokit import data as cytokit_data
 
 DEFAULT_BATCH_SIZE = 1
 CELL_CHANNEL = 0
 NUCLEUS_CHANNEL = 1
-DEFAULT_CELL_INTENSITY_PREFIX = 'ci:'
-DEFAULT_NUCL_INTENSITY_PREFIX = 'ni:'
-DEFAULT_CELL_GRAPH_PREFIX = 'cg:'
-DEFAULT_CELL_SPOT_PREFIX = 'cs:'
+DCHR = ':'
+DEFAULT_CELL_INTENSITY_PREFIX = 'ci'
+DEFAULT_NUCL_INTENSITY_PREFIX = 'ni'
+DEFAULT_CELL_MORPHOLOGY_PREFIX = 'cm'
+DEFAULT_NUCL_MORPHOLOGY_PREFIX = 'nm'
+DEFAULT_CELL_GRAPH_PREFIX = 'cg'
+DEFAULT_CELL_SPOT_PREFIX = 'cs'
+DEFAULT_MORPHOLOGY_FEATURES = ['size', 'diameter', 'perimeter', 'solidity', 'circularity']
+TEXTURE_MORPHOLOGY_FEATURES = \
+    ['glcm' + DCHR + f for f in ['correlation', 'dissimilarity']] + \
+    ['lbp' + DCHR + f for f in ['mean', 'median']]
 
 DEFAULT_PREFIXES = [
     DEFAULT_CELL_INTENSITY_PREFIX,
@@ -35,14 +44,39 @@ DEFAULT_SPOT_AREA = [2, 64]
 
 COMP_CELL = 'cell'
 COMP_NUCLEUS = 'nucleus'
+DEFAULT_COMPONENTS = [COMP_CELL, COMP_NUCLEUS]
 
 INTENSITY_COMPONENTS = {
     COMP_CELL: DEFAULT_CELL_INTENSITY_PREFIX,
     COMP_NUCLEUS: DEFAULT_NUCL_INTENSITY_PREFIX
 }
 
+MORPHOLOGY_COMPONENTS = {
+    COMP_CELL: DEFAULT_CELL_MORPHOLOGY_PREFIX,
+    COMP_NUCLEUS: DEFAULT_NUCL_MORPHOLOGY_PREFIX
+}
 
-class KerasCytometer2D(object):
+
+class Cytometer(ABC):
+
+    @abstractmethod
+    def initialize(self):
+        pass
+
+    @abstractmethod
+    def segment(self, img, **kwargs):
+        pass
+
+    @abstractmethod
+    def quantify(self, tile, segmentation, **kwargs):
+        pass
+
+    @abstractmethod
+    def augment(self, df, config):
+        pass
+
+
+class KerasCytometer2D(Cytometer):
 
     def __init__(self, input_shape, target_shape=None, weights_path=None):
         """Cytometer Initialization
@@ -193,69 +227,185 @@ class ObjectProperties(object):
         return self.props[COMP_NUCLEUS]
 
 
-class FeatureCalculator(object):
+class FeatureCalculator(ABC):
+
+    @abstractmethod
+    def get_feature_names(self):
+        pass
+
+    @abstractmethod
+    def get_feature_values(self, signals, labels, graph, props, z):
+        pass
+
+
+class FeatureCalculators(FeatureCalculator):
+
+    def __init__(self, calculators):
+        self.calculators = calculators
 
     def get_feature_names(self):
-        raise NotImplementedError()
+        return [f for c in self.calculators for f in c.get_feature_names()]
 
     def get_feature_values(self, signals, labels, graph, props, z):
-        raise NotImplementedError()
+        return [f for c in self.calculators for f in c.get_feature_values(signals, labels, graph, props, z)]
 
 
-class BasicCellFeatures(FeatureCalculator):
+class CoordinateFeatures(FeatureCalculator):
 
     def get_feature_names(self):
-        # Note: "size" is used here instead of area/volume for compatibility between 2D and 3D
-        return [
-            'id', 'x', 'y', 'z',
-            'cell_size', 'cell_diameter', 'cell_perimeter', 'cell_circularity', 'cell_solidity',
-            'nucleus_size', 'nucleus_diameter', 'nucleus_perimeter', 'nucleus_circularity', 'nucleus_solidity'
-        ]
+        return ['id', 'x', 'y', 'z']
 
     def get_feature_values(self, signals, labels, graph, props, z):
-        # Extract these once as their calculations are not cached
-        cell_area, nuc_area = props.cell.area, props.nucleus.area
-        cell_perimeter, nuc_perimeter = props.cell.perimeter, props.nucleus.perimeter
-        return [
-            props.cell.label, props.cell.centroid[1], props.cell.centroid[0], z,
+        return [props.cell.label, props.cell.centroid[1], props.cell.centroid[0], z]
 
-            cell_area, cytokit_math.area_to_diameter(cell_area),
-            cell_perimeter, cytokit_math.circularity(cell_area, cell_perimeter), props.cell.solidity,
 
-            nuc_area, cytokit_math.area_to_diameter(nuc_area),
-            nuc_perimeter, cytokit_math.circularity(nuc_area, nuc_perimeter), props.nucleus.solidity
+class ChannelComponentFeatureCalculator(FeatureCalculator):
+
+    def __init__(self, keys, channels):
+        self.keys = keys
+        self.channels = channels
+
+    @abstractmethod
+    def _prefix(self, component):
+        pass
+
+    def get_feature_names(self):
+        def join(k):
+            return DCHR.join([v if i > 0 else self._prefix(v) for i, v in enumerate(k) if v is not None])
+        return [join(k) for k in self.keys]
+
+    @abstractmethod
+    def _value(self, component, channel, feature, prop, image):
+        pass
+
+    def get_feature_values(self, signals, labels, graph, props, z):
+        # Signals should have shape ZHWC
+        assert signals.ndim == 4, 'Expecting 4D signals image but got shape {}'.format(signals.shape)
+
+        # Signals should have shape ZHWC
+        values = []
+        for k in self.keys:
+            c, n, f = k
+            p = props[c]
+            min_row, min_col, max_row, max_col = p.bbox
+            # Extract channel-specific individual cell image if a channel is given, otherwise return None
+            im = signals[z, min_row:max_row, min_col:max_col, self.channels.index(n)] if n else None
+            values.append(self._value(c, n, f, p, im))
+        features = self.get_feature_names()
+        assert len(values) == len(features), \
+            'Expecting {} feature values but got {} (expected feature names = {})' \
+            .format(len(features), len(values), features)
+        return values
+
+
+class ChannelComponentFeatures(ChannelComponentFeatureCalculator):
+
+    def _prefix(self, component):
+        return MORPHOLOGY_COMPONENTS[component]
+
+    def _value(self, component, channel, feature, prop, image):
+        if feature in DEFAULT_MORPHOLOGY_FEATURES:
+            if feature == 'size':
+                return prop.area
+            if feature == 'diameter':
+                return cytokit_math.area_to_diameter(prop.area)
+            if feature == 'circularity':
+                return cytokit_math.circularity(prop.area, prop.perimeter)
+            return getattr(prop, feature)
+        elif feature.startswith('glcm'):
+            assert image.ndim == 2, 'Expecting 2D object image, got shape {}'.format(image.shape)
+            from skimage.feature import greycomatrix, greycoprops
+            # Mask out parts of object image that don't overlap with object binary image (i.e. set to 0)
+            image = image * prop.image.astype(int)
+            if image.dtype != np.uint8:
+                image = exposure.rescale_intensity(image, out_range='uint8').astype(np.uint8)
+            assert image.dtype == np.uint8
+            glcm = greycomatrix(image, [5], [0], symmetric=True, normed=True)
+            return greycoprops(glcm, feature.split(DCHR)[-1])[0, 0]
+        elif feature.startswith('lbp'):
+            assert image.ndim == 2, 'Expecting 2D object image, got shape {}'.format(image.shape)
+            from skimage.feature import local_binary_pattern
+            lbp = local_binary_pattern(image, 8*3, 3, 'uniform')
+            fun = getattr(np, feature.split(DCHR)[-1])
+            return fun(lbp)
+        raise NotImplementedError('Morphology feature "{}" not yet implemented'.format(feature))
+
+
+class ComponentFeatures(ChannelComponentFeatures):
+
+    def __init__(self, components, channels, features):
+        # Override to single undefined channel forces calculations
+        # to ignore channel (as performance optimization)
+        super().__init__([(c, None, f) for c in components for f in features], channels)
+
+
+def _get_default_feature_calculators(channels):
+    return FeatureCalculators([
+        CoordinateFeatures(),
+        ComponentFeatures(DEFAULT_COMPONENTS, channels, DEFAULT_MORPHOLOGY_FEATURES)
+    ])
+
+
+def _get_agg_funcs(funcs):
+    # Return average aggregation function if boolean
+    if isinstance(funcs, bool):
+        return ['mean']
+    # Validate that all numpy aggregation function names are iterable
+    assert isinstance(funcs, Iterable), \
+        'Expecting iterable sequence of aggregation functions but got type {} (funcs = {})'.format(type(funcs), funcs)
+    return funcs
+
+
+def _get_feature_keys(features, channels, qualifiers):
+    # Return default combination of components and features (with given channels)
+    # if simply choosing to include extended morphological features
+    if isinstance(features, bool):
+        keys = [
+            (c, n, f)
+            for c in DEFAULT_COMPONENTS
+            for n in channels
+            for f in qualifiers
         ]
+    # Otherwise, assume features is a list of 3-item keys
+    else:
+        keys = features
+    # Validate that all keys are iterable and contain 3 items
+    assert isinstance(keys, Iterable), \
+        'Expecting iterable sequence of keys but got type {} (keys = {})'.format(type(keys), keys)
+    assert all([len(k) == 3 for k in keys]), \
+        'Expecting all keys to have 3 items (keys given = {})'.format(keys)
+    return keys
 
 
-def _quantify_intensities(image, prop):
+def _quantify_intensities(image, prop, func):
     # Get a (n_pixels, n_channels) array of intensity values associated with
-    # this region and then average across n_pixels dimension
-    intensities = image[prop.coords[:, 0], prop.coords[:, 1]].mean(axis=0)
+    # this region and then apply given function (by name) across n_pixels
+    # dimension to give result of length n_channels
+    func = getattr(np, func)
+    image = image[prop.coords[:, 0], prop.coords[:, 1]]
+    assert image.ndim == 2, 'Expecting 2D intensity image to aggregate but got shape {}'.format(image.shape)
+    intensities = np.apply_along_axis(func, 0, image)
     assert intensities.ndim == 1, 'Expecting 1D resulting intensities but got shape {}'.format(intensities.shape)
     return list(intensities)
 
 
 class IntensityFeatures(FeatureCalculator):
 
-    def __init__(self, n_channels, channel_names, component):
-        self.n_channels = n_channels
+    def __init__(self, channel_names, component, funcs=['mean']):
+        self.n_channels = len(channel_names)
         self.channel_names = channel_names
         self.component = component
+        self.funcs = funcs
 
-        if len(channel_names) != n_channels:
-            raise ValueError(
-                'Channel name list expected to have {} names (names given = {})',
-                n_channels, channel_names
-            )
         if component not in INTENSITY_COMPONENTS:
             raise ValueError(
-                'Cellular component to quantify intensities for must be one of {} not "{}"'
+                'Component to quantify intensities for must be one of {} not "{}"'
                 .format(list(INTENSITY_COMPONENTS.keys()), component)
             )
 
     def get_feature_names(self):
         prefix = INTENSITY_COMPONENTS[self.component]
-        return [prefix + c for c in self.channel_names]
+        return [prefix + DCHR + c + DCHR + f for f in self.funcs for c in self.channel_names]
 
     def get_feature_values(self, signals, labels, graph, props, z):
         # Signals should have shape ZHWC
@@ -264,12 +414,15 @@ class IntensityFeatures(FeatureCalculator):
         # Extract target skimage region prop
         prop = props[self.component]
 
-        values = _quantify_intensities(signals[z], prop)
-        if len(values) != self.n_channels:
-            raise AssertionError(
-                'Expecting {} {} intensity measurements but got result {}'
-                .format(self.n_channels, self.component, values)
-            )
+        values = []
+        for f in self.funcs:
+            vals = _quantify_intensities(signals[z], prop, f)
+            if len(vals) != self.n_channels:
+                raise AssertionError(
+                    'Expecting {} {} intensity measurements but got result {}'
+                    .format(self.n_channels, self.component, vals)
+                )
+            values.extend(vals)
         return values
 
 
@@ -293,7 +446,7 @@ class SpotFeatures(FeatureCalculator):
         features = []
         for c in self.channel_names:
             for metric in self.METRICS:
-                features.append(DEFAULT_CELL_SPOT_PREFIX + c + ':' + metric)
+                features.append(DEFAULT_CELL_SPOT_PREFIX + DCHR + c + DCHR + metric)
         return features
 
     def get_feature_values(self, signals, labels, graph, props, z):
@@ -368,7 +521,7 @@ class GraphFeatures(FeatureCalculator):
 
     def get_feature_names(self):
         return [
-            DEFAULT_CELL_GRAPH_PREFIX + c
+            DEFAULT_CELL_GRAPH_PREFIX + DCHR + c
             for c in ['n_neighbors', 'neighbor_ids', 'adj_neighbor_pct', 'adj_bg_pct']
         ]
 
@@ -557,18 +710,22 @@ class Cytometer2D(KerasCytometer2D):
         img_bin = np.stack(img_bin_list, axis=0) if return_masks else None
         assert img_seg.ndim == 4, 'Expecting 4D segmentation image but shape is {}'.format(img_seg.shape)
 
-        # Return (in this order) labeled volumes, prediction volumes, mask volumes
-        return img_seg, img_pred, img_bin
+        if return_masks:
+            # Return (in this order) labeled volumes, prediction volumes, mask volumes
+            return img_seg, img_pred, img_bin
+        else:
+            return img_seg
 
-    def quantify(self, tile, img_seg, channel_names=None,
-                 include_cell_intensity=True,
-                 include_nucleus_intensity=False,
-                 include_cell_graph=False,
-                 spot_count_channels=None,
-                 spot_count_params=None):
+    def quantify(self, tile, img_seg, channel_names=None, cell_intensity=True, nucleus_intensity=False,
+        cell_graph=False, morphology_features=False, spot_count_channels=None, spot_count_params=None):
         ncyc, nz, _, nh, nw = tile.shape
 
-        # Move cycles and channels to last axes (in that order)
+        assert img_seg.ndim == 4, \
+            'Expecting 4D segmentation image with format ' \
+            '(z, channels [0=cell, 1=nucleus], height, width) but got shape {}' \
+            .format(img_seg.shape)
+
+        # Move cycles and channels to last axes (in that order) leaving tile in (z, height, width, cyc, ch) order
         tile = np.moveaxis(tile, 0, -1)
         tile = np.moveaxis(tile, 1, -1)
 
@@ -588,13 +745,18 @@ class Cytometer2D(KerasCytometer2D):
             )
 
         # Configure features to be calculated based on provided flags
-        feature_calculators = [BasicCellFeatures()]
-        if include_cell_intensity:
-            feature_calculators.append(IntensityFeatures(nch, channel_names, COMP_CELL))
-        if include_nucleus_intensity:
-            feature_calculators.append(IntensityFeatures(nch, channel_names, COMP_NUCLEUS))
-        if include_cell_graph:
+        feature_calculators = [_get_default_feature_calculators(channel_names)]
+        if cell_graph:
             feature_calculators.append(GraphFeatures())
+        if cell_intensity:
+            funcs = _get_agg_funcs(cell_intensity)
+            feature_calculators.append(IntensityFeatures(channel_names, COMP_CELL, funcs=funcs))
+        if nucleus_intensity:
+            funcs = _get_agg_funcs(nucleus_intensity)
+            feature_calculators.append(IntensityFeatures(channel_names, COMP_NUCLEUS, funcs=funcs))
+        if morphology_features:
+            keys = _get_feature_keys(morphology_features, channel_names, TEXTURE_MORPHOLOGY_FEATURES)
+            feature_calculators.append(ChannelComponentFeatures(keys, channel_names))
         if spot_count_channels is not None:
             indexes = [channel_names.index(c) for c in spot_count_channels]
             params = spot_count_params or {}
@@ -616,7 +778,7 @@ class Cytometer2D(KerasCytometer2D):
 
             # Compute RAG for cells if necessary
             graph = None
-            if include_cell_graph:
+            if cell_graph:
                 labels = img_seg[z][CELL_CHANNEL]
 
                 # rag_boundary fails on all zero label matrices so default to empty graph if that is the case
@@ -637,3 +799,19 @@ class Cytometer2D(KerasCytometer2D):
                 ])
 
         return pd.DataFrame(feature_values, columns=feature_names)
+
+    def augment(self, df, config):
+        # Convert size measurements to more meaningful scales
+        resolution_um = config.microscope_params.res_lateral_nm / 1000.
+        for c in [DEFAULT_CELL_MORPHOLOGY_PREFIX, DEFAULT_NUCL_MORPHOLOGY_PREFIX]:
+            col = c + DCHR + 'size'
+            if col in df:
+                # Preserve area/volume (depending on 2 or 3D segmentation) as separate field adjacent to original
+                df.insert(loc=df.columns.tolist().index(col)+1, column=col + '_vx', value=df[col])
+                df[col] = cytokit_math.pixel_area_to_squared_um(df[col].values, resolution_um)
+            col = c + DCHR + 'diameter'
+            if col in df:
+                # Preserve diameter as separate field adjacent to original
+                df.insert(loc=df.columns.tolist().index(col)+1, column=col + '_vx', value=df[col])
+                df[col] = df[col] * resolution_um
+        return df

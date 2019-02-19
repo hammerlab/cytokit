@@ -109,6 +109,14 @@ intensities:
 
 See the [Cytokit Explorer](python/applications/cytokit_app/explorer/README.md) docs for more details.
 
+### Custom Segmentation
+
+While the purpose of this pipeline is to perform image preprocessing and segmentation, the semantics of that 
+segmentation often change.  Depending on the experimental context, the provided cell nucleus segmentation may not 
+be adequate and if a different segmentation methodology is required then any custom logic can be added to the 
+pipeline as in the [mc38-spheroid](pub/analysis/mc38-spheroid) example.  Specifically, a [custom segmentation
+implemntation](pub/analysis/mc38-spheroid/spheroid_cytometer.py) is used here to identify spheroids rather 
+than cells.
 
 ### Messaging Caveats
 

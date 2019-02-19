@@ -1,0 +1,71 @@
+name: '20190215-mc38-dmso-control'
+date: '2019-02-15 00:00:00'
+environment:
+  # Note that the imaging group here "XY02" is included as an example but this most be overridden
+  # on execution to match each raw data file format
+  path_formats: 'get_default_path_formats("1_XY02_{tile:05d}_Z{z:03d}_CH{channel:d}.tif")'
+  index_symlinks:
+    channel: {3: 4}
+acquisition:
+  # Red = dead, Green = live
+  # XY07 = untreated, XY02 = DMSO 10%, XY03 = DMSO 1%
+  # Green = acridine orange (AO) FITC (CH2)
+  # Red = propidium iodide (PI) Cy5 (CH4)
+  per_cycle_channel_names: [BF, FITC, Cy5]
+  channel_names: [BF, LIVE, DEAD]
+  emission_wavelengths: [425,525,670]
+  # 10um z-step (bcf pitch = 100)
+  axial_resolution: 10000.0
+  lateral_resolution: 377.442
+  magnification: 20
+  num_cycles: 1
+  num_z_planes: 26
+  numerical_aperture: 0.75
+  objective_type: air
+  region_names: [Region1]
+  region_height: 3
+  region_width: 3
+  tile_height: 1008
+  tile_overlap_x: 576
+  tile_overlap_y: 432
+  tile_width: 1344
+  tiling_mode: snake
+operator:
+  - extract:
+      z: best
+      name: segm
+      channels:
+        - proc_BF
+        - proc_LIVE
+        - proc_DEAD
+        - cyto_cell_boundary
+        - cyto_cell_mask
+        - cyto_gradient(0,2)
+        - cyto_gradbin(0,3)
+        - cyto_basin(0,4)
+        - cyto_markers(0,5)
+  - montage: {name: segm, extract_name: segm}
+analysis:
+  - aggregate_cytometry_statistics: {mode: all}
+processor:
+  args:
+    gpus: [0]
+    run_spectral_unmixing: false
+    run_deconvolution: false
+    run_best_focus: true
+    run_cytometry: true
+  tile_generator: {raw_file_type: keyence_mixed}
+  best_focus: {channel: BF}
+  deconvolution: {n_iter: 10, scale_factor: .5}
+  cytometry:
+    z_plane: best
+    type:
+      module: spheroid_cytometer
+      class: SpheroidCytometer
+      args: {}
+    nuclei_channel_name: BF
+    quantification_params:
+      nucleus_intensity: [mean, sum]
+      cell_intensity: [mean, sum]
+      morphology_features: true
+      cell_graph: true

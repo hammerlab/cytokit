@@ -57,7 +57,6 @@ class TestConfig(unittest.TestCase):
         # The drift aligned dapi channels should be nearly identical across cycles, but in this case there are border
         # cells that end up with dapi=0 for cval=0 in drift compensation translation function so make the check
         # on a threshold (the ratio is < .5 with no drift compensation)
-        print(config.cytometry_params)
         dapi_ratio = df['ni:DAPI2:mean'].mean() / df['ni:DAPI1:mean'].mean()
         self.assertTrue(.8 < dapi_ratio <= 1,
                         'Expecting cycle 2 DAPI averages to be similar to cycle 1 DAPI after drift compensation, '

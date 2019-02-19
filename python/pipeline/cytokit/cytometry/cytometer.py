@@ -325,7 +325,10 @@ class ChannelComponentFeatures(ChannelComponentFeatureCalculator):
         elif feature.startswith('lbp'):
             assert image.ndim == 2, 'Expecting 2D object image, got shape {}'.format(image.shape)
             from skimage.feature import local_binary_pattern
-            lbp = local_binary_pattern(image, 8*3, 3, 'uniform')
+            # Use defaults in:
+            # http://scikit-image.org/docs/dev/auto_examples/features_detection/plot_local_binary_pattern.html
+            n_points, radius = 24, 3
+            lbp = local_binary_pattern(image, n_points, radius, 'uniform')
             fun = getattr(np, feature.split(DCHR)[-1])
             return fun(lbp)
         raise NotImplementedError('Morphology feature "{}" not yet implemented'.format(feature))

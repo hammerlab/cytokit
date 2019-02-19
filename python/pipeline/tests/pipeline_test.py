@@ -7,13 +7,14 @@ from cytokit.function import data as ck_fn
 from cytokit import config as ck_config
 from cytokit import io as ck_io
 from skimage import io as sk_io
+import logging
 
 
 class TestConfig(unittest.TestCase):
 
     def test_pipeline_01(self):
         out_dir = tempfile.mkdtemp(prefix='cytokit_test_pipeline_01_')
-        print('Initialized output dir {} for pipeline test 01'.format(out_dir))
+        logging.info('Initialized output dir {} for pipeline test 01'.format(out_dir))
 
         raw_dir = osp.join(cytokit.test_data_dir, 'experiment', 'cellular-marker-small', 'raw')
         val_dir = osp.join(cytokit.test_data_dir, 'experiment', 'cellular-marker-small', 'validation')

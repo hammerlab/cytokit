@@ -6,6 +6,8 @@ from cytokit import io as cytokit_io
 import tensorflow as tf
 import numpy as np
 import logging
+DEFAULT_PATCH_SIZE = 84
+DEFAULT_N_CLASSES = 11
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ class CytokitFocalPlaneSelector(CytokitOp):
         See https://github.com/google/microscopeimagequality for more details on the classifier used by this operation
     """
 
-    def __init__(self, config, patch_size=84, n_classes=11, save_tile=False):
+    def __init__(self, config, patch_size=DEFAULT_PATCH_SIZE, n_classes=DEFAULT_N_CLASSES, save_tile=False):
         super().__init__(config)
         self.mqiest = None
         self.graph = None

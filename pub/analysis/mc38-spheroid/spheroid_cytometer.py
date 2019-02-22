@@ -2,93 +2,161 @@ import numpy as np
 from skimage import filters
 from skimage import measure
 from skimage import exposure
+from skimage import transform
 from skimage import feature
 from skimage import morphology
 from skimage import segmentation
 from skimage import img_as_float
 from cytokit import math as ck_math
 from cytokit.cytometry import cytometer
-from scipy.ndimage.morphology import distance_transform_edt
+from scipy import ndimage as ndi
 import logging
 logger = logging.getLogger(__name__)
 
+def _flat_selem():
+    # Return default 3D structuring element with all connections outside center plane gone
+    return np.stack([
+        np.zeros((3, 3), bool), 
+        ndi.generate_binary_structure(2, 1), 
+        np.zeros((3, 3), bool)
+    ])
 
 class SpheroidCytometer(cytometer.Cytometer):
     
-    def __init__(self, **kwargs):
-        pass
+    def __init__(self, config):
+        """Cytometer Initialization
+
+        Args:
+        """
+        super().__init__(config)
     
     def initialize(self):
         pass
-    
-    def segment(self, img, **kwargs):
-        assert img.ndim == 3, 'Expecting 3D image, got shape %s' % img.shape
         
-        # Run max-z projection to create single 2D image (but record initial number of z planes)
-        nz = img.shape[0]
-        logger.info('Max projecting z dimension from %s planes to 1', nz)
-        img = img.max(axis=0)
+    def segment(
+        self, img, rescale_factor=None, z_sample_factor=None, 
+        min_object_size=1024, min_peak_dist=200,
+        sigmas=(1, 2, 5), include_intermediate_results=False, **kwargs):
         
-        # Verify 8 or 16 bit type before forcing to 8 bit (for median filtering)
-        assert img.dtype in [np.uint8, np.uint16], 'Expecting 8 or 16 bit image but got type %s' % img.dtype
-        if img.dtype == np.uint16:
-            img = exposure.rescale_intensity(img, out_range='uint8').astype(np.uint8)
-        assert img.dtype == np.uint8
-        img_raw = img
+        # Validate arguments
+        assert img.dtype in [np.uint8, np.uint16], \
+            'Expecting 8 or 16 bit image but got type %s' % img.dtype
+        assert img.ndim == 3, \
+            'Expecting 3D image, got shape %s' % img.shape
+        assert len(sigmas) == 3, \
+            'Sigmas must be 3 element sequence'
+        if z_sample_factor is None:
+            z_sample_factor = 1.
+        assert 0 < z_sample_factor <= 1, \
+            'Z-sampling factor must be in (0, 1]'
+        if rescale_factor is None:
+            rescale_factor = 1
+        assert 0 < rescale_factor <= 1, \
+            'XY rescale factor must be in (0, 1]'
+        shape = img.shape
         
-        # Preprocess to remove outliers and blur
-        img = filters.median(img, selem=morphology.square(3))
-        img = filters.gaussian(img, sigma=3)
+        if 0 < rescale_factor < 1:
+            logger.debug('Reducing image XY dimensions by factor %s', rescale_factor)
+            img = transform.rescale(
+                img, (1, rescale_factor, rescale_factor), 
+                multichannel=False, preserve_range=True, 
+                anti_aliasing=True, mode='reflect'
+            ).astype(img.dtype)
         
-        # Median requires 8 or 16 bit images (or a warning is thrown) but gaussian filter
-        # will convert result per img_as_float conventions leaving 0-1 image (verify that
-        # and stretch to 0-1)
-        assert img.min() >= 0 and img.max() <= 1, \
-            'Expecting 0-1 image but got range %s - %s' % (img.min(), img.max())
-        img = exposure.rescale_intensity(img, out_range=(0, 1))
-        assert img.min() == 0 and img.max() == 1
+        # Run small XY median filter to remove outliers (and convert to float)
+        img = ndi.median_filter(img, size=(1, 3, 3))
+        img = img_as_float(img)
+        
+        
+        def get_sigma(s):
+            return (z_sample_factor*s, s, s)
+        
+        #img_log = ndi.gaussian_laplace(img, sigma=get_sigma(sigmas[0]), mode='reflect')
 
-        # Run open-close morphological reconstruction
-        img_seed = morphology.erosion(img, selem=morphology.disk(8))
-        img = morphology.reconstruction(img_seed, img, method='dilation')
-        img_seed = morphology.dilation(img, selem=morphology.disk(8))
-        img = morphology.reconstruction(img_seed, img, method='erosion')
+        logger.debug('Running high pass filter (sigma = %s)', get_sigma(sigmas[0]))
+        img_hp = img - ndi.gaussian_filter(img, sigma=get_sigma(sigmas[0]), mode='reflect')
+        img_hp = exposure.rescale_intensity(img_hp, out_range=(0, 1))
+        
+        logger.debug('Computing gradients (sigma = %s)', get_sigma(sigmas[1]))
+        img_grad = ndi.generic_gradient_magnitude(img_hp, ndi.sobel)
+        img_grad = ndi.gaussian_filter(img_grad, sigma=get_sigma(sigmas[1]), mode='constant')
+        img_grad = exposure.rescale_intensity(img_grad, out_range=(0, 1))
 
-        # Compute gradient, blur, and threshold to give reasonable outlines of objects
-        img_grad = filters.sobel(img)
-        img_grad = filters.gaussian(img_grad, sigma=1)
-        img_grad_bin = img_grad > filters.threshold_li(img_grad)
+        threshold = filters.threshold_li(img_grad)
+        logger.debug('Computing gradient mask (threshold = %s)', threshold)
+        img_mask = img_grad > threshold
 
-        # Fill in outlines by performing large radius closing
-        img_mask = morphology.remove_small_objects(img_grad_bin, min_size=64)
-        img_mask = morphology.binary_closing(img_mask, selem=morphology.disk(8))
-        img_mask = morphology.remove_small_holes(img_mask, area_threshold=2048)
+        selem = _flat_selem()
+        img_mask = ndi.binary_closing(img_mask, structure=selem, iterations=1)
+        img_mask = ndi.binary_fill_holes(img_mask, structure=selem)
+        img_mask = morphology.remove_small_objects(img_mask, min_size=min_object_size)
+        img_mask_lab = ndi.label(img_mask)[0]
 
-        # Determine seed for primary object segmentation as peak local max in mask dist
-        img_mask_dist = distance_transform_edt(img_mask)
-        img_mask_dist = filters.gaussian(img_mask_dist, sigma=5) # Large sigma helps join nearby peaks
-        img_markers = feature.peak_local_max(img_mask_dist, indices=False, exclude_border=False, min_distance=64)
-        img_markers = measure.label(img_markers)
-        img_basin = -img_mask_dist
+        logger.debug('Computing mask distance transform (sigma = %s)', get_sigma(sigmas[2]))
+        img_dist = ndi.distance_transform_edt(img_mask, sampling=(1/z_sample_factor, 1, 1))
+        img_dist = ndi.gaussian_filter(img_dist, sigma=get_sigma(sigmas[2]), mode='constant')
 
-        # Segment larger objects (i.e. spheroids)
-        img_seg = segmentation.watershed(img_basin, img_markers, mask=img_mask).astype(np.uint16)
+        logger.debug('Finding local maxima (min peak dist = %s)', min_peak_dist)
+        # Compute local maxima in gradient intensity making sure to isolate min_distance filters
+        # to different objects in the mask, otherwise disconnected objects close together will
+        # only get one peak if that distance is < min_peak_dist
+        img_pks = feature.peak_local_max(
+            img_dist, min_distance=min_peak_dist, labels=img_mask_lab,
+            indices=False, exclude_border=False
+        )
+        img_pks = ndi.label(img_pks)[0]
+
+        logger.debug('Running watershed transform')
+        img_seg = segmentation.watershed(-img_dist, img_pks, mask=img_mask).astype(np.uint16)
 
         # Convert (h, w) -> required (z, (cell, nucleus, ...[others]), h, w) format 
-        img_seg = np.stack([
-            img_seg, img_seg,
+        images = ([img_seg] * 2) + ([
             exposure.rescale_intensity(img_grad, out_range='uint16').astype(np.uint16),
-            img_grad_bin.astype(np.uint16),
-            exposure.rescale_intensity(img_basin, out_range='uint16').astype(np.uint16),
-            img_markers.astype(np.uint16)
-        ])
-        return np.stack([img_seg]*nz)
+            img_mask.astype(np.uint16),
+            img_pks.astype(np.uint16),
+        ] if include_intermediate_results else [])
+        img_seg = np.stack(images, 1)
+        assert img_seg.dtype == np.uint16
+        assert img_seg.ndim == 4, 'Expecting 4D result, got shape {}'.format(img_seg.shape)
+        
+        # Rescale back to original size if necessary
+        if 0 < rescale_factor < 1:
+            # Transpose to (h, w, ...) since resize will operation on batches like this
+            img_seg = np.transpose(img_seg, axes=(2, 3, 0, 1))
+            tgt_shape = shape[-2:] + img_seg.shape[2:]
+            logger.debug('Rescaling results from shape %s back to %s', img_seg.shape, tgt_shape)
+            assert len(tgt_shape) == img_seg.ndim
+            img_seg = transform.resize(
+                img_seg, tgt_shape, mode='constant',
+                preserve_range=True, anti_aliasing=False, clip=True
+            ).astype(img_seg.dtype)
+            # Transpose back to original (z, (cell, nucleus, ...[others]), h, w) format
+            img_seg = np.transpose(img_seg, axes=(2, 3, 0, 1))
+        
+        return img_seg
     
-    def quantify(self, tile, segmentation, **kwargs):
-        return cytometer.Cytometer2D.quantify(None, tile, segmentation, **kwargs)
+    def quantify(self, tile, segments, sigma=None, **kwargs):
+        # Compute LoG image using nucleus channel
+        logger.debug('Computing LoG image (sigma = %s)', sigma)
+        ch_name = self.config.cytometry_params['nuclei_channel_name']
+        ch_coords = self.config.get_channel_coordinates(nuc_channel_name)
+        img = img_as_float(tile[ch_coords[0], :, ch_coords[1]])
+        img = ndi.gaussian_laplace(img, sigma=sigma, mode='reflect')
+        img = exposure.rescale_intensity(img, out_range=str(tile.dtype)).astype(tile.dtype)
+        
+        logger.debug('Appending LoG image and running quantification')
+        # Stack LoG image onto tile as new channel (at end of array)
+        assert img.ndim == 3
+        assert img.dtype == tile.dtype
+        # Stack (1, z, 1, h, w) onto tile (cyc, z, ch, h, w)
+        tile = np.append(tile, img[np.newaxis, :, np.newaxis, :, :], axis=2)
+        assert tile.ndim == 5
+        if 'channel_names' in kwargs:
+            kwargs['channel_names'] = kwargs['channel_names'] + ['laplofgauss']
+        return cytometer.Base2D.quantify(tile, segments, **kwargs)
 
-    def augment(self, df, config):
-        df = cytometer.Cytometer2D.augment(None, df, config)
+    def augment(self, df):
+        df = cytometer.Base2D.augment(df, self.config.microscope_params)
         # Attempt to sum live + dead intensities if both channels are present
         for agg_fun in ['mean', 'sum']:
             cols = df.filter(regex='ci:(LIVE|DEAD):{}'.format(agg_fun)).columns.tolist()

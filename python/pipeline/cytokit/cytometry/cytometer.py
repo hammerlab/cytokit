@@ -57,154 +57,6 @@ MORPHOLOGY_COMPONENTS = {
 }
 
 
-class Cytometer(ABC):
-
-    @abstractmethod
-    def initialize(self):
-        pass
-
-    @abstractmethod
-    def segment(self, img, **kwargs):
-        pass
-
-    @abstractmethod
-    def quantify(self, tile, segmentation, **kwargs):
-        pass
-
-    @abstractmethod
-    def augment(self, df, config):
-        pass
-
-
-class KerasCytometer2D(Cytometer):
-
-    def __init__(self, input_shape, target_shape=None, weights_path=None):
-        """Cytometer Initialization
-
-        Args:
-            input_shape: Shape of input images as HWC tuple
-            target_shape: Shape of resized images to use for prediction as HW tuple; if None (default),
-                then the images will not be resized
-            weights_path: Path to model weights; if None (default), a default path will be used
-        """
-        self.input_shape = input_shape
-        self.target_shape = target_shape
-        self.weights_path = weights_path
-        self.initialized = False
-        self.model = None
-
-        if len(input_shape) != 3:
-            raise ValueError('Input shape must be HWC 3 tuple (given {})'.format(input_shape))
-        if target_shape is not None and len(target_shape) != 2:
-            raise ValueError('Target shape must be HW 2 tuple (given {})'.format(target_shape))
-
-        # Set resize indicator to true only if target HW dimensions differ from original
-        self.resize = target_shape is not None and target_shape != input_shape[:2]
-
-    def initialize(self):
-        # Choose input shape for model based on whether or not resizing is being used
-        if self.resize:
-            # Set as HWC where HW comes from target shape
-            input_shape = tuple(self.target_shape) + (self.input_shape[-1],)
-        else:
-            input_shape = self.input_shape
-        self.model = self._get_model(input_shape)
-        self.model.load_weights(self.weights_path or self._get_weights_path())
-        self.initialized = True
-        return self
-
-    def _resize(self, img, shape):
-        """Resize NHWC image to target shape
-
-        Args:
-            img: Image array with shape NHWC
-            shape: Shape to resize to (HW tuple)
-        Return:
-            Image array with shape NHWC where H and W are equal to sizes in `shape`
-        """
-        if img.ndim != 4:
-            raise ValueError('Expecting 4D NHWC image to resize (given shape = {})'.format(img.shape))
-        if len(shape) != 2:
-            raise ValueError('Expecting 2 tuple for target shape (given {})'.format(shape))
-
-        # Resize expects images as HW first and then trailing dimensions will be ignored if
-        # explicitly set to resize them to the same values
-        input_shape = img.shape
-        output_shape = tuple(shape) + (input_shape[-1], input_shape[0])
-        img = np.moveaxis(img, 0, -1)  # NHWC -> HWCN
-        img = transform.resize(img, output_shape=output_shape, mode='constant', anti_aliasing=True, preserve_range=True)
-        img = np.moveaxis(img, -1, 0)  # HWCN -> NHWC
-
-        # Ensure result agrees with original in N and C dimensions
-        assert img.shape[0] == input_shape[0] and img.shape[-1] == input_shape[-1], \
-            'Resized image does not have expected batch and channel dim values (input shape = {}, result shape = {}' \
-            .format(input_shape, img.shape)
-        return img
-
-    def predict(self, img, batch_size):
-        """Run prediction for an image
-
-        Args:
-            img: Image array with shape NHWC
-            batch_size: Number of images to predict at one time
-        Return:
-            Predictions from model with shape NHWC where C can differ from input while all other dimensions are
-                the same (difference depends on prediction targets of model)
-        """
-        if img.ndim != 4:
-            raise ValueError('Expecting 4D NHWC image for prediction but got image with shape "{}"'.format(img.shape))
-        if img.shape[1:] != self.input_shape:
-            raise ValueError(
-                'Given image with shape {} does not match expected image shape {} in non-batch dimensions'
-                .format(img.shape[1:], self.input_shape)
-            )
-        if batch_size < 1:
-            raise ValueError('Batch size must be integer >= 1 (given {})'.format(batch_size))
-
-        shape = img.shape
-
-        # Resize input, if necessary
-        if self.resize:
-            img = self._resize(img, self.target_shape)
-
-        # Run predictions on NHWC0 image to give NHWC1 result where C0 possibly != C1
-        img = self.model.predict(img, batch_size=batch_size)
-
-        # Make sure results are NHWC
-        if img.ndim != 4:
-            raise AssertionError('Expecting 4D prediction image results but got image with shape {}'.format(img.shape))
-
-        # Convert HW dimensions of predictions back to original, if necessary
-        if self.resize:
-            img = self._resize(img, self.input_shape[:2])
-
-        # Ensure results agree with input in NHW dimensions
-        if img.shape[:-1] != shape[:-1]:
-            raise AssertionError(
-                'Prediction and input images do not have same NHW dimensions (input shape = {}, result shape = {})'
-                .format(shape, img.shape)
-            )
-
-        return img
-
-    def _get_model(self, input_shape):
-        raise NotImplementedError()
-
-    def _get_weights_path(self):
-        raise NotImplementedError()
-
-
-def _to_uint8(img, name):
-    if img.dtype != np.uint8 and img.dtype != np.uint16:
-        raise ValueError(
-            'Image must be 8 or 16 bit for segmentation (image name = {}, dtype = {}, shape = {})'
-            .format(name, img.dtype, img.shape)
-        )
-    if img.dtype == np.uint16:
-        img = exposure.rescale_intensity(img, in_range=np.uint16, out_range=np.uint8).astype(np.uint8)
-    return img
-
-
 class ObjectProperties(object):
 
     def __init__(self, cell, nucleus):
@@ -562,8 +414,276 @@ class GraphFeatures(FeatureCalculator):
             _pct_list([bgwt / wtsum])
         ]
 
+###########################
+# Cytometer Implementations
+###########################
+
+
+class Cytometer(ABC):
+
+    def __init__(self, config):
+        self.config = config
+
+    def initialize(self):
+        pass
+
+    @abstractmethod
+    def segment(self, image, **kwargs):
+        pass
+
+    @abstractmethod
+    def quantify(self, tile, segments, **kwargs):
+        pass
+
+    @abstractmethod
+    def augment(self, df, **kwargs):
+        pass
+
+
+class KerasCytometer2D(Cytometer):
+
+    def __init__(self, input_shape, target_shape=None, weights_path=None, config=None):
+        """Cytometer Initialization
+
+        Args:
+            input_shape: Shape of input images as HWC tuple
+            target_shape: Shape of resized images to use for prediction as HW tuple; if None (default),
+                then the images will not be resized
+            weights_path: Path to model weights; if None (default), a default path will be used
+            config: Extra configuration information global to experiment
+        """
+        super().__init__(config)
+        self.input_shape = input_shape
+        self.target_shape = target_shape
+        self.weights_path = weights_path
+        self.initialized = False
+        self.model = None
+
+        if len(input_shape) != 3:
+            raise ValueError('Input shape must be HWC 3 tuple (given {})'.format(input_shape))
+        if target_shape is not None and len(target_shape) != 2:
+            raise ValueError('Target shape must be HW 2 tuple (given {})'.format(target_shape))
+
+        # Set resize indicator to true only if target HW dimensions differ from original
+        self.resize = target_shape is not None and target_shape != input_shape[:2]
+
+    def initialize(self):
+        # Choose input shape for model based on whether or not resizing is being used
+        if self.resize:
+            # Set as HWC where HW comes from target shape
+            input_shape = tuple(self.target_shape) + (self.input_shape[-1],)
+        else:
+            input_shape = self.input_shape
+        self.model = self._get_model(input_shape)
+        self.model.load_weights(self.weights_path or self._get_weights_path())
+        self.initialized = True
+        return self
+
+    def _resize(self, img, shape):
+        """Resize NHWC image to target shape
+
+        Args:
+            img: Image array with shape NHWC
+            shape: Shape to resize to (HW tuple)
+        Return:
+            Image array with shape NHWC where H and W are equal to sizes in `shape`
+        """
+        if img.ndim != 4:
+            raise ValueError('Expecting 4D NHWC image to resize (given shape = {})'.format(img.shape))
+        if len(shape) != 2:
+            raise ValueError('Expecting 2 tuple for target shape (given {})'.format(shape))
+
+        # Resize expects images as HW first and then trailing dimensions will be ignored if
+        # explicitly set to resize them to the same values
+        input_shape = img.shape
+        output_shape = tuple(shape) + (input_shape[-1], input_shape[0])
+        img = np.moveaxis(img, 0, -1)  # NHWC -> HWCN
+        img = transform.resize(img, output_shape=output_shape, mode='constant', anti_aliasing=True, preserve_range=True)
+        img = np.moveaxis(img, -1, 0)  # HWCN -> NHWC
+
+        # Ensure result agrees with original in N and C dimensions
+        assert img.shape[0] == input_shape[0] and img.shape[-1] == input_shape[-1], \
+            'Resized image does not have expected batch and channel dim values (input shape = {}, result shape = {}' \
+            .format(input_shape, img.shape)
+        return img
+
+    def predict(self, img, batch_size):
+        """Run prediction for an image
+
+        Args:
+            img: Image array with shape NHWC
+            batch_size: Number of images to predict at one time
+        Return:
+            Predictions from model with shape NHWC where C can differ from input while all other dimensions are
+                the same (difference depends on prediction targets of model)
+        """
+        if img.ndim != 4:
+            raise ValueError('Expecting 4D NHWC image for prediction but got image with shape "{}"'.format(img.shape))
+        if img.shape[1:] != self.input_shape:
+            raise ValueError(
+                'Given image with shape {} does not match expected image shape {} in non-batch dimensions'
+                .format(img.shape[1:], self.input_shape)
+            )
+        if batch_size < 1:
+            raise ValueError('Batch size must be integer >= 1 (given {})'.format(batch_size))
+
+        shape = img.shape
+
+        # Resize input, if necessary
+        if self.resize:
+            img = self._resize(img, self.target_shape)
+
+        # Run predictions on NHWC0 image to give NHWC1 result where C0 possibly != C1
+        img = self.model.predict(img, batch_size=batch_size)
+
+        # Make sure results are NHWC
+        if img.ndim != 4:
+            raise AssertionError('Expecting 4D prediction image results but got image with shape {}'.format(img.shape))
+
+        # Convert HW dimensions of predictions back to original, if necessary
+        if self.resize:
+            img = self._resize(img, self.input_shape[:2])
+
+        # Ensure results agree with input in NHW dimensions
+        if img.shape[:-1] != shape[:-1]:
+            raise AssertionError(
+                'Prediction and input images do not have same NHW dimensions (input shape = {}, result shape = {})'
+                .format(shape, img.shape)
+            )
+
+        return img
+
+    @abstractmethod
+    def _get_model(self, input_shape):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def _get_weights_path(self):
+        raise NotImplementedError()
+
+
+def _to_uint8(img, name):
+    if img.dtype != np.uint8 and img.dtype != np.uint16:
+        raise ValueError(
+            'Image must be 8 or 16 bit for segmentation (image name = {}, dtype = {}, shape = {})'
+            .format(name, img.dtype, img.shape)
+        )
+    if img.dtype == np.uint16:
+        img = exposure.rescale_intensity(img, in_range=np.uint16, out_range=np.uint8).astype(np.uint8)
+    return img
+
+
+class Base2D(object):
+    """ Base Cytometer implementations for quantification + augmentation (but not segmentation) """
+
+    @classmethod
+    def quantify(cls, tile, img_seg, channel_names=None, cell_intensity=True, nucleus_intensity=False,
+                 cell_graph=False, morphology_features=False, spot_count_channels=None, spot_count_params=None):
+        ncyc, nz, _, nh, nw = tile.shape
+
+        assert img_seg.ndim == 4, \
+            'Expecting 4D segmentation image with format ' \
+            '(z, channels [0=cell, 1=nucleus], height, width) but got shape {}' \
+            .format(img_seg.shape)
+        assert img_seg.shape[-2:] == (nh, nw), \
+            'HW dimensions of segmentation volume ({}) do not match tile ({})'\
+            .format(img_seg.shape[-2:], (nh, nw))
+
+        # Move cycles and channels to last axes (in that order) leaving tile in (z, height, width, cyc, ch) order
+        tile = np.moveaxis(tile, 0, -1)
+        tile = np.moveaxis(tile, 1, -1)
+
+        # Collapse tile to ZHWC (instead of cycles and channels being separate)
+        tile = np.reshape(tile, (nz, nh, nw, -1))
+        nch = tile.shape[-1]
+
+        # Generate default channel names list if necessary
+        if channel_names is None:
+            channel_names = ['{:03d}'.format(i) for i in range(nch)]
+
+        if nch != len(channel_names):
+            raise ValueError(
+                'Tile has {} channels but given channel name list has {} (they should be equal); '
+                'channel names given = {}, tile shape = {}'
+                .format(nch, len(channel_names), channel_names, tile.shape)
+            )
+
+        # Configure features to be calculated based on provided flags
+        feature_calculators = [_get_default_feature_calculators(channel_names)]
+        if cell_graph:
+            feature_calculators.append(GraphFeatures())
+        if cell_intensity:
+            funcs = _get_agg_funcs(cell_intensity)
+            feature_calculators.append(IntensityFeatures(channel_names, COMP_CELL, funcs=funcs))
+        if nucleus_intensity:
+            funcs = _get_agg_funcs(nucleus_intensity)
+            feature_calculators.append(IntensityFeatures(channel_names, COMP_NUCLEUS, funcs=funcs))
+        if morphology_features:
+            keys = _get_feature_keys(morphology_features, channel_names, TEXTURE_MORPHOLOGY_FEATURES)
+            feature_calculators.append(ChannelComponentFeatures(keys, channel_names))
+        if spot_count_channels is not None:
+            indexes = [channel_names.index(c) for c in spot_count_channels]
+            params = spot_count_params or {}
+            feature_calculators.append(SpotFeatures(indexes, spot_count_channels, **params))
+
+        # Compute list of resulting feature names (values will be added in this order)
+        feature_names = [v for fc in feature_calculators for v in fc.get_feature_names()]
+
+        feature_values = []
+        for z in range(nz):
+            # Calculate properties of masked+labeled cell components
+            cell_props = measure.regionprops(img_seg[z][CELL_CHANNEL], cache=False)
+            nucleus_props = measure.regionprops(img_seg[z][NUCLEUS_CHANNEL], cache=False)
+            if len(cell_props) != len(nucleus_props):
+                raise ValueError(
+                    'Expecting cell and nucleus properties to have same length (nucleus props = {}, cell props = {})'
+                    .format(len(nucleus_props), len(cell_props))
+                )
+
+            # Compute RAG for cells if necessary
+            graph = None
+            if cell_graph:
+                labels = img_seg[z][CELL_CHANNEL]
+
+                # rag_boundary fails on all zero label matrices so default to empty graph if that is the case
+                # see: https://github.com/scikit-image/scikit-image/blob/master/skimage/future/graph/rag.py#L386
+                if np.count_nonzero(labels) > 0:
+                    graph = label_graph.rag_boundary(labels, np.ones(labels.shape))
+                else:
+                    graph = label_graph.RAG()
+
+            # Loop through each detected cell and compute features
+            for i in range(len(cell_props)):
+                props = ObjectProperties(cell=cell_props[i], nucleus=nucleus_props[i])
+
+                # Run each feature calculator and add results in order
+                feature_values.append([
+                    v for fc in feature_calculators
+                    for v in fc.get_feature_values(tile, img_seg, graph, props, z)
+                ])
+
+        return pd.DataFrame(feature_values, columns=feature_names)
+
+    @classmethod
+    def augment(cls, df, microscope_params):
+        # Convert size measurements to more meaningful scales
+        resolution_um = microscope_params.res_lateral_nm / 1000.
+        for c in [DEFAULT_CELL_MORPHOLOGY_PREFIX, DEFAULT_NUCL_MORPHOLOGY_PREFIX]:
+            col = c + DCHR + 'size'
+            if col in df:
+                # Preserve area/volume (depending on 2 or 3D segmentation) as separate field adjacent to original
+                df.insert(loc=df.columns.tolist().index(col)+1, column=col + '_vx', value=df[col])
+                df[col] = cytokit_math.pixel_area_to_squared_um(df[col].values, resolution_um)
+            col = c + DCHR + 'diameter'
+            if col in df:
+                # Preserve diameter as separate field adjacent to original
+                df.insert(loc=df.columns.tolist().index(col)+1, column=col + '_vx', value=df[col])
+                df[col] = df[col] * resolution_um
+        return df
+
 
 class Cytometer2D(KerasCytometer2D):
+    """ Default Cytometer implementation using 2D Keras UNet"""
 
     def _get_model(self, input_shape):
         # Load this as late as possible to avoid premature keras backend initialization
@@ -719,102 +839,8 @@ class Cytometer2D(KerasCytometer2D):
         else:
             return img_seg
 
-    def quantify(self, tile, img_seg, channel_names=None, cell_intensity=True, nucleus_intensity=False,
-        cell_graph=False, morphology_features=False, spot_count_channels=None, spot_count_params=None):
-        ncyc, nz, _, nh, nw = tile.shape
+    def quantify(self, tile, segments, **kwargs):
+        return Base2D.quantify(tile, segments, **kwargs)
 
-        assert img_seg.ndim == 4, \
-            'Expecting 4D segmentation image with format ' \
-            '(z, channels [0=cell, 1=nucleus], height, width) but got shape {}' \
-            .format(img_seg.shape)
-
-        # Move cycles and channels to last axes (in that order) leaving tile in (z, height, width, cyc, ch) order
-        tile = np.moveaxis(tile, 0, -1)
-        tile = np.moveaxis(tile, 1, -1)
-
-        # Collapse tile to ZHWC (instead of cycles and channels being separate)
-        tile = np.reshape(tile, (nz, nh, nw, -1))
-        nch = tile.shape[-1]
-
-        # Generate default channel names list if necessary
-        if channel_names is None:
-            channel_names = ['{:03d}'.format(i) for i in range(nch)]
-
-        if nch != len(channel_names):
-            raise ValueError(
-                'Tile has {} channels but given channel name list has {} (they should be equal); '
-                'channel names given = {}, tile shape = {}'
-                .format(nch, len(channel_names), channel_names, tile.shape)
-            )
-
-        # Configure features to be calculated based on provided flags
-        feature_calculators = [_get_default_feature_calculators(channel_names)]
-        if cell_graph:
-            feature_calculators.append(GraphFeatures())
-        if cell_intensity:
-            funcs = _get_agg_funcs(cell_intensity)
-            feature_calculators.append(IntensityFeatures(channel_names, COMP_CELL, funcs=funcs))
-        if nucleus_intensity:
-            funcs = _get_agg_funcs(nucleus_intensity)
-            feature_calculators.append(IntensityFeatures(channel_names, COMP_NUCLEUS, funcs=funcs))
-        if morphology_features:
-            keys = _get_feature_keys(morphology_features, channel_names, TEXTURE_MORPHOLOGY_FEATURES)
-            feature_calculators.append(ChannelComponentFeatures(keys, channel_names))
-        if spot_count_channels is not None:
-            indexes = [channel_names.index(c) for c in spot_count_channels]
-            params = spot_count_params or {}
-            feature_calculators.append(SpotFeatures(indexes, spot_count_channels, **params))
-
-        # Compute list of resulting feature names (values will be added in this order)
-        feature_names = [v for fc in feature_calculators for v in fc.get_feature_names()]
-
-        feature_values = []
-        for z in range(nz):
-            # Calculate properties of masked+labeled cell components
-            cell_props = measure.regionprops(img_seg[z][CELL_CHANNEL], cache=False)
-            nucleus_props = measure.regionprops(img_seg[z][NUCLEUS_CHANNEL], cache=False)
-            if len(cell_props) != len(nucleus_props):
-                raise ValueError(
-                    'Expecting cell and nucleus properties to have same length (nucleus props = {}, cell props = {})'
-                    .format(len(nucleus_props), len(cell_props))
-                )
-
-            # Compute RAG for cells if necessary
-            graph = None
-            if cell_graph:
-                labels = img_seg[z][CELL_CHANNEL]
-
-                # rag_boundary fails on all zero label matrices so default to empty graph if that is the case
-                # see: https://github.com/scikit-image/scikit-image/blob/master/skimage/future/graph/rag.py#L386
-                if np.count_nonzero(labels) > 0:
-                    graph = label_graph.rag_boundary(labels, np.ones(labels.shape))
-                else:
-                    graph = label_graph.RAG()
-
-            # Loop through each detected cell and compute features
-            for i in range(len(cell_props)):
-                props = ObjectProperties(cell=cell_props[i], nucleus=nucleus_props[i])
-
-                # Run each feature calculator and add results in order
-                feature_values.append([
-                    v for fc in feature_calculators
-                    for v in fc.get_feature_values(tile, img_seg, graph, props, z)
-                ])
-
-        return pd.DataFrame(feature_values, columns=feature_names)
-
-    def augment(self, df, config):
-        # Convert size measurements to more meaningful scales
-        resolution_um = config.microscope_params.res_lateral_nm / 1000.
-        for c in [DEFAULT_CELL_MORPHOLOGY_PREFIX, DEFAULT_NUCL_MORPHOLOGY_PREFIX]:
-            col = c + DCHR + 'size'
-            if col in df:
-                # Preserve area/volume (depending on 2 or 3D segmentation) as separate field adjacent to original
-                df.insert(loc=df.columns.tolist().index(col)+1, column=col + '_vx', value=df[col])
-                df[col] = cytokit_math.pixel_area_to_squared_um(df[col].values, resolution_um)
-            col = c + DCHR + 'diameter'
-            if col in df:
-                # Preserve diameter as separate field adjacent to original
-                df.insert(loc=df.columns.tolist().index(col)+1, column=col + '_vx', value=df[col])
-                df[col] = df[col] * resolution_um
-        return df
+    def augment(self, df, **kwargs):
+        return Base2D.augment(df, self.config.microscope_params)

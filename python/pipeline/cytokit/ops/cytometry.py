@@ -100,9 +100,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
 
         if hasattr(self.cytometer_type, 'keys'):
             self.cytometer = cytokit_config.get_implementation_instance(
-                self.cytometer_type, 'Cytometer',
-                input_shape=self.input_shape, target_shape=self.target_shape
-            )
+                self.cytometer_type, 'Cytometer', config=self.config)
             self.cytometer.initialize()
             return self
 
@@ -121,7 +119,8 @@ class Cytometry2D(cytokit_op.CytokitOp):
         )
 
         self.cytometer = cytometer.Cytometer2D(
-            self.input_shape, target_shape=self.target_shape, weights_path=weights_path)
+            input_shape=self.input_shape, target_shape=self.target_shape,
+            weights_path=weights_path, config=self.config)
         self.cytometer.initialize()
         return self
 
@@ -191,7 +190,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
         stats = self.cytometer.quantify(tile, img_seg, **self.quantification_params)
 
         # Add any statistics or transformations that require the experimental context
-        stats = self.cytometer.augment(stats, self.config)
+        stats = self.cytometer.augment(stats)
 
         # Create overlay image of nucleus channel and boundaries and convert to 5D
         # shape to conform with usual tile convention

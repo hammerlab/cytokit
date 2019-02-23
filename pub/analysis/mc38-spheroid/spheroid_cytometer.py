@@ -13,12 +13,27 @@ from scipy import ndimage as ndi
 import logging
 logger = logging.getLogger(__name__)
 
-def _flat_selem():
+def flat_disk(radius):
     # Return default 3D structuring element with all connections outside center plane gone
+    n = 2*radius + 1
     return np.stack([
-        np.zeros((3, 3), bool), 
-        ndi.generate_binary_structure(2, 1), 
-        np.zeros((3, 3), bool)
+        np.zeros((n, n), bool), 
+        morphology.disk(radius).astype(bool), 
+        np.zeros((n, n), bool)
+    ])
+
+def flat_square(size):
+    return np.stack([
+        np.zeros((size, size), bool), 
+        morphology.square(size).astype(bool), 
+        np.zeros((size, size), bool)
+    ])
+
+def flat_ball(r, rz):
+    return np.stack([
+        np.pad(morphology.disk(rz), r-rz, 'constant'),
+        morphology.disk(r),
+        np.pad(morphology.disk(rz), r-rz, 'constant'),
     ])
 
 class SpheroidCytometer(cytometer.Cytometer):
@@ -36,7 +51,7 @@ class SpheroidCytometer(cytometer.Cytometer):
     def segment(
         self, img, rescale_factor=None, z_sample_factor=None, 
         min_object_size=1024, min_peak_dist=200,
-        sigmas=(1, 2, 5), include_intermediate_results=False, **kwargs):
+        sigmas=(1, 2, 5), include_intermediate_results=False, max_peaks=75, **kwargs):
         
         # Validate arguments
         assert img.dtype in [np.uint8, np.uint16], \
@@ -82,18 +97,23 @@ class SpheroidCytometer(cytometer.Cytometer):
         img_grad = ndi.gaussian_filter(img_grad, sigma=get_sigma(sigmas[1]), mode='constant')
         img_grad = exposure.rescale_intensity(img_grad, out_range=(0, 1))
 
-        threshold = filters.threshold_li(img_grad)
+        threshold = filters.threshold_otsu(img_grad)
         logger.debug('Computing gradient mask (threshold = %s)', threshold)
         img_mask = img_grad > threshold
 
-        selem = _flat_selem()
-        img_mask = ndi.binary_closing(img_mask, structure=selem, iterations=1)
-        img_mask = ndi.binary_fill_holes(img_mask, structure=selem)
-        img_mask = morphology.remove_small_objects(img_mask, min_size=min_object_size)
-        img_mask_lab = ndi.label(img_mask)[0]
+        # Make sure to transform mask only after running distance transorm
+        logger.debug('Applying morphological smoothings to mask')
+        img_mask = ndi.binary_fill_holes(img_mask, structure=flat_disk(1))
+        img_border_mask = morphology.binary_closing(img_mask, selem=ndi.generate_binary_structure(3, 1))
+        img_marker_mask = morphology.binary_erosion(img_border_mask, selem=flat_ball(15, 4))
+        img_marker_mask = img_marker_mask & img_border_mask
+        img_center_mask = morphology.binary_dilation(img_marker_mask, selem=flat_ball(15, 4))
+        img_marker_mask = img_center_mask & img_border_mask
+        
+        img_marker_labl = morphology.label(img_marker_mask)
 
         logger.debug('Computing mask distance transform (sigma = %s)', get_sigma(sigmas[2]))
-        img_dist = ndi.distance_transform_edt(img_mask, sampling=(1/z_sample_factor, 1, 1))
+        img_dist = ndi.distance_transform_edt(img_marker_mask, sampling=(1/z_sample_factor, 1, 1))
         img_dist = ndi.gaussian_filter(img_dist, sigma=get_sigma(sigmas[2]), mode='constant')
 
         logger.debug('Finding local maxima (min peak dist = %s)', min_peak_dist)
@@ -101,19 +121,27 @@ class SpheroidCytometer(cytometer.Cytometer):
         # to different objects in the mask, otherwise disconnected objects close together will
         # only get one peak if that distance is < min_peak_dist
         img_pks = feature.peak_local_max(
-            img_dist, min_distance=min_peak_dist, labels=img_mask_lab,
-            indices=False, exclude_border=False
+            img_dist, min_distance=min_peak_dist, labels=img_marker_labl,
+            indices=False, exclude_border=False,
+            num_peaks=max_peaks
         )
-        img_pks = ndi.label(img_pks)[0]
+        img_pks = morphology.label(img_pks)
+        
 
         logger.debug('Running watershed transform')
-        img_seg = segmentation.watershed(-img_dist, img_pks, mask=img_mask).astype(np.uint16)
+        #img_seg = segmentation.random_walker(img_grad, img_pks - (~img_border_mask).astype(img_pks.dtype)).astype(np.uint16)
+        #img_seg = segmentation.watershed(-img_dist, img_pks, mask=img_border_mask).astype(np.uint16)
+        img_basin = ndi.distance_transform_edt(~(img_pks>0), sampling=(1/z_sample_factor, 1, 1))
+        img_seg = segmentation.watershed(img_basin, img_pks, mask=img_border_mask).astype(np.uint16)
+        img_center_lbl = img_center_mask.astype(np.uint16) * img_seg
 
         # Convert (h, w) -> required (z, (cell, nucleus, ...[others]), h, w) format 
-        images = ([img_seg] * 2) + ([
+        images = ([img_seg, img_center_lbl]) + ([
             exposure.rescale_intensity(img_grad, out_range='uint16').astype(np.uint16),
-            img_mask.astype(np.uint16),
-            img_pks.astype(np.uint16),
+            img_marker_labl.astype(np.uint16),
+            exposure.rescale_intensity(img_dist, out_range='uint16').astype(np.uint16),
+            exposure.rescale_intensity(img_basin, out_range='uint16').astype(np.uint16)
+            #img_pks.astype(np.uint16),
         ] if include_intermediate_results else [])
         img_seg = np.stack(images, 1)
         assert img_seg.dtype == np.uint16
@@ -127,7 +155,7 @@ class SpheroidCytometer(cytometer.Cytometer):
             logger.debug('Rescaling results from shape %s back to %s', img_seg.shape, tgt_shape)
             assert len(tgt_shape) == img_seg.ndim
             img_seg = transform.resize(
-                img_seg, tgt_shape, mode='constant',
+                img_seg, tgt_shape, mode='constant', order=0,
                 preserve_range=True, anti_aliasing=False, clip=True
             ).astype(img_seg.dtype)
             # Transpose back to original (z, (cell, nucleus, ...[others]), h, w) format
@@ -136,10 +164,13 @@ class SpheroidCytometer(cytometer.Cytometer):
         return img_seg
     
     def quantify(self, tile, segments, sigma=None, **kwargs):
+        # TODO: Fix this to use rescaling factors
+        sigma = sigma if sigma is not None else (.1, 1, 1)
+        
         # Compute LoG image using nucleus channel
-        logger.debug('Computing LoG image (sigma = %s)', sigma)
         ch_name = self.config.cytometry_params['nuclei_channel_name']
-        ch_coords = self.config.get_channel_coordinates(nuc_channel_name)
+        ch_coords = self.config.get_channel_coordinates(ch_name)
+        logger.debug('Computing LoG image on channel "%s" (sigma = %s)', ch_name, sigma)
         img = img_as_float(tile[ch_coords[0], :, ch_coords[1]])
         img = ndi.gaussian_laplace(img, sigma=sigma, mode='reflect')
         img = exposure.rescale_intensity(img, out_range=str(tile.dtype)).astype(tile.dtype)

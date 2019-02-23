@@ -139,7 +139,7 @@ def _load_montage_data():
     # Montage Resampling
     ####################
 
-    logger.info('Loaded montage image with shape = %s, dtype = %s', img.shape, img.dtype)
+    logger.info('Loaded montage image with shape = %s, dtype = %s, z = %s', img.shape, img.dtype, cfg.montage_z)
     if img.dtype != np.uint8 and img.dtype != np.uint16:
         raise ValueError('Only 8 or 16 bit images are supported (image type = {})'.format(img.dtype))
 
@@ -191,7 +191,10 @@ def _load_tile_data(tx, ty):
     img = img[cfg.extract_cycle, cfg.extract_z]
     labels = list(meta['structured_labels'][cfg.extract_cycle, cfg.extract_z])
 
-    logger.info('Loaded tile image for tile x = %s, tile y = %s, shape = %s, dtype = %s', tx, ty, img.shape, img.dtype)
+    logger.info(
+        'Loaded tile image for tile x = %s, tile y = %s, z = %s, shape = %s, dtype = %s',
+        tx, ty, cfg.extract_z, img.shape, img.dtype
+    )
     if img.dtype != np.uint8 and img.dtype != np.uint16:
         raise ValueError('Only 8 or 16 bit images are supported (image type = {})'.format(img.dtype))
 

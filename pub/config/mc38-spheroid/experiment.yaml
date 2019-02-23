@@ -32,7 +32,7 @@ acquisition:
   tiling_mode: snake
 operator:
   - extract:
-      z: best
+      z: all
       name: segm
       channels:
         - proc_BF
@@ -40,10 +40,10 @@ operator:
         - proc_DEAD
         - cyto_cell_boundary
         - cyto_cell_mask
-        - cyto_gradient(0,2)
-        - cyto_gradbin(0,3)
-        - cyto_basin(0,4)
-        - cyto_markers(0,5)
+#        - cyto_gradient(0,2)
+#        - cyto_gradbin(0,3)
+#        - cyto_basin(0,4)
+#        - cyto_markers(0,5)
   - montage: {name: segm, extract_name: segm}
 analysis:
   - aggregate_cytometry_statistics: {mode: all}
@@ -58,14 +58,18 @@ processor:
   best_focus: {channel: BF}
   deconvolution: {n_iter: 10, scale_factor: .5}
   cytometry:
-    z_plane: best
+    z_plane: all
     type:
       module: spheroid_cytometer
       class: SpheroidCytometer
       args: {}
     nuclei_channel_name: BF
+    segmentation_params:
+      rescale_factor: .5
+      min_object_size: 512
+      min_peak_dist: 75
     quantification_params:
-      nucleus_intensity: [mean, sum]
-      cell_intensity: [mean, sum]
-      morphology_features: true
+      nucleus_intensity: false
+      cell_intensity: [mean, sum, var]
+      morphology_features: false
       cell_graph: true

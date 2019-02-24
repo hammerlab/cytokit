@@ -12,15 +12,14 @@ import logging
 import numpy as np
 logger = logging.getLogger(__name__)
 
-MASK_CYCLE = 0
-BOUNDARY_CYCLE = 1
+OBJECT_CYCLE = 0
 
 CHANNEL_COORDINATES = {
     # Map channel names to (cycle, channel) coordinates
-    'cell_mask': (MASK_CYCLE, cytometer.CELL_CHANNEL),
-    'cell_boundary': (BOUNDARY_CYCLE, cytometer.CELL_CHANNEL),
-    'nucleus_mask': (MASK_CYCLE, cytometer.NUCLEUS_CHANNEL),
-    'nucleus_boundary': (BOUNDARY_CYCLE, cytometer.NUCLEUS_CHANNEL),
+    'cell_mask': (OBJECT_CYCLE, cytometer.Base2D.CELL_MASK_CHANNEL),
+    'cell_boundary': (OBJECT_CYCLE, cytometer.Base2D.CELL_BOUNDARY_CHANNEL),
+    'nucleus_mask': (OBJECT_CYCLE, cytometer.Base2D.NUCLEUS_MASK_CHANNEL),
+    'nucleus_boundary': (OBJECT_CYCLE, cytometer.Base2D.NUCLEUS_BOUNDARY_CHANNEL)
 }
 
 
@@ -164,6 +163,9 @@ class Cytometry2D(cytokit_op.CytokitOp):
         # Fetch segmentation volume as ZCHW where C = 2 and C1 = cell and C2 = nucleus
         img_seg = self.cytometer.segment(img_nuc, img_memb=img_memb, **self.segmentation_params)
 
+        # Validate results are 4D (ZCHW)
+        assert img_seg.ndim == 4, 'Expecting 4D segmentation image but shape is {}'.format(img_seg.shape)
+
         # If using a specific z-plane, conform segmented volume to typical tile
         # shape by adding empty z-planes
         if z_plane != 'all':
@@ -180,7 +182,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
             'Labeled segmentation image contains label < 0 (shape = {}, dtype = {})'\
             .format(img_seg.shape, img_seg.dtype)
 
-        # Check to make sure we did not end up with more than the maximum possible number of labeled cells
+        # Check to make sure we did not end up with more than the maximum possible number of labeled objects
         if img_seg.max() > np.iinfo(np.uint16).max:
             raise ValueError(
                 'Segmentation resulted in {} cells, a number which is both suspiciously high '
@@ -192,19 +194,11 @@ class Cytometry2D(cytokit_op.CytokitOp):
         # Add any statistics or transformations that require the experimental context
         stats = self.cytometer.augment(stats)
 
-        # Create overlay image of nucleus channel and boundaries and convert to 5D
-        # shape to conform with usual tile convention
-        img_boundary = np.stack([
-            _find_boundaries(img_seg[:, i], as_binary=False)
-            for i in range(img_seg.shape[1])
-        ], axis=1)
-        assert img_boundary.ndim == 4, 'Expecting 4D image, got shape {}'.format(img_boundary.shape)
+        # Convert to 5D tile format (single cycle) and 16-bit
+        img_seg = img_seg.astype(np.uint16)[np.newaxis]
+        assert img_seg.ndim == 5, 'Expecting 5D image but shape is {}'.format(img_seg.shape)
 
-        # Stack labeled volumes to 5D tiles and convert to uint16
-        # * Note that this ordering should align to MASK_CYCLE and BOUNDARY_CYCLE constants
-        img_label = np.stack([img_seg, img_boundary], axis=0).astype(np.uint16)
-
-        return img_label, stats
+        return img_seg, stats
 
     def save(self, tile_indices, output_dir, data):
         region_index, tile_index, tx, ty = tile_indices
@@ -227,22 +221,22 @@ class Cytometry2D(cytokit_op.CytokitOp):
         return label_tile_path, stats_path
 
 
-def _find_boundaries(img, as_binary=False):
-    """Identify boundaries in labeled image volume
-
-    Args:
-        img: A labeled 3D volume with shape (z, h, w)
-        as_binary: Flag indicating whether to return binary boundary image or labeled boundaries
-    """
-    from skimage import segmentation
-    assert img.ndim == 3, 'Expecting 3D volume but got image with shape {}'.format(img.shape)
-
-    # Find boundaries (per z-plane since find_boundaries is buggy in 3D)
-    bg_value = img.min()
-    res = np.stack([
-        segmentation.find_boundaries(img[i], mode='inner', background=bg_value)
-        for i in range(img.shape[0])
-    ], axis=0)
-
-    return res if as_binary else res * img
+# def _find_boundaries(img, as_binary=False):
+#     """Identify boundaries in labeled image volume
+#
+#     Args:
+#         img: A labeled 3D volume with shape (z, h, w)
+#         as_binary: Flag indicating whether to return binary boundary image or labeled boundaries
+#     """
+#     from skimage import segmentation
+#     assert img.ndim == 3, 'Expecting 3D volume but got image with shape {}'.format(img.shape)
+#
+#     # Find boundaries (per z-plane since find_boundaries is buggy in 3D)
+#     bg_value = img.min()
+#     res = np.stack([
+#         segmentation.find_boundaries(img[i], mode='inner', background=bg_value)
+#         for i in range(img.shape[0])
+#     ], axis=0)
+#
+#     return res if as_binary else res * img
 

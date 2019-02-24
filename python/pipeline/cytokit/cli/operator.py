@@ -206,7 +206,7 @@ class Operator(cli.DataCLI):
 
         logging.info('Extraction complete (results saved to %s)', osp.dirname(extract_path) if extract_path else None)
 
-    def montage(self, name, extract_name, region_indexes=None, crop=None):
+    def montage(self, name, extract_name, region_indexes=None, crop=None, scale=None):
         """Create a montage of extracted tiles
 
         Args:
@@ -219,15 +219,28 @@ class Operator(cli.DataCLI):
                 - tuple: A 2-item or 3-item tuple forming the slice (start, stop[, step]); stop is inclusive
                 - list: A list of integers will be used as is
             tile_indexes: 1-based sequence of tile indexes to process; has same semantics as `region_indexes`
-            crop: Either none (default) or a 4-item list in the format (y_start, y_end, x_start, x_end) as
+            crop: Either None (default) or a 4-item list in the format (y_start, y_end, x_start, x_end) as
                 bounding indices (0-based) that will be applied as a slice on the final montage (this is helpful
                 for generating more reasonably sized montage subsets over large datasets)
+            scale: Either None (default) or a float in (0, 1] used to define scale factor for XY dimensions (note
+                that if this is supplied in addition to cropping, it is applied afterwards)
         """
         logging.info('Creating montage "%s" from extraction "%s"', name, extract_name)
         region_indexes = cli.resolve_index_list_arg(region_indexes, zero_based=True)
-        prep_fn = None
-        if crop is not None:
-            prep_fn = lambda tile: tile[:, :, :, crop[0]:crop[1], crop[2]:crop[3]]
+
+        def prep_fn(tile):
+            if crop is not None:
+                tile = tile[..., crop[0]:crop[1], crop[2]:crop[3]]
+            if scale is not None:
+                from skimage import transform
+                # Transpose to (h, w, cyc, z, ch) and then back
+                tile = np.transpose(transform.rescale(
+                        np.transpose(tile, (3, 4, 0, 1, 2)),
+                        scale=(scale, scale, 1, 1, 1), anti_aliasing=True, multichannel=False,
+                        preserve_range=True, mode='constant', order=0
+                    ), (2, 3, 4, 0, 1)
+                ).astype(tile.dtype)
+            return tile
         core.create_montage(self.data_dir, self.config, extract_name, name, region_indexes, prep_fn=prep_fn)
 
 

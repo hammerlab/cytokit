@@ -12,7 +12,7 @@ do
     BASE_CONF=$CYTOKIT_REPO_DIR/pub/config/mc38-spheroid
     
             
-    echo "Clearing existing data at $DATA_DIR/output/*"
+    #echo "Clearing existing data at $DATA_DIR/output/*"
     rm -rf $DATA_DIR/output/*
         
     cytokit config editor --base-config-path=$BASE_CONF --output-dir=$DATA_DIR/output \
@@ -31,7 +31,7 @@ do
         
         echo "Processing experiment $EXP_NAME (config = $CONFIG_DIR, condition = $EXP_COND, dir = $EXP_DIR)"
         
-        cytokit processor run_all --config-path=$CONFIG_DIR --data-dir=$DATA_DIR/raw --output-dir=$OUTPUT_DIR
+        cytokit processor run_all --config-path=$CONFIG_DIR --data-dir=$DATA_DIR/raw --output-dir=$OUTPUT_DIR --py-log-level=DEBUG
         cytokit operator run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR --raw-dir=$DATA_DIR/raw
         cytokit analysis run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
     done

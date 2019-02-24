@@ -22,10 +22,10 @@ class Analysis(cli.DataCLI):
         core.run_nb(nb_name, nb_output_path, nb_params)
         logging.info('Processor data summary complete; view results with `jupyter notebook %s`', nb_output_path)
 
-    def aggregate_cytometry_statistics(self, mode='all', export_csv=True, export_fcs=True):
+    def aggregate_cytometry_statistics(self, mode='all', export_csv=True, export_fcs=True, variant=None):
         logging.info('Running cytometry statistics aggregation')
         core.aggregate_cytometry_statistics(
-            self.data_dir, self.config, mode=mode, export_csv=export_csv, export_fcs=export_fcs)
+            self.data_dir, self.config, mode=mode, export_csv=export_csv, export_fcs=export_fcs, variant=variant)
 
 
 if __name__ == '__main__':

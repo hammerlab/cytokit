@@ -18,8 +18,6 @@ from cytokit import math as cytokit_math
 from cytokit import data as cytokit_data
 
 DEFAULT_BATCH_SIZE = 1
-CELL_CHANNEL = 0
-NUCLEUS_CHANNEL = 1
 DCHR = ':'
 DEFAULT_CELL_INTENSITY_PREFIX = 'ci'
 DEFAULT_NUCL_INTENSITY_PREFIX = 'ni'
@@ -576,6 +574,11 @@ def _to_uint8(img, name):
 class Base2D(object):
     """ Base Cytometer implementations for quantification + augmentation (but not segmentation) """
 
+    CELL_MASK_CHANNEL = 0
+    NUCLEUS_MASK_CHANNEL = 1
+    CELL_BOUNDARY_CHANNEL = 2
+    NUCLEUS_BOUNDARY_CHANNEL = 3
+
     @classmethod
     def quantify(cls, tile, img_seg, channel_names=None, cell_intensity=True, nucleus_intensity=False,
                  cell_graph=False, morphology_features=False, spot_count_channels=None, spot_count_params=None):
@@ -632,8 +635,8 @@ class Base2D(object):
         feature_values = []
         for z in range(nz):
             # Calculate properties of masked+labeled cell components
-            cell_props = measure.regionprops(img_seg[z][CELL_CHANNEL], cache=False)
-            nucleus_props = measure.regionprops(img_seg[z][NUCLEUS_CHANNEL], cache=False)
+            cell_props = measure.regionprops(img_seg[z][Base2D.CELL_MASK_CHANNEL], cache=False)
+            nucleus_props = measure.regionprops(img_seg[z][Base2D.NUCLEUS_MASK_CHANNEL], cache=False)
             if len(cell_props) != len(nucleus_props):
                 raise ValueError(
                     'Expecting cell and nucleus properties to have same length (nucleus props = {}, cell props = {})'
@@ -643,7 +646,7 @@ class Base2D(object):
             # Compute RAG for cells if necessary
             graph = None
             if cell_graph:
-                labels = img_seg[z][CELL_CHANNEL]
+                labels = img_seg[z][Base2D.CELL_MASK_CHANNEL]
 
                 # rag_boundary fails on all zero label matrices so default to empty graph if that is the case
                 # see: https://github.com/scikit-image/scikit-image/blob/master/skimage/future/graph/rag.py#L386
@@ -693,7 +696,14 @@ class Cytometer2D(KerasCytometer2D):
     def _get_weights_path(self):
         return cytokit_data.initialize_cytometry_2d_model()
 
-    def get_segmentation_mask(self, img_bin_nuc, img_memb=None,
+    @staticmethod
+    def get_boundary(label_img):
+        assert label_img.ndim == 2, 'Expecting 2D image, got shape {}'.format(label_img.shape)
+        # Found boundary mask and relabel with original
+        return label_img * segmentation.find_boundaries(label_img, mode='inner', background=0)
+
+    @staticmethod
+    def get_segmentation_mask(img_bin_nuc, img_memb=None,
                               min_dist=None, max_dist=None, hole_size=None,
                               method='li', sigma=None, gamma=None):
         # Determine mask image for minimum distance from nuclei
@@ -786,7 +796,7 @@ class Cytometer2D(KerasCytometer2D):
 
             # Determine the overall mask to segment across by dilating nuclei by some fixed amount
             # or if possible, using the given cell membrane image
-            img_bin_mask = self.get_segmentation_mask(
+            img_bin_mask = Cytometer2D.get_segmentation_mask(
                 img_bin_nuci, img_memb=img_memb[i] if img_memb is not None else None,
                 min_dist=memb_min_dist, max_dist=memb_max_dist, hole_size=memb_hole_size,
                 method=memb_tresh_method, sigma=memb_sigma, gamma=memb_gamma)
@@ -814,11 +824,19 @@ class Cytometer2D(KerasCytometer2D):
             img_nuc_seg = (img_cell_seg > 0) & img_bin_nuci
             img_nuc_seg = img_nuc_seg * img_cell_seg
 
-            # Add labeled images to results
+            # Add labeled images to results (with boundaries) as a stack
+            # with new leading channel dimension (c, h, w)
             assert img_cell_seg.dtype == img_nuc_seg.dtype, \
                 'Cell segmentation dtype {} != nucleus segmentation dtype {}'\
                 .format(img_cell_seg.dtype, img_nuc_seg.dtype)
-            img_seg_list.append(np.stack([img_cell_seg, img_nuc_seg], axis=0))
+            # This ordering must align with constants Base2D.(CELL|NUCLEUS)_(MASK|BOUNDARY)_CHANNEL
+            img_seg_stack = np.stack([
+                img_cell_seg, img_nuc_seg,
+                Cytometer2D.get_boundary(img_cell_seg),
+                Cytometer2D.get_boundary(img_nuc_seg)
+            ], axis=0)
+            assert img_seg_stack.ndim == 3, 'Expecting 3D array, got shape {}'.format(img_seg_stack.shape)
+            img_seg_list.append(img_seg_stack)
 
             # Add mask images to results, if requested
             if return_masks:

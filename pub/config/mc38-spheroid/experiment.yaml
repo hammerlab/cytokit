@@ -39,14 +39,20 @@ operator:
         - proc_LIVE
         - proc_DEAD
         - cyto_cell_boundary
-        - cyto_cell_mask
+#        - cyto_cell_mask
 #        - cyto_gradient(0,2)
-#        - cyto_gradbin(0,3)
-#        - cyto_basin(0,4)
-#        - cyto_markers(0,5)
+  - extract:
+      name: bestz_segm
+      channels:
+        - proc_BF
+        - proc_LIVE
+        - proc_DEAD
+        - cyto_cell_boundary
   - montage: {name: segm, extract_name: segm}
+  - montage: {name: bestz_segm, extract_name: bestz_segm}
 analysis:
-  - aggregate_cytometry_statistics: {mode: all}
+  - aggregate_cytometry_statistics: {mode: best_z_plane}
+  - aggregate_cytometry_statistics: {mode: all, variant: all}
 processor:
   args:
     gpus: [0]
@@ -65,9 +71,11 @@ processor:
       args: {}
     nuclei_channel_name: BF
     segmentation_params:
-      rescale_factor: .5
-      min_object_size: 512
+      rescaling: .5
+      sigmas: [1, 3, 2]
       min_peak_dist: 75
+      max_peaks: 75
+      basin_type: dist
     quantification_params:
       nucleus_intensity: false
       cell_intensity: [mean, sum, var]

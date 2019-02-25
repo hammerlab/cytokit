@@ -39,7 +39,7 @@ operator:
         - proc_LIVE
         - proc_DEAD
         - cyto_cell_boundary
-#        - cyto_cell_mask
+        - cyto_cell_mask
 #        - cyto_gradient(0,2)
   - extract:
       name: bestz_segm
@@ -48,6 +48,7 @@ operator:
         - proc_LIVE
         - proc_DEAD
         - cyto_cell_boundary
+        - cyto_cell_mask
   - montage: {name: segm, extract_name: segm}
   - montage: {name: bestz_segm, extract_name: bestz_segm}
 analysis:
@@ -79,5 +80,5 @@ processor:
     quantification_params:
       nucleus_intensity: false
       cell_intensity: [mean, sum, var]
-      morphology_features: false
+      morphology_features: true
       cell_graph: true

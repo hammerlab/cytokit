@@ -93,10 +93,12 @@ def get_extract_image_meta(output_dir, extract):
     return meta
 
 
-def get_single_cell_image_data(output_dir, df, extract, ranges=None, colors=None, image_size=None, **kwargs):
+def get_single_cell_image_data(output_dir, df, extract, ranges=None, colors=None, image_size=None,
+                               z=0, cycle=0, **kwargs):
     """Add single cell images and properties (based on an extract) to a cytometry data frame
 
     Args:
+        output_dir: Output directory for experiment containing image data to extract
         df: Cytometry data frame
         extract: Name of extract from which to extract single cell data; must contain the channel `cyto_cell_boundary`
         ranges: Dictionary mapping extract channel names to min/max value ranges (to control contrast); Example:
@@ -124,17 +126,27 @@ def get_single_cell_image_data(output_dir, df, extract, ranges=None, colors=None
             to the target 2D shape WITHOUT resampling -- instead the image is cropped around the center or padded
             with zeros to ensure that the resulting images have the same scale (this ensures that cell images
             are comparable on the same image scale).
+        z: Either a single z index (0-based) in extract tiles to fetch or None in which case the z value in the given
+            data frame from will be used to determine what images to process (Default is 0)
+        cycle: 0-based cycle index in tile (default is 0)
+        kwargs: Arguments for `extract_single_cell_image_data`
     """
+    # Tile cache used to prevent multiple reads from disk
+    tile_cache = {}
 
     def add_cell_images(g):
+        # Get region and tile coordinates as well as z coordinate depending on whether
+        # it is supposed to be fetched from the given data or static
         reg, tx, ty = g.iloc[0][['region_index', 'tile_x', 'tile_y']]
+        iz = g.iloc[0]['z'] if z is None else z
 
         # Extract the relevant 2D image to be used for both cell object isolation and cell image display
         path = osp.join(output_dir, cytokit_io.get_extract_image_path(reg, tx, ty, extract))
-        img, meta = cytokit_io.read_tile(path, return_metadata=True)
-        icyc, iz = kwargs.pop('cycle', 0), kwargs.pop('z', 0)
-        img = img[icyc, iz]
-        channels = list(meta['structured_labels'][icyc, iz])
+        if path not in tile_cache:
+            tile_cache[path] = cytokit_io.read_tile(path, return_metadata=True)
+        img, meta = tile_cache[path]
+        img = img[cycle, iz]
+        channels = list(meta['structured_labels'][cycle, iz])
         processor = cvproc.get_image_processor(channels, ranges=ranges, colors=colors)
 
         # Get the cell image data frame containing the original cell id, cell image based on processed
@@ -151,8 +163,10 @@ def get_single_cell_image_data(output_dir, df, extract, ranges=None, colors=None
         # Left join cytometry data on single cell data
         return pd.merge(g, cell_data, how='left', on='id')
 
-    return df.groupby(['region_index', 'tile_x', 'tile_y'], group_keys=False)\
-        .apply(add_cell_images).reset_index(drop=True)
+    cols = ['region_index', 'tile_x', 'tile_y']
+    if z is None:
+        cols.append('z')
+    return df.groupby(cols, group_keys=False).apply(add_cell_images).reset_index(drop=True)
 
 
 def extract_single_cell_image_data(df, raw_tile, display_tile, channels, image_size=None,

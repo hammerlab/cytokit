@@ -7,7 +7,8 @@ def get_config_resolution_args(config):
     """Get tifffile resolution arguments for an experiment configuration"""
     ms_params = config.microscope_params
     # ImageJ resolution is in pixels per unit instead of units per pixel
-    xy, z = 1. / (ms_params.res_lateral_nm / 1000.), 1. / (ms_params.res_axial_nm / 1000.)
+    # (but z spacing is in units per pixel)
+    xy, z = 1. / (ms_params.res_lateral_nm / 1000.), ms_params.res_axial_nm / 1000.
     resolution = (xy, xy)
     metadata = {'spacing': z, 'unit': 'um'}
     return resolution, metadata

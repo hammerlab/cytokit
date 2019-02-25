@@ -13,7 +13,7 @@ do
     
             
     #echo "Clearing existing data at $DATA_DIR/output/*"
-    rm -rf $DATA_DIR/output/*
+    #rm -rf $DATA_DIR/output/*
         
     cytokit config editor --base-config-path=$BASE_CONF --output-dir=$DATA_DIR/output \
     set name "$EXP_NAME.$EXP_DIR.$EXP_COND" \

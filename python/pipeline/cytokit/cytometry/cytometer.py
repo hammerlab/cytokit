@@ -23,6 +23,8 @@ DEFAULT_CELL_INTENSITY_PREFIX = 'ci'
 DEFAULT_NUCL_INTENSITY_PREFIX = 'ni'
 DEFAULT_CELL_MORPHOLOGY_PREFIX = 'cm'
 DEFAULT_NUCL_MORPHOLOGY_PREFIX = 'nm'
+DEFAULT_CELL_BORDER_PREFIX = 'cb'
+DEFAULT_NUCL_BORDER_PREFIX = 'nb'
 DEFAULT_CELL_GRAPH_PREFIX = 'cg'
 DEFAULT_CELL_SPOT_PREFIX = 'cs'
 DEFAULT_MORPHOLOGY_FEATURES = ['size', 'diameter', 'perimeter', 'solidity', 'circularity']
@@ -54,6 +56,11 @@ MORPHOLOGY_COMPONENTS = {
     COMP_NUCLEUS: DEFAULT_NUCL_MORPHOLOGY_PREFIX
 }
 
+BORDER_COMPONENTS = {
+    COMP_CELL: DEFAULT_CELL_BORDER_PREFIX,
+    COMP_NUCLEUS: DEFAULT_NUCL_BORDER_PREFIX
+}
+
 
 class ObjectProperties(object):
 
@@ -67,6 +74,9 @@ class ObjectProperties(object):
 
     def __getitem__(self, key):
         return self.props[key]
+
+    def keys(self):
+        return self.props.keys()
 
     @property
     def cell(self):
@@ -109,7 +119,41 @@ class CoordinateFeatures(FeatureCalculator):
         return [props.cell.label, props.cell.centroid[1], props.cell.centroid[0], z]
 
 
-class ChannelComponentFeatureCalculator(FeatureCalculator):
+class BorderFeatures(FeatureCalculator):
+
+    def __init__(self, component, channel, labels, mode='2D'):
+        """Features related to identify objects at volume border
+
+        Args:
+            component: Object component name (e.g. 'cell', 'nucleus')
+            channel: Channel index in labels containing component masks
+            labels: 4D label image volume (z, nch, h, w)
+            mode: '2D' (default) or '3D' determining whether or not labels should be treated
+                as multiple 2D slices or a single 3D volume
+        """
+        self.component = component
+        assert labels.ndim == 4, 'Expecting 4D labels, got shape {}'.format(labels.shape)
+        assert mode in ['2D', '3D'], 'Mode "{}" not valid'.format(mode)
+
+        def get_interior_ids(im):
+            # Clear border objects and collect remaining interior object ids
+            return set(np.setdiff1d(np.unique(segmentation.clear_border(im)), [0]))
+
+        if mode == '2D':
+            self.interior_ids = {z: get_interior_ids(labels[z, channel]) for z in range(labels.shape[0])}
+        else:
+            self.interior_ids = get_interior_ids(labels[:, channel])
+
+    def get_feature_names(self):
+        prefix = BORDER_COMPONENTS[self.component]
+        return [prefix + DCHR + 'on_border']
+
+    def get_feature_values(self, signals, labels, graph, props, z):
+        ids = self.interior_ids if mode == '3D' else self.interior_ids[z]
+        return [int(props[self.component].label in ids)]
+
+
+class ComponentFeatureCalculator(FeatureCalculator):
 
     def __init__(self, keys, channels):
         self.keys = keys
@@ -148,7 +192,7 @@ class ChannelComponentFeatureCalculator(FeatureCalculator):
         return values
 
 
-class ChannelComponentFeatures(ChannelComponentFeatureCalculator):
+class ChannelMorphologyFeatures(ComponentFeatureCalculator):
 
     def _prefix(self, component):
         return MORPHOLOGY_COMPONENTS[component]
@@ -184,18 +228,18 @@ class ChannelComponentFeatures(ChannelComponentFeatureCalculator):
         raise NotImplementedError('Morphology feature "{}" not yet implemented'.format(feature))
 
 
-class ComponentFeatures(ChannelComponentFeatures):
+class ObjectMorphologyFeatures(ChannelMorphologyFeatures):
 
-    def __init__(self, components, channels, features):
+    def __init__(self, components, features):
         # Override to single undefined channel forces calculations
         # to ignore channel (as performance optimization)
-        super().__init__([(c, None, f) for c in components for f in features], channels)
+        super().__init__(keys=[(c, None, f) for c in components for f in features], channels=None)
 
 
-def _get_default_feature_calculators(channels):
+def _get_default_feature_calculators():
     return FeatureCalculators([
         CoordinateFeatures(),
-        ComponentFeatures(DEFAULT_COMPONENTS, channels, DEFAULT_MORPHOLOGY_FEATURES)
+        ObjectMorphologyFeatures(DEFAULT_COMPONENTS, DEFAULT_MORPHOLOGY_FEATURES)
     ])
 
 
@@ -581,7 +625,8 @@ class Base2D(object):
 
     @classmethod
     def quantify(cls, tile, img_seg, channel_names=None, cell_intensity=True, nucleus_intensity=False,
-                 cell_graph=False, morphology_features=False, spot_count_channels=None, spot_count_params=None):
+                 cell_graph=False, border_features=True, morphology_features=False,
+                 spot_count_channels=None, spot_count_params=None):
         ncyc, nz, _, nh, nw = tile.shape
 
         assert img_seg.ndim == 4, \
@@ -612,9 +657,12 @@ class Base2D(object):
             )
 
         # Configure features to be calculated based on provided flags
-        feature_calculators = [_get_default_feature_calculators(channel_names)]
+        feature_calculators = [_get_default_feature_calculators()]
         if cell_graph:
             feature_calculators.append(GraphFeatures())
+        if border_features:
+            feature_calculators.append(BorderFeatures(COMP_CELL, Base2D.CELL_MASK_CHANNEL, img_seg, mode='2D'))
+            feature_calculators.append(BorderFeatures(COMP_NUCLEUS, Base2D.NUCLEUS_MASK_CHANNEL, img_seg, mode='2D'))
         if cell_intensity:
             funcs = _get_agg_funcs(cell_intensity)
             feature_calculators.append(IntensityFeatures(channel_names, COMP_CELL, funcs=funcs))
@@ -623,7 +671,7 @@ class Base2D(object):
             feature_calculators.append(IntensityFeatures(channel_names, COMP_NUCLEUS, funcs=funcs))
         if morphology_features:
             keys = _get_feature_keys(morphology_features, channel_names, TEXTURE_MORPHOLOGY_FEATURES)
-            feature_calculators.append(ChannelComponentFeatures(keys, channel_names))
+            feature_calculators.append(ComponentFeatureCalculator(keys, channel_names))
         if spot_count_channels is not None:
             indexes = [channel_names.index(c) for c in spot_count_channels]
             params = spot_count_params or {}

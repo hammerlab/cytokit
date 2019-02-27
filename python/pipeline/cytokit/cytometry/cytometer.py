@@ -671,7 +671,7 @@ class Base2D(object):
             feature_calculators.append(IntensityFeatures(channel_names, COMP_NUCLEUS, funcs=funcs))
         if morphology_features:
             keys = _get_feature_keys(morphology_features, channel_names, TEXTURE_MORPHOLOGY_FEATURES)
-            feature_calculators.append(ComponentFeatureCalculator(keys, channel_names))
+            feature_calculators.append(ChannelMorphologyFeatures(keys, channel_names))
         if spot_count_channels is not None:
             indexes = [channel_names.index(c) for c in spot_count_channels]
             params = spot_count_params or {}

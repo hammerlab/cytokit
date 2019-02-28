@@ -1,5 +1,4 @@
 import numpy as np
-from skimage import draw
 from skimage import filters
 from skimage import measure
 from skimage import exposure
@@ -14,9 +13,6 @@ from scipy import ndimage as ndi
 import logging
 logger = logging.getLogger(__name__)
 
-####################
-# 20X Implementation
-####################
 
 def flat_disk(radius):
     """ Get default 3D structuring element with all connections outside center plane gone """
@@ -95,7 +91,7 @@ def _get_basin(basin_type, img_dist, img_peaks, sampling=None):
     return img_basin
 
 
-class SpheroidCytometer20x(cytometer.Cytometer):
+class SpheroidCytometer(cytometer.Cytometer):
     
     def __init__(self, config, sampling=None):
         """Cytometer Initialization
@@ -261,86 +257,3 @@ class SpheroidCytometer20x(cytometer.Cytometer):
                 df['ci:LIVE+DEAD:{}'.format(agg_fun)] = df[cols[0]] + df[cols[0]]
         return df
     
-    
-###################
-# 2X Implementation
-###################
-        
-
-def get_circle_mask(radius, shape, center=None, translation=None):
-    center = np.asarray(shape)//2 if center is None else np.asarray(center)
-    if translation is not None:
-        center += np.asarray(translation).astype(int)
-    rr, cc = draw.circle(*center, radius=radius, shape=shape)
-    arr = np.zeros(shape, dtype=bool)
-    arr[rr, cc] = 1
-    return arr.astype(bool)
-
-class SpheroidCytometer2x(cytometer.Cytometer):
-
-    def segment(self, img, well_diameter=800, well_mask_diameter=775, include_intermediate_results=False, **kwargs):
-        # Assume image is single plane z-stack and grab first 2D image to process
-        assert img.ndim == 3
-        assert img.shape[0] == 1
-        img = img[0]
-        
-        logger.debug(
-            'Running 2x segmentation on image with shape %s, type %s (args: well_diameter = %s, well_mask_diameter = %s, include_intermediate_results=%s)',
-            img.shape, img.dtype, well_diameter, well_mask_diameter, include_intermediate_results
-        )
-
-        # Remove outliers, convert to float
-        img = ndi.median_filter(img, size=(3, 3))
-        img = img_as_float(img)
-
-        # Apply bandpass and compute gradients
-        img_bp = ndi.gaussian_filter(img, sigma=6) - ndi.gaussian_filter(img, sigma=10)
-        img_gr = ndi.generic_gradient_magnitude(img_bp, ndi.sobel)
-
-        # Get and apply well mask translation
-        img_well = get_circle_mask(well_diameter, img_gr.shape)
-        shifts = feature.register_translation(img_gr, img_well)[0]
-        img_well = get_circle_mask(well_mask_diameter, img_gr.shape, translation=shifts)
-        img_gm = img_gr * img_well
-
-        # Apply local threshold and cleanup binary result
-        img_bm = img_gm > filters.threshold_local(img_gm, 255)
-        img_bm = ndi.binary_fill_holes(img_bm, structure=morphology.disk(1))
-        img_bm = morphology.binary_opening(img_bm, selem=morphology.disk(8))
-
-        # Run segmentation
-        img_dt = ndi.distance_transform_edt(img_bm)
-        img_dt = ndi.gaussian_filter(img_dt, sigma=1)
-        img_pk = morphology.label(feature.peak_local_max(img_dt, indices=False, min_distance=8))
-        img_obj = segmentation.watershed(-img_dt, img_pk, mask=img_bm).astype(np.uint16)
-        img_bnd = img_obj * segmentation.find_boundaries(img_obj, mode='inner', background=0)
-
-        # Compile list of object image results (and append intermediates if necessary)
-        img_seg = [img_obj, img_obj, img_bnd, img_bnd]
-        if include_intermediate_results:
-            to_uint16 = lambda im: exposure.rescale_intensity(im, out_range='uint16').astype(np.uint16)
-            img_seg += [
-                to_uint16(img_bp), 
-                segmentation.find_boundaries(img_well, mode='inner', background=0).astype(np.uint16),
-                to_uint16(img_gm),
-                to_uint16(img_dt), 
-                img_pk.astype(np.uint16)
-            ]
-            
-        # Stack and add new axis to give to (z, ch, h, w)
-        img_seg = np.stack(img_seg)[np.newaxis]
-        assert img_seg.dtype == np.uint16, 'Expecting 16bit result, got type {}'.format(img_seg.dtype)
-        assert img_seg.ndim == 4, 'Expecting 4D result, got shape {}'.format(img_seg.shape)
-        return img_seg
-        
-    def quantify(self, tile, segments, **kwargs):
-        return cytometer.Base2D.quantify(tile, segments, **kwargs)
-    
-    def augment(self, df):
-        df = cytometer.Base2D.augment(df, self.config.microscope_params)
-        # Attempt to sum live + dead intensities if both channels are present
-        for agg_fun in ['mean', 'sum']:
-            cols = df.filter(regex='ci:(LIVE|DEAD):{}'.format(agg_fun)).columns.tolist()
-            if len(cols) == 2:
-                df['ci:LIVE+DEAD:{}'.format(agg_fun)] = df[cols[0]] + df[cols[0]]
-        return df

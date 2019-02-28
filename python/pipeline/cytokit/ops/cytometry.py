@@ -72,7 +72,8 @@ def get_op(config):
 
 class Cytometry2D(cytokit_op.CytokitOp):
 
-    def __init__(self, config, z_plane='best', cytometer_type='2D', target_shape=None, segmentation_params=None, quantification_params=None):
+    def __init__(self, config, z_plane='best', cytometer_type='2D', target_shape=None, segmentation_params=None,
+                 quantification_params=None):
         super().__init__(config)
 
         params = config.cytometry_params

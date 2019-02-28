@@ -139,7 +139,8 @@ class BorderFeatures(FeatureCalculator):
             # Clear border objects and collect remaining interior object ids
             return set(np.setdiff1d(np.unique(segmentation.clear_border(im)), [0]))
 
-        if mode == '2D':
+        self.mode = mode
+        if self.mode == '2D':
             self.interior_ids = {z: get_interior_ids(labels[z, channel]) for z in range(labels.shape[0])}
         else:
             self.interior_ids = get_interior_ids(labels[:, channel])
@@ -149,7 +150,7 @@ class BorderFeatures(FeatureCalculator):
         return [prefix + DCHR + 'on_border']
 
     def get_feature_values(self, signals, labels, graph, props, z):
-        ids = self.interior_ids if mode == '3D' else self.interior_ids[z]
+        ids = self.interior_ids if self.mode == '3D' else self.interior_ids[z]
         return [int(props[self.component].label in ids)]
 
 

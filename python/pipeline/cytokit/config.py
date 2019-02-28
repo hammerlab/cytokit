@@ -306,6 +306,14 @@ class CytokitConfigV10(Config):
         return self.n_cycles * self.n_channels_per_cycle
 
     @property
+    def axial_sampling_ratio(self):
+        """Get the z-step sampling rate divided by the xy sampling rate for this experiment
+
+        For example, if the z-step is 1um and the xy sampling rate .1um, this will return 1/.1 = 10
+        """
+        return self.microscope_params.res_axial_nm / self.microscope_params.res_lateral_nm
+
+    @property
     def microscope_params(self):
         return MicroscopeParams(
             magnification=self._conf['acquisition']['magnification'],

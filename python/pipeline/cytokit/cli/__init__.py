@@ -4,6 +4,8 @@ import os
 import os.path as osp
 import cytokit
 import logging
+import traceback
+import warnings
 from cytokit import io as cytokit_io
 from cytokit import config as cytokit_config
 import pandas as pd
@@ -76,12 +78,21 @@ def resolve_index_list_arg(arg, zero_based=False):
     return [i - 1 for i in indexes] if zero_based else indexes
 
 
-def get_logging_init_fn(py_log_level, tf_py_log_level, tf_cpp_log_level):
+def warn_with_traceback(message, category, filename, lineno, file=None, line=None):
+    log = file if hasattr(file, 'write') else sys.stderr
+    traceback.print_stack(file=log)
+    log.write(warnings.formatwarning(message, category, filename, lineno, line))
+
+
+def get_logging_init_fn(py_log_level, tf_py_log_level, tf_cpp_log_level, warning_traceback=False):
     from cytokit.utils import tf_utils
 
     def init():
         logging.basicConfig(level=tf_utils.log_level_code(py_log_level), format=LOG_FORMAT)
         tf_utils.init_tf_logging(tf_cpp_log_level, tf_py_log_level)
+        if warning_traceback:
+            logging.info('Enabling warnings traceback')
+            warnings.showwarning = warn_with_traceback
     return init
 
 
@@ -89,7 +100,8 @@ class CLI(object):
 
     def __init__(self, py_log_level=logging.INFO,
                  tf_py_log_level=logging.ERROR,
-                 tf_cpp_log_level=logging.ERROR):
+                 tf_cpp_log_level=logging.ERROR,
+                 warning_traceback=False):
         """CLI Initialization
 
         Args:
@@ -98,9 +110,12 @@ class CLI(object):
                 'warn', 'error', 'fatal' or corresponding integers); default is 'info'
             tf_py_log_level: TensorFlow python logging level; same semantics as `py_log_level`; default is 'error'
             tf_cpp_log_level: TensorFlow C++ logging level; same semantics as `py_log_level`; default is 'error'
+            warning_traceback: If true this will print the full traceback for warnings without raising an error,
+                which is helpful for determining the source of warnings that are otherwise too difficult to trace
+                as short messages (false by default)
         """
         # Get and run logging initializer
-        self._logging_init_fn = get_logging_init_fn(py_log_level, tf_py_log_level, tf_cpp_log_level)
+        self._logging_init_fn = get_logging_init_fn(py_log_level, tf_py_log_level, tf_cpp_log_level, warning_traceback)
         self._logging_init_fn()
 
 
@@ -110,7 +125,8 @@ class DataCLI(CLI):
                  data_dir, config_path=None,
                  py_log_level=logging.INFO,
                  tf_py_log_level=logging.ERROR,
-                 tf_cpp_log_level=logging.ERROR):
+                 tf_cpp_log_level=logging.ERROR,
+                 warning_traceback=False):
         """CLI Initialization
 
         Args:
@@ -123,8 +139,11 @@ class DataCLI(CLI):
                 'warn', 'error', 'fatal' or corresponding integers); default is 'info'
             tf_py_log_level: TensorFlow python logging level; same semantics as `py_log_level`; default is 'error'
             tf_cpp_log_level: TensorFlow C++ logging level; same semantics as `py_log_level`; default is 'error'
+            warning_traceback: If true this will print the full traceback for warnings without raising an error,
+                which is helpful for determining the source of warnings that are otherwise too difficult to trace
+                as short messages (false by default)
         """
-        super(DataCLI, self).__init__(py_log_level, tf_py_log_level, tf_cpp_log_level)
+        super(DataCLI, self).__init__(py_log_level, tf_py_log_level, tf_cpp_log_level, warning_traceback)
         self.config = get_config(config_path or data_dir)
         self.data_dir = data_dir
 

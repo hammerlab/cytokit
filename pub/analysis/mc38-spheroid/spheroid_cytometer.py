@@ -1,4 +1,5 @@
 import numpy as np
+from skimage import util
 from skimage import draw
 from skimage import filters
 from skimage import measure
@@ -8,6 +9,8 @@ from skimage import feature
 from skimage import morphology
 from skimage import segmentation
 from skimage import img_as_float
+from skimage.feature.blob import _prune_blobs
+from centrosome import propagate
 from cytokit import math as ck_math
 from cytokit.cytometry import cytometer
 from scipy import ndimage as ndi
@@ -17,82 +20,6 @@ logger = logging.getLogger(__name__)
 ####################
 # 20X Implementation
 ####################
-
-def flat_disk(radius):
-    """ Get default 3D structuring element with all connections outside center plane gone """
-    n = 2*radius + 1
-    return np.stack([
-        np.zeros((n, n), bool), 
-        morphology.disk(radius).astype(bool), 
-        np.zeros((n, n), bool)
-    ])
-
-
-def flat_square(size):
-    return np.stack([
-        np.zeros((size, size), bool), 
-        morphology.square(size).astype(bool), 
-        np.zeros((size, size), bool)
-    ])
-
-
-def flat_ball(r, rz):
-    return np.stack([
-        np.pad(morphology.disk(rz), r-rz, 'constant'),
-        morphology.disk(r),
-        np.pad(morphology.disk(rz), r-rz, 'constant'),
-    ]).astype(bool)
-
-
-def get_boundaries(label_img):
-    assert label_img.ndim == 3, 'Expecting 3D volume but got image with shape {}'.format(label_img.shape)
-    return np.stack([
-        label_img[i] * segmentation.find_boundaries(label_img[i], mode='inner', background=0)
-        for i in range(label_img.shape[0])
-    ])
-
-
-def _downscale_image(img, scales):
-    logger.debug('Reducing image dimensions by factors %s', rescaling)
-    return transform.rescale(
-        img, scales, 
-        multichannel=False, preserve_range=True, 
-        anti_aliasing=True, clip=True, mode='reflect'
-    ).astype(img.dtype)
-
-
-def _upscale_image(img, shape):
-    # Assume image as (z, ch, h, w)
-    assert img.ndim == 4, 'Expecting 4D image, got shape {}'.format(img.shape)
-    assert len(shape) == 2, 'Expecting 2 item target shape, got {}'.format(target_shape)
-    
-    # Transpose to (h, w, ...) since resize will operation on batches like this
-    img = np.transpose(img, axes=(2, 3, 0, 1))
-    shape = tuple(shape) + img.shape[2:]
-    logger.debug('Rescaling results from shape %s back to %s', img.shape, shape)
-    assert len(shape) == img.ndim
-    img = transform.resize(
-        img, shape, mode='constant', order=0,
-        preserve_range=True, anti_aliasing=False, clip=True
-    ).astype(img.dtype)
-    # Transpose back to original (z, (cell, nucleus, ...[others]), h, w) format
-    return np.transpose(img, axes=(2, 3, 0, 1))
-
-
-def _get_basin(basin_type, img_dist, img_peaks, sampling=None):
-    # Return negative distance from background (most common method)
-    if basin_type == 'dist':
-        img_basin = -img_dist
-    # If "inverting" the distance basin, use distance to nearest peak as basin (aka delaunay triangulation distance); 
-    # otherwise, use distance to nearest background from markers
-    elif basin_type == 'inverse':
-        img_basin = ndi.distance_transform_edt(~(img_peaks>0), sampling=sampling)
-    # EXPERIMENTAL: this or something like it may better balance segmentation at boundaries
-    elif basin_type == 'diff':
-        img_basin = ndi.distance_transform_edt(~(img_peaks>0), sampling=sampling) - img_dist
-    else:
-        raise ValueError('Basin type "{}" not valid'.format(basin_type))
-    return img_basin
 
 
 class SpheroidCytometer20x(cytometer.Cytometer):
@@ -123,133 +50,68 @@ class SpheroidCytometer20x(cytometer.Cytometer):
     def initialize(self):
         pass
         
-    def segment(
-        self, img, rescaling=None, min_peak_dist=100, max_peaks=75,
-        sigmas=(1, 3, 2), basin_type='dist', include_intermediate_results=False, **kwargs):
         
-        # Validate arguments
-        assert img.dtype in [np.uint8, np.uint16], \
-            'Expecting 8 or 16 bit image but got type %s' % img.dtype
-        assert img.ndim == 3, \
-            'Expecting 3D image, got shape %s' % img.shape
-        assert len(sigmas) == 3, \
-            'Sigmas must be 3 element sequence'
-        assert basin_type in ['diff', 'dist', 'inverse'], \
-            'Basin type must be one of "diff", "dist", "inverse" (not {})'.format(basin_type)
-        
-        if rescaling is None:
-            rescaling = (1, 1, 1)
-        if np.isscalar(rescaling):
-            rescaling = (1, float(rescaling), float(rescaling))
-        assert len(rescaling) == 3, \
-            'Rescaling factors must be 3 item list-like'
-        assert all([0 < r <= 1 for r in rescaling]), \
-            'All rescaling factors must be in (0, 1]'
-        shape = img.shape
-        
-        logger.debug('Rescaling sigma values with sampling factors = %s, resize factors = %s', tuple(self.factors), rescaling)
-        sigmas = [
-            tuple(self.factors * np.array(rescaling) * np.array([s]*len(self.factors))) 
-            for s in sigmas
-        ]
-        
-        # Apply downsampling factors if provided
-        if any([r < 1 for r in rescaling]):
-            img = _downscale_image(img, rescaling)
-        
-        # Run small XY median filter to remove outliers (and convert to float)
+    def get_primary_object_mask(self, img, img_pk):
+        assert img.ndim == 3, 'Expecting 3D image, got shape {}'.format(img.shape)
+        assert img_pk.dtype == np.bool
+        #img = ndi.gaussian_filter(img, sigma=1*self.factors) - ndi.gaussian_filter(img, sigma=32*self.factors)
+        img = np.abs(ndi.gaussian_filter(img, sigma=1*self.factors) - ndi.gaussian_filter(img, sigma=8*self.factors))
+        img = img.max(axis=0)
+        img = img > filters.threshold_otsu(img)
+        img = img | img_pk
+        img = morphology.binary_closing(img, selem=morphology.disk(8))
+        img = ndi.morphology.binary_fill_holes(img)
+        img = morphology.binary_opening(img, selem=morphology.disk(8))
+        #img = morphology.remove_small_objects(img, min_size=256) # Not necessary with larger opening
+        return img
+    
+    def segment(self, img, include_intermediate_results=False, **kwargs):
+        assert img.ndim == 3, 'Expecting 3D image, got shape {}'.format(img.shape)
         img = ndi.median_filter(img, size=(1, 3, 3))
         img = img_as_float(img)
-
-        logger.debug('Running high pass filter (sigma = %s)', sigmas[0])
-        img_hp = img - ndi.gaussian_filter(img, sigma=sigmas[0])
-        # img_hp = exposure.rescale_intensity(img_hp, out_range=(0, 1)) 
+        img = util.invert(img)
         
-        logger.debug('Computing gradients (sigma = %s)', sigmas[1])
-        img_grad_raw = ndi.generic_gradient_magnitude(img_hp, ndi.sobel)
-        img_grad = ndi.gaussian_filter(img_grad_raw, sigma=sigmas[1])
-        img_grad = exposure.rescale_intensity(img_grad, out_range=(0, 1))
-
-        threshold = filters.threshold_otsu(img_grad)
-        logger.debug('Computing gradient mask (threshold = %s)', threshold)
-        img_mask = img_grad > threshold
-
-        logger.debug('Applying morphological smoothings to mask')
-        img_mask = ndi.binary_fill_holes(img_mask, structure=flat_disk(1))
-        img_border_mask = morphology.binary_closing(img_mask, selem=flat_ball(1, 0))
-        # Open to give objects enclosing highly smoothed centers of objects (break into erosion + dilation
-        # and fetch intermediate result to work with eroded centers)
-        img_marker_mask = morphology.binary_opening(img_border_mask, selem=flat_ball(15, 4))
-        img_marker_mask = img_marker_mask & img_border_mask
-        img_marker_labl = morphology.label(img_marker_mask)
-
-        logger.debug('Computing mask distance transform (sigma = %s, sampling = %s)', sigmas[2], tuple(self.sampling))
-        img_dist = ndi.distance_transform_edt(img_marker_mask, sampling=self.sampling)
-        img_dist = ndi.gaussian_filter(img_dist, sigma=sigmas[2], mode='constant')
-
-        logger.debug('Finding local maxima (min peak dist = %s, max peaks = %s)', min_peak_dist, max_peaks)
-        # Compute local maxima in gradient intensity making sure to isolate min_distance filters
-        # to different objects in the mask, otherwise disconnected objects close together will
-        # only get one peak if that distance is < min_peak_dist
-        img_pks = feature.peak_local_max(
-            img_dist, min_distance=min_peak_dist, labels=img_marker_labl,
-            indices=False, exclude_border=False,
-            num_peaks=max_peaks
-        )
-        img_pks, num_pks = morphology.label(img_pks, return_num=True)
+        img_mz = img.max(axis=0)
+        img_mz = exposure.rescale_intensity(img_mz, out_range=(0, 1))
+        peaks, img_dog = blob_dog(img_mz, min_sigma=8, max_sigma=128, sigma_ratio=1.6, overlap=.25, threshold=1.75)
         
-
-        logger.debug('Running watershed transform (sampling = %s, num peaks = %s)', tuple(self.sampling), num_pks)
-        # This works well but is insanely slow
-        # img_seg = segmentation.random_walker(img_grad, img_pks - (~img_border_mask).astype(img_pks.dtype)).astype(np.uint16)
-        img_basin = _get_basin(basin_type, img_dist, img_pks, sampling=self.sampling)
-        img_seg_obj = segmentation.watershed(img_basin, img_pks, mask=img_border_mask).astype(np.uint16)
-        # Label markers using segmentation ids
-        img_seg_ctr = img_seg_obj * img_marker_mask
+        img_pk = np.zeros(img_mz.shape, dtype=bool)
+        img_pk[peaks[:,0].astype(int), peaks[:,1].astype(int)] = True
+        img_pk = morphology.label(img_pk)
         
-        # Compute boundaries
-        img_seg_obj_bnd = get_boundaries(img_seg_obj)
-        img_seg_ctr_bnd = get_boundaries(img_seg_ctr)
-        assert img_seg_obj_bnd.dtype == img_seg_obj.dtype and img_seg_obj_bnd.shape == img_seg_obj.shape
-        assert img_seg_ctr_bnd.dtype == img_seg_ctr.dtype and img_seg_ctr_bnd.shape == img_seg_ctr.shape
-
-        # Convert (h, w) -> required (z, (cell_mask, nucleus_mask, cell_boundary, nucleus_boundary, ...[others]), h, w) format 
-        img_seg = ([img_seg_obj, img_seg_ctr, img_seg_obj_bnd, img_seg_ctr_bnd, img_grad_raw]) + ([
-                exposure.rescale_intensity(img_dist, out_range='uint16').astype(np.uint16),
-                exposure.rescale_intensity(img_basin, out_range='uint16').astype(np.uint16),
-                img_marker_labl.astype(np.uint16),
-                img_pks.astype(np.uint16)
-            ] if include_intermediate_results else [])
-        img_seg = np.stack(img_seg, axis=1)
-        assert img_seg.dtype == np.uint16
+        # Get mask to conduct segmentation over
+        img_pm = self.get_primary_object_mask(img, morphology.binary_dilation(img_pk > 0, morphology.disk(32)))
+        
+        
+        img_dt = ndi.distance_transform_edt(img_pm)
+        #img_obj = segmentation.watershed(-img_dt, img_pk, mask=img_pm).astype(np.uint16)
+        img_obj = propagate.propagate(img_mz, img_pk, img_pm, .01)[0].astype(np.uint16)
+        img_bnd = img_obj * segmentation.find_boundaries(img_obj, mode='inner', background=0)
+        
+        img_seg = [img_obj, img_obj, img_bnd, img_bnd]
+        if include_intermediate_results:
+            to_uint16 = lambda im: exposure.rescale_intensity(im, out_range='uint16').astype(np.uint16)
+            img_seg += [
+                to_uint16(img_mz), 
+                to_uint16(img_dog[0]),
+                to_uint16(img_dog[1]),
+                img_pm.astype(np.uint16),
+                img_pk.astype(np.uint16)
+            ]
+            
+        # Stack and add new axis to give to (z, ch, h, w)
+        img_seg = np.stack(img_seg)[np.newaxis]
+        assert img_seg.dtype == np.uint16, 'Expecting 16bit result, got type {}'.format(img_seg.dtype)
         assert img_seg.ndim == 4, 'Expecting 4D result, got shape {}'.format(img_seg.shape)
-        
-        # Rescale back to original size if necessary
-        if any([r < 1 for r in rescaling]):
-            img_seg = _upscale_image(img_seg, shape[-2:])
-        
         return img_seg
+        
     
-    def quantify(self, tile, segments, sigma=1, **kwargs):
-        sigma = tuple(self.factors * np.array([sigma]*len(self.factors))) 
-        
-        # Compute LoG image using nucleus channel
-        #ch_name = self.config.cytometry_params['nuclei_channel_name']
-        #ch_coords = self.config.get_channel_coordinates(ch_name)
-        #logger.debug('Computing LoG image on channel "%s" (sigma = %s)', ch_name, sigma)
-        #img = ndi.gaussian_laplace(img, sigma=sigma, mode='reflect')
-        #img = exposure.rescale_intensity(img, out_range=str(tile.dtype)).astype(tile.dtype)
-        
-        logger.debug('Appending sobel image and running quantification')
-        # Extract sobel image (5th image at index 4) and append to tile for quantification
-        img = segments[:, 4]
-        assert img.ndim == 3
-        assert img.dtype == tile.dtype
-        # Stack (1, z, 1, h, w) onto tile (cyc, z, ch, h, w)
-        tile = np.append(tile, img[np.newaxis, :, np.newaxis, :, :], axis=2)
+    def quantify(self, tile, segments, **kwargs):
         assert tile.ndim == 5
-        if 'channel_names' in kwargs:
-            kwargs['channel_names'] = kwargs['channel_names'] + ['sobel']
+        # Run max-z projection across all channels and insert new axis where z dimension was
+        tile = tile.max(axis=1)[:, np.newaxis]
+        assert tile.ndim == 5, 'Expecting result after max-z projection to be 5D but got shape {}'.format(tile.shape)
+        assert tile.shape[0] == tile.shape[1] == 1
         return cytometer.Base2D.quantify(tile, segments, **kwargs)
 
     def augment(self, df):
@@ -278,15 +140,15 @@ def get_circle_mask(radius, shape, center=None, translation=None):
 
 class SpheroidCytometer2x(cytometer.Cytometer):
 
-    def segment(self, img, well_diameter=800, well_mask_diameter=775, include_intermediate_results=False, **kwargs):
+    def segment(self, img, well_radius=800, well_mask_radius=765, include_intermediate_results=False, **kwargs):
         # Assume image is single plane z-stack and grab first 2D image to process
         assert img.ndim == 3
         assert img.shape[0] == 1
         img = img[0]
         
         logger.debug(
-            'Running 2x segmentation on image with shape %s, type %s (args: well_diameter = %s, well_mask_diameter = %s, include_intermediate_results=%s)',
-            img.shape, img.dtype, well_diameter, well_mask_diameter, include_intermediate_results
+            'Running 2x segmentation on image with shape %s, type %s (args: well_radius = %s, well_mask_radius = %s, include_intermediate_results=%s)',
+            img.shape, img.dtype, well_radius, well_mask_radius, include_intermediate_results
         )
 
         # Remove outliers, convert to float
@@ -298,9 +160,9 @@ class SpheroidCytometer2x(cytometer.Cytometer):
         img_gr = ndi.generic_gradient_magnitude(img_bp, ndi.sobel)
 
         # Get and apply well mask translation
-        img_well = get_circle_mask(well_diameter, img_gr.shape)
+        img_well = get_circle_mask(well_radius, img_gr.shape)
         shifts = feature.register_translation(img_gr, img_well)[0]
-        img_well = get_circle_mask(well_mask_diameter, img_gr.shape, translation=shifts)
+        img_well = get_circle_mask(well_mask_radius, img_gr.shape, translation=shifts)
         img_gm = img_gr * img_well
 
         # Apply local threshold and cleanup binary result
@@ -344,3 +206,73 @@ class SpheroidCytometer2x(cytometer.Cytometer):
             if len(cols) == 2:
                 df['ci:LIVE+DEAD:{}'.format(agg_fun)] = df[cols[0]] + df[cols[0]]
         return df
+    
+    
+###################
+# Utility Functions
+###################
+
+def blob_dog(image, min_sigma=1, max_sigma=50, sigma_ratio=1.6, threshold=2.0,
+             overlap=.5, *, exclude_border=False):
+    r"""Lift from https://github.com/scikit-image/scikit-image/blob/2962429237988cb60b9b317aa020ca3bab100b7f/skimage/feature/blob.py#L168
+    
+    Modifications are added here to return more intermediate results
+    """
+    image = img_as_float(image)
+
+    # if both min and max sigma are scalar, function returns only one sigma
+    scalar_sigma = np.isscalar(max_sigma) and np.isscalar(min_sigma)
+
+    # Gaussian filter requires that sequence-type sigmas have same
+    # dimensionality as image. This broadcasts scalar kernels
+    if np.isscalar(max_sigma):
+        max_sigma = np.full(image.ndim, max_sigma, dtype=float)
+    if np.isscalar(min_sigma):
+        min_sigma = np.full(image.ndim, min_sigma, dtype=float)
+
+    # Convert sequence types to array
+    min_sigma = np.asarray(min_sigma, dtype=float)
+    max_sigma = np.asarray(max_sigma, dtype=float)
+
+    # k such that min_sigma*(sigma_ratio**k) > max_sigma
+    k = int(np.mean(np.log(max_sigma / min_sigma) / np.log(sigma_ratio) + 1))
+
+    # a geometric progression of standard deviations for gaussian kernels
+    sigma_list = np.array([min_sigma * (sigma_ratio ** i)
+                           for i in range(k + 1)])
+
+    gaussian_images = [ndi.gaussian_filter(image, s) for s in sigma_list]
+
+    # computing difference between two successive Gaussian blurred images
+    # multiplying with average standard deviation provides scale invariance
+    dog_images = [(gaussian_images[i] - gaussian_images[i + 1])
+                  * np.mean(sigma_list[i]) for i in range(k)]
+
+    image_cube = np.stack(dog_images, axis=-1)
+
+    # local_maxima = get_local_maxima(image_cube, threshold)
+    local_maxima = feature.peak_local_max(image_cube, threshold_abs=threshold,
+                                  footprint=np.ones((3,) * (image.ndim + 1)),
+                                  threshold_rel=0.0,
+                                  exclude_border=exclude_border)
+    # Catch no peaks
+    if local_maxima.size == 0:
+        return np.empty((0, 3))
+
+    # Convert local_maxima to float64
+    lm = local_maxima.astype(np.float64)
+
+    # translate final column of lm, which contains the index of the
+    # sigma that produced the maximum intensity value, into the sigma
+    sigmas_of_peaks = sigma_list[local_maxima[:, -1]]
+
+    if scalar_sigma:
+        # select one sigma column, keeping dimension
+        sigmas_of_peaks = sigmas_of_peaks[:, 0:1]
+
+    # Remove sigma index and replace with sigmas
+    lm = np.hstack([lm[:, :-1], sigmas_of_peaks])
+
+    # See: https://github.com/scikit-image/scikit-image/blob/master/skimage/feature/blob.py#L129
+    #return lm, _prune_blobs(lm, overlap), sigma_list, dog_images
+    return _prune_blobs(lm, overlap), dog_images

@@ -166,14 +166,22 @@ class Cytometry2D(cytokit_op.CytokitOp):
 
         # Validate results are 4D (ZCHW)
         assert img_seg.ndim == 4, 'Expecting 4D segmentation image but shape is {}'.format(img_seg.shape)
+        assert img_seg.shape[0] == 1 or img_seg.shape[0] == tile.shape[1], \
+            'Expecting segmentation image to have either one z-plane or as many as input tile ({}) but got {}'\
+            .format(tile.shape[1], img_seg.shape[0])
 
-        # If using a specific z-plane, conform segmented volume to typical tile
-        # shape by adding empty z-planes
-        if z_plane != 'all':
+        # Segmentation results can have one z plane or as many as tile so depending on
+        # the z plane used to calculate segmentation, pad the result to necessary shape (if necessary)
+        if img_seg.shape[0] != tile.shape[1]:
             shape = list(img_seg.shape)
             shape[0] = tile.shape[1]
             img_seg_tmp = np.zeros(shape, dtype=img_seg.dtype)
-            img_seg_tmp[z_plane] = img_seg
+            if z_plane == 'all':
+                # Repeat result z times
+                img_seg_tmp[:] = img_seg
+            else:
+                # Set single plane to result and leave all others as 0
+                img_seg_tmp[z_plane] = img_seg
             img_seg = img_seg_tmp
 
         # Ensure segmentation image is of integer type and >= 0

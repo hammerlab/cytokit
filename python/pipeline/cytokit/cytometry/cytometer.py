@@ -208,8 +208,11 @@ class ChannelMorphologyFeatures(ComponentFeatureCalculator):
                 return cytokit_math.circularity(prop.area, prop.perimeter)
             return getattr(prop, feature)
         elif feature.startswith('glcm'):
+            # EXPERIMENTAL: include grey level co-occurrence features
             assert image.ndim == 2, 'Expecting 2D object image, got shape {}'.format(image.shape)
             from skimage.feature import greycomatrix, greycoprops
+            if exposure.is_low_contrast(image):
+                return 0.0
             # Mask out parts of object image that don't overlap with object binary image (i.e. set to 0)
             image = image * prop.image.astype(int)
             if image.dtype != np.uint8:
@@ -218,8 +221,11 @@ class ChannelMorphologyFeatures(ComponentFeatureCalculator):
             glcm = greycomatrix(image, [5], [0], symmetric=True, normed=True)
             return greycoprops(glcm, feature.split(DCHR)[-1])[0, 0]
         elif feature.startswith('lbp'):
+            # EXPERIMENTAL: include local binary pattern features
             assert image.ndim == 2, 'Expecting 2D object image, got shape {}'.format(image.shape)
             from skimage.feature import local_binary_pattern
+            if exposure.is_low_contrast(image):
+                return 0.0
             # Use defaults in:
             # http://scikit-image.org/docs/dev/auto_examples/features_detection/plot_local_binary_pattern.html
             n_points, radius = 24, 3

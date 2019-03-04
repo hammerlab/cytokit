@@ -1,4 +1,5 @@
 from cytokit.ops import op as cytokit_op
+from cytokit.ops import tile_crop
 from cytokit.cytometry import cytometer
 from cytokit import io as cytokit_io
 from cytokit import math as cytokit_math
@@ -72,8 +73,8 @@ def get_op(config):
 
 class Cytometry2D(cytokit_op.CytokitOp):
 
-    def __init__(self, config, z_plane='best', cytometer_type='2D', target_shape=None, segmentation_params=None,
-                 quantification_params=None):
+    def __init__(self, config, z_plane='best', cytometer_type='2D', crop=False, target_shape=None,
+                 segmentation_params=None, quantification_params=None):
         super().__init__(config)
 
         params = config.cytometry_params
@@ -93,6 +94,8 @@ class Cytometry2D(cytokit_op.CytokitOp):
         self.cytometer_type = params.get('type', cytometer_type)
         self.cytometer = None
         self.input_shape = (config.tile_height, config.tile_width, 1)
+
+        self.cropper = tile_crop.CytokitTileCrop(config) if params.get('crop', crop) else None
 
         _validate_z_plane(self.z_plane)
 
@@ -197,6 +200,12 @@ class Cytometry2D(cytokit_op.CytokitOp):
                 'Segmentation resulted in {} cells, a number which is both suspiciously high '
                 'and too large to store as the assumed 16-bit format'.format(img_seg.max()))
 
+        # Lastly, if configured to crop input tiles and results, apply this cropping
+        # after segmentation and before quantification
+        if self.cropper is not None:
+            tile = self.cropper.run(tile)
+            img_seg = self.cropper.run(img_seg)
+
         # Run cell cytometry calculations (results given as data frame)
         stats = self.cytometer.quantify(tile, img_seg, **self.quantification_params)
 
@@ -207,7 +216,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
         img_seg = img_seg.astype(np.uint16)[np.newaxis]
         assert img_seg.ndim == 5, 'Expecting 5D image but shape is {}'.format(img_seg.shape)
 
-        return img_seg, stats
+        return tile, (img_seg, stats)
 
     def save(self, tile_indices, output_dir, data):
         region_index, tile_index, tx, ty = tile_indices

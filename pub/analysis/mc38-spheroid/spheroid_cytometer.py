@@ -54,15 +54,16 @@ class SpheroidCytometer20x(cytometer.Cytometer):
     def get_primary_object_mask(self, img, img_pk):
         assert img.ndim == 3, 'Expecting 3D image, got shape {}'.format(img.shape)
         assert img_pk.dtype == np.bool
-        #img = ndi.gaussian_filter(img, sigma=1*self.factors) - ndi.gaussian_filter(img, sigma=32*self.factors)
+        # Remove frequencies above scale of individual cells (this results in clusters near spheroid centers)
         img = np.abs(ndi.gaussian_filter(img, sigma=1*self.factors) - ndi.gaussian_filter(img, sigma=8*self.factors))
         img = img.max(axis=0)
         img = img > filters.threshold_otsu(img)
-        img = img | img_pk
+        img = img | img_pk # Merge threshold mask with given peaks/markers
         img = morphology.binary_closing(img, selem=morphology.disk(8))
         img = ndi.morphology.binary_fill_holes(img)
         img = morphology.binary_opening(img, selem=morphology.disk(8))
-        #img = morphology.remove_small_objects(img, min_size=256) # Not necessary with larger opening
+        # Not necessary with larger opening (min size = ~227 w/ 8 radius disk)
+        # img = morphology.remove_small_objects(img, min_size=256) 
         return img
     
     def segment(self, img, include_intermediate_results=False, **kwargs):
@@ -73,7 +74,7 @@ class SpheroidCytometer20x(cytometer.Cytometer):
         
         img_mz = img.max(axis=0)
         img_mz = exposure.rescale_intensity(img_mz, out_range=(0, 1))
-        peaks, img_dog = blob_dog(img_mz, min_sigma=8, max_sigma=128, sigma_ratio=1.6, overlap=.25, threshold=1.75)
+        peaks, img_dog, sigmas = blob_dog(img_mz, min_sigma=8, max_sigma=128, sigma_ratio=1.6, overlap=.25, threshold=1.75)
         
         img_pk = np.zeros(img_mz.shape, dtype=bool)
         img_pk[peaks[:,0].astype(int), peaks[:,1].astype(int)] = True
@@ -257,7 +258,7 @@ def blob_dog(image, min_sigma=1, max_sigma=50, sigma_ratio=1.6, threshold=2.0,
                                   exclude_border=exclude_border)
     # Catch no peaks
     if local_maxima.size == 0:
-        return np.empty((0, 3))
+        return np.empty((0, 3)), dog_images, sigma_list
 
     # Convert local_maxima to float64
     lm = local_maxima.astype(np.float64)
@@ -275,4 +276,4 @@ def blob_dog(image, min_sigma=1, max_sigma=50, sigma_ratio=1.6, threshold=2.0,
 
     # See: https://github.com/scikit-image/scikit-image/blob/master/skimage/feature/blob.py#L129
     #return lm, _prune_blobs(lm, overlap), sigma_list, dog_images
-    return _prune_blobs(lm, overlap), dog_images
+    return _prune_blobs(lm, overlap), dog_images, sigma_list

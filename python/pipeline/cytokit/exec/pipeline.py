@@ -222,7 +222,7 @@ def preprocess_tile(tile, tile_indices, ops, log_fn, task_config):
     # Cytometry (segmentation + quantification)
     if ops.cytometry_op:
         best_focus_z_plane = best_focus_data[1] if best_focus_data else None
-        cyto_data = ops.cytometry_op.run(tile, best_focus_z_plane=best_focus_z_plane)
+        tile, cyto_data = ops.cytometry_op.run(tile, best_focus_z_plane=best_focus_z_plane)
         paths = ops.cytometry_op.save(tile_indices, output_dir, cyto_data)
         log_fn('Tile cytometry complete; Statistics saved to "{}"'.format(paths[-1]), cyto_data[0])
     else:
@@ -276,7 +276,7 @@ def postprocess_tile(tile, tile_indices, ops, log_fn, task_config):
     best_focus_z_plane = best_focus_data[(tile_indices.region_index, tile_indices.tile_x, tile_indices.tile_y)]
 
     # Rerun cytometry based on corrected tile
-    cyto_data = ops.cytometry_op.run(tile, best_focus_z_plane=best_focus_z_plane)
+    tile, cyto_data = ops.cytometry_op.run(tile, best_focus_z_plane=best_focus_z_plane)
     paths = ops.cytometry_op.save(tile_indices, output_dir, cyto_data)
     log_fn('Postprocessing cytometry complete; Statistics saved to "{}"'.format(paths[-1]), cyto_data[0])
 

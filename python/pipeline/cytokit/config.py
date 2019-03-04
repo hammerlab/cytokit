@@ -291,11 +291,11 @@ class CytokitConfigV10(Config):
 
     @property
     def analysis_params(self):
-        return self._conf.get('analysis', [])
+        return self._conf.get('analysis', []) or []
 
     @property
     def operator_params(self):
-        return self._conf.get('operator', [])
+        return self._conf.get('operator', []) or []
 
     @property
     def _n_actual_channels(self):

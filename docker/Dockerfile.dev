@@ -28,6 +28,7 @@ RUN pip --no-cache-dir install \
     centrosome==1.1.5 \
     plotnine==0.4.0 \
     jupyterlab \
+    python-dotenv \
     papermill \
     fcswrite \
     tifffile \

@@ -634,7 +634,7 @@ class Base2D(object):
     def quantify(cls, tile, img_seg, channel_names=None, cell_intensity=True, nucleus_intensity=False,
                  cell_graph=False, border_features=True, morphology_features=False,
                  spot_count_channels=None, spot_count_params=None):
-        ncyc, nz, _, nh, nw = tile.shape
+        _, nz, _, nh, nw = tile.shape
 
         assert img_seg.ndim == 4, \
             'Expecting 4D segmentation image with format ' \

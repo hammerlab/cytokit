@@ -35,10 +35,10 @@ def generate_psfs(config):
         # Numerical aperture
         na=na,
 
-        # Axial resolution in microns (nm in akoya config)
+        # Axial resolution in microns
         res_axial=res_axial_nm / 1000.,
 
-        # Lateral resolution in microns (nm in akoya config)
+        # Lateral resolution in microns
         res_lateral=res_lateral_nm / 1000.,
 
         # Immersion refractive index
@@ -54,7 +54,7 @@ def generate_psfs(config):
     )
 
     logger.debug('Generating PSFs from experiment configuration file')
-    # Specify a psf for each emission wavelength in microns (nm in cytokit_app config)
+    # Specify a psf for each emission wavelength in microns
     return [
         fd_psf.GibsonLanni(**{**args, **{'wavelength': w/1000.}}).generate()
         for w in em_wavelength_nm
@@ -77,17 +77,18 @@ def rescale_stack(tile, stack, scale_factor):
 
 class CytokitDeconvolution(CytokitOp):
 
-    def __init__(self, config, n_iter=25, scale_factor=.5):
+    def __init__(self, config, n_iter=25, scale_factor=.5, pad_mode='none'):
         super().__init__(config)
 
         params = config.deconvolution_params
         self.n_iter = params.get('n_iter', n_iter)
         self.scale_factor = params.get('scale_factor', scale_factor)
+        self.pad_mode = params.get('pad_mode', pad_mode)
         self.algo = None
         self.psfs = None
 
     def initialize(self):
-        self.algo = fd_restoration.RichardsonLucyDeconvolver(n_dims=3).initialize()
+        self.algo = fd_restoration.RichardsonLucyDeconvolver(n_dims=3, pad_mode=self.pad_mode).initialize()
         self.psfs = generate_psfs(self.config)
         return self
 
@@ -99,10 +100,15 @@ class CytokitDeconvolution(CytokitOp):
             )
 
         # Tile should have shape (cycles, z, channel, height, width)
-        dims = self.config.tile_dims
-        if dims != tile.shape:
-            raise AssertionError('Given tile with shape {} does not match expected shape {}'.format(tile.shape, dims))
-        ncyc, nz, nch, nh, nw = dims
+        ncyc, nz, nch, nh, nw = tile.shape
+
+        # Ensure that given tile has same number of channels as required in configuration
+        # since PSF generation is specific for each channel
+        if nch != self.config.n_channels_per_cycle:
+            raise AssertionError(
+                'Given tile with shape {} ({} channels) does not have expected number of channels {}'
+                .format(tile.shape, nch, config.n_channels_per_cycle)
+            )
 
         img_cyc = []
         for icyc in range(ncyc):

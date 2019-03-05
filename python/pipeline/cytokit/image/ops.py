@@ -6,6 +6,18 @@ import numpy as np
 DEFAULT_COLORS = list(cvcolor.COLORS.values())
 
 
+def describe(img):
+    """Return dict containing commonly referenced image metadata"""
+    return dict(
+        type=str(img.dtype),
+        shape=img.shape,
+        min=img.min(),
+        max=img.max(),
+        mean=img.mean(),
+        bytes=img.nbytes
+    )
+
+
 def pad_around_center(img, shape, mode='constant', constant_values=0):
     """Pad an image to a target shape with centering
 

@@ -28,9 +28,15 @@ DEFAULT_NUCL_BORDER_PREFIX = 'nb'
 DEFAULT_CELL_GRAPH_PREFIX = 'cg'
 DEFAULT_CELL_SPOT_PREFIX = 'cs'
 DEFAULT_MORPHOLOGY_FEATURES = ['size', 'diameter', 'perimeter', 'solidity', 'circularity']
+TEXTURE_GLCM_FEATURES = ['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation', 'ASM']
+TEXTURE_HRLK_FEATURES = [
+    'ASM', 'contrast', 'correlation', 'variance', 'invdiffmoment',
+    'sumavg', 'sumvar', 'sument', 'ent', 'diffvar', 'diffent', 'info1', 'info2'
+]
 TEXTURE_MORPHOLOGY_FEATURES = \
-    ['glcm' + DCHR + f for f in ['correlation', 'dissimilarity']] + \
-    ['lbp' + DCHR + f for f in ['mean', 'median']]
+    ['lbp' + DCHR + f for f in ['mean', 'median']] + \
+    ['glcm' + DCHR + f for f in TEXTURE_GLCM_FEATURES] + \
+    ['hrlk' + DCHR + f for f in TEXTURE_HRLK_FEATURES]
 
 DEFAULT_PREFIXES = [
     DEFAULT_CELL_INTENSITY_PREFIX,
@@ -157,7 +163,7 @@ class BorderFeatures(FeatureCalculator):
 class ComponentFeatureCalculator(FeatureCalculator):
 
     def __init__(self, keys, channels):
-        self.keys = keys
+        self.keys = sorted(keys)
         self.channels = channels
 
     @abstractmethod
@@ -170,6 +176,14 @@ class ComponentFeatureCalculator(FeatureCalculator):
         return [join(k) for k in self.keys]
 
     @abstractmethod
+    def _start(self, component, channel, prop, image):
+        pass
+
+    @abstractmethod
+    def _stop(self, component, channel):
+        pass
+
+    @abstractmethod
     def _value(self, component, channel, feature, prop, image):
         pass
 
@@ -179,12 +193,18 @@ class ComponentFeatureCalculator(FeatureCalculator):
 
         # Signals should have shape ZHWC
         values = []
+        last = None
         for k in self.keys:
             c, n, f = k
             p = props[c]
             min_row, min_col, max_row, max_col = p.bbox
             # Extract channel-specific individual cell image if a channel is given, otherwise return None
             im = signals[z, min_row:max_row, min_col:max_col, self.channels.index(n)] if n else None
+            # Call start/stop when component + channel combination changes
+            if last is None or last != (c, n):
+                self._stop(c, n)
+                self._start(c, n, p, im)
+                last = (c, n)
             values.append(self._value(c, n, f, p, im))
         features = self.get_feature_names()
         assert len(values) == len(features), \
@@ -194,6 +214,58 @@ class ComponentFeatureCalculator(FeatureCalculator):
 
 
 class ChannelMorphologyFeatures(ComponentFeatureCalculator):
+
+    def __init__(self, keys, channels):
+        super().__init__(keys, channels)
+        self.has_glcm = any([k[-1].startswith('glcm') for k in keys])
+        self.has_hrlk = any([k[-1].startswith('hrlk') for k in keys])
+
+    def _start(self, component, channel, prop, image):
+        if not self.has_glcm and not self.has_hrlk:
+            return
+        assert image.ndim == 2, 'Expecting 2D object image, got shape {}'.format(image.shape)
+        # Mask out parts of object image that don't overlap with object binary image (i.e. set to 0)
+        image = image * prop.image.astype(image.dtype)
+        if exposure.is_low_contrast(image, fraction_threshold=.01):
+            image = np.zeros(image.shape, dtype=np.uint8)
+        else:
+            # Both greycomatrix and haralick require 8-bit images
+            image = exposure.rescale_intensity(image, in_range='dtype', out_range='uint8').astype(np.uint8)
+        assert image.dtype == np.uint8
+
+        # NOTE: Both skimage and mahotas GLCM-based features are very similar though there is a critical difference
+        # in that the mahotas implementation allows zeros to be ignored, which leads to substantially different
+        # results that are otherwise nearly identical.  Also, the mahotas version is used in CellProfiler
+        # with ignore_zeros=True so it should be preferred.
+        # TODO: make distance parameterized
+        distance = 16
+
+        # Initialize GLCM matrix if necessary
+        if self.has_glcm:
+            from skimage.feature import greycomatrix, greycoprops
+            # With these 4 angles, results are nearly identical to mhf.haralick with ignore_zeros=False
+            glcm = greycomatrix(image, [distance], [0, np.pi/2, np.pi, 3*np.pi/2], symmetric=True, normed=True)
+            # Average across array of shape [d, a] where d = num distances (1 in this case)
+            # and a = num angles (4 in this case)
+            self.glcm_fn = lambda feature: (greycoprops(glcm, feature).mean(), prop.label)
+
+        # Gather Haralick features if necessary
+        if self.has_hrlk:
+            from mahotas import features as mhf
+            try:
+                hrlk = mhf.haralick(image, distance=distance, ignore_zeros=True, return_mean=True)
+            except ValueError as e:
+                # If an error is thrown about empty features (which can happen even with non-empty images),
+                # then get the default values using a small empty array
+                if 'mahotas.haralick_features: the input is empty. Cannot compute features!' not in str(e):
+                    raise
+                hrlk = mhf.haralick(np.zeros((2, 2), dtype=np.uint8), distance=1, ignore_zeros=False, return_mean=True)
+            hrlk = dict(zip(TEXTURE_HRLK_FEATURES, hrlk))
+            self.hrlk_fn = lambda feature: (hrlk[feature], prop.label)
+
+    def _stop(self, component, channel):
+        self.glcm_fn = None
+        self.hrlk_fn = None
 
     def _prefix(self, component):
         return MORPHOLOGY_COMPONENTS[component]
@@ -207,21 +279,18 @@ class ChannelMorphologyFeatures(ComponentFeatureCalculator):
             if feature == 'circularity':
                 return cytokit_math.circularity(prop.area, prop.perimeter)
             return getattr(prop, feature)
+        # EXPERIMENTAL: include texture features (note that the prop label is returned
+        # as verification that the feature is for the correct object)
         elif feature.startswith('glcm'):
-            # EXPERIMENTAL: include grey level co-occurrence features
-            assert image.ndim == 2, 'Expecting 2D object image, got shape {}'.format(image.shape)
-            from skimage.feature import greycomatrix, greycoprops
-            if exposure.is_low_contrast(image):
-                return 0.0
-            # Mask out parts of object image that don't overlap with object binary image (i.e. set to 0)
-            image = image * prop.image.astype(int)
-            if image.dtype != np.uint8:
-                image = exposure.rescale_intensity(image, out_range='uint8').astype(np.uint8)
-            assert image.dtype == np.uint8
-            glcm = greycomatrix(image, [5], [0], symmetric=True, normed=True)
-            return greycoprops(glcm, feature.split(DCHR)[-1])[0, 0]
+            val, lbl = self.glcm_fn(feature.split(DCHR)[-1])
+            assert lbl == prop.label
+            return val
+        elif feature.startswith('hrlk'):
+            val, lbl = self.hrlk_fn(feature.split(DCHR)[-1])
+            assert lbl == prop.label
+            return val
         elif feature.startswith('lbp'):
-            # EXPERIMENTAL: include local binary pattern features
+            # TODO: preload LBP and then apply aggregations here
             assert image.ndim == 2, 'Expecting 2D object image, got shape {}'.format(image.shape)
             from skimage.feature import local_binary_pattern
             if exposure.is_low_contrast(image):
@@ -232,6 +301,7 @@ class ChannelMorphologyFeatures(ComponentFeatureCalculator):
             lbp = local_binary_pattern(image, n_points, radius, 'uniform')
             fun = getattr(np, feature.split(DCHR)[-1])
             return fun(lbp)
+
         raise NotImplementedError('Morphology feature "{}" not yet implemented'.format(feature))
 
 

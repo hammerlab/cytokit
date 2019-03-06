@@ -26,6 +26,7 @@ RUN pip --no-cache-dir install \
     bokeh==1.0.1 \
     keras==2.2.4 \
     centrosome==1.1.5 \
+    mahotas==1.4.5 \
     plotnine==0.4.0 \
     jupyterlab \
     python-dotenv \
@@ -69,6 +70,11 @@ ENV CYTOKIT_SIM_DIR $SIM_DIR
 ENV CYTOKIT_DATA_DIR $DATA_DIR
 ENV CYTOKIT_REPO_DIR $CYTOKIT_REPO_DIR
 ENV SHELL /bin/bash
+
+# Set these or papermill will error out with:
+# "Click will abort further execution because Python 3 was configured to use ASCII as encoding for the environment"
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
 
 # Eliminate these warnings globally: FutureWarning: Conversion of the second argument of issubdtype from
 # `float` to `np.floating` is deprecated. In future, it will be treated as `np.float64 == np.dtype(float).type`

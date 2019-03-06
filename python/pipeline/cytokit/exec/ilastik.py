@@ -43,7 +43,7 @@ class Ilastik(object):
 
         # Verify that the given output path exists
         if not osp.exists(output_path):
-            raise ck_ilastik.IlastikError(
+            raise IlastikError(
                 'Ilastik failed to produce result at "{}".\ncommand: {}\nstdout: {}\nstderr:\n{}',
                 output_path,
                 ' '.join(pres.args),

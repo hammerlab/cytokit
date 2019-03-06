@@ -3,6 +3,7 @@ from cytokit.utils import np_utils
 from flowdec import restoration as fd_restoration
 from flowdec import psf as fd_psf
 from flowdec import data as fd_data
+import re
 import numpy as np
 import logging
 
@@ -75,15 +76,31 @@ def rescale_stack(tile, stack, scale_factor):
     return stack * (mean_ratio * scale_factor), mean_ratio
 
 
+def _resolve_channels(channels, config):
+    # If channels is a single string, assume it is a regular expression and resolve to list of names
+    if isinstance(channels, str):
+        regex = channels
+        channels = [c for c in config.channel_names if re.search(regex, c)]
+        logger.debug('Resolved enabled channel pattern "%s" to list %s', regex, channels)
+    # Otherwise, assume channels is a list of individual names and convert to indices
+    return [config.channel_names.index(c) for c in channels]
+
+
 class CytokitDeconvolution(CytokitOp):
 
-    def __init__(self, config, n_iter=25, scale_factor=.5, pad_mode='none'):
+    def __init__(self, config, n_iter=25, scale_factor=.5, pad_mode='none', channels=None):
         super().__init__(config)
 
         params = config.deconvolution_params
         self.n_iter = params.get('n_iter', n_iter)
         self.scale_factor = params.get('scale_factor', scale_factor)
         self.pad_mode = params.get('pad_mode', pad_mode)
+        self.channels = params.get('channels', channels)
+        if self.channels is not None:
+            channels = _resolve_channels(self.channels, config)
+            if not channels:
+                raise ValueError('Channels filter "{}" resolved to empty list of indices'.format(self.channels))
+            self.channels = channels
         self.algo = None
         self.psfs = None
 
@@ -107,14 +124,21 @@ class CytokitDeconvolution(CytokitOp):
         if nch != self.config.n_channels_per_cycle:
             raise AssertionError(
                 'Given tile with shape {} ({} channels) does not have expected number of channels {}'
-                .format(tile.shape, nch, config.n_channels_per_cycle)
+                .format(tile.shape, nch, self.config.n_channels_per_cycle)
             )
 
         img_cyc = []
         for icyc in range(ncyc):
             img_ch = []
             for ich in range(nch):
-                acq = fd_data.Acquisition(tile[icyc, :, ich, :, :], kernel=self.psfs[ich])
+                img = tile[icyc, :, ich, :, :]
+
+                # Skip deconvolution if channel was configured to be ignored
+                if self.channels is not None and ich not in self.channels:
+                    img_ch.append(img)
+                    continue
+
+                acq = fd_data.Acquisition(img, kernel=self.psfs[ich])
                 logger.debug('Running deconvolution for cycle {}, channel {} [dtype = {}]'.format(icyc, ich, acq.data.dtype))
                 res = self.algo.run(acq, self.n_iter, session_config=get_tf_config(self)).data
 

@@ -8,23 +8,10 @@ import copy
 import pprint
 from cytokit import cli
 from cytokit import io as cytokit_io
+from cytokit import config as cytokit_config
 logger = logging.getLogger(__name__)
 
 PROP_CHAR = '.'
-
-
-def _write_config(path, data):
-    # Write config as either json or yaml, depending on the assigned extension
-    if path.endswith('.yaml'):
-        import yaml
-        with open(path, 'w') as fd:
-            yaml.dump(data, fd)
-    elif path.endswith('.json'):
-        import json
-        with open(path, 'w') as fd:
-            json.dump(data, fd)
-    else:
-        raise ValueError('Configuration filepath "{}" does not have a valid extension'.format(path))
 
 
 class ConfigEditor(object):
@@ -150,7 +137,7 @@ class ConfigEditor(object):
             logger.info('Creating non-existent directory "{}" for configuration'.format(osp.dirname(path)))
             os.makedirs(osp.dirname(path), exist_ok=True)
 
-        _write_config(path, self.data)
+        cytokit_config.save(path, self.data)
         logger.info('Configuration saved to path "{}"'.format(path))
         return self
 

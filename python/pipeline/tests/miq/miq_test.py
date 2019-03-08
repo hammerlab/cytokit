@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 from skimage import filters
 from cytokit import data as ck_data
+from cytokit.ops import op
 from cytokit.miq import prediction
 from cytokit.ops.best_focus import DEFAULT_PATCH_SIZE, DEFAULT_N_CLASSES
 
@@ -10,7 +11,10 @@ class TestMiq(unittest.TestCase):
 
     def test_image_quality_classification(self):
         model_path = ck_data.initialize_best_focus_model()
-        miqest = prediction.ImageQualityClassifier(model_path, DEFAULT_PATCH_SIZE, DEFAULT_N_CLASSES)
+        # Make sure to use default op TF config since GPU memory errors during testing will
+        # occur otherwise (i.e. when gpu_options.allow_growth is not set to True)
+        miqest = prediction.ImageQualityClassifier(
+            model_path, DEFAULT_PATCH_SIZE, DEFAULT_N_CLASSES, session_config=op.get_tf_config(None))
 
         img1 = np.zeros((DEFAULT_PATCH_SIZE*2, DEFAULT_PATCH_SIZE*2))
         img1[6:10, 6:10] = 1

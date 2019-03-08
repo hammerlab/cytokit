@@ -87,9 +87,21 @@ class SnakeTiling(Tiling):
         return i
 
 
+class GridTiling(Tiling):
+    """Grid tiling implies movements as left-to-right, reset, and then left-to-right, repeat (i.e. reading order)"""
+
+    def _coordinates_from_index(self, index, w, h):
+        return index % w, index // w
+
+    def _index_from_coordinates(self, x, y, w, h):
+        return y * w + x
+
+
 TILINGS = {
-    'snake': SnakeTiling()
+    'snake': SnakeTiling(),
+    'grid': GridTiling()
 }
+
 
 def get_tiling_by_name(name):
     if name not in TILINGS:

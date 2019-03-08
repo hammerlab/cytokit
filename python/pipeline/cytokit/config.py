@@ -1,4 +1,5 @@
 import json
+import yaml
 import os
 import cytokit
 from cytokit import tiling
@@ -15,11 +16,9 @@ def _load_config(data_dir, filename):
     if not osp.exists(f):
         raise ValueError('Required configuration file "{}" does not exist'.format(f))
     if filename.endswith('.yaml'):
-        import yaml
         with open(f, 'r') as fd:
             return yaml.load(fd)
     elif filename.endswith('.json'):
-        import json
         with open(f, 'r') as fd:
             return json.load(fd)
     else:
@@ -355,6 +354,13 @@ class CytokitConfigV10(Config):
 
 
 def load(path):
+    """Load configuration data from path
+
+    Args:
+        path: Path to configuration file name with .yaml or .json extension or a directory containing a
+            file matching the default configuration name (controlled by env var CYTOKIT_CONFIG_DEFAULT_FILENAME)
+        data: Either a dictionary or configuration object to save
+    """
     if not osp.exists(path):
         raise ValueError('Configuration path "{}" does not exist'.format(path))
 
@@ -373,6 +379,27 @@ def load(path):
             'Configuration version "{}" not supported (determined by env variable {})'
             .format(version, cytokit.ENV_CONFIG_VERSION)
         )
+
+
+def save(path, data):
+    """Save configuration data to file
+
+    Args:
+        path: Path to configuration file name with .yaml or .json extension
+        data: Either a dictionary or configuration object to save
+    """
+    if isinstance(data, Config):
+        data = data.to_dict()
+
+    # Write config as either json or yaml, depending on the assigned extension
+    if path.endswith('.yaml'):
+        with open(path, 'w') as fd:
+            yaml.dump(data, fd)
+    elif path.endswith('.json'):
+        with open(path, 'w') as fd:
+            json.dump(data, fd)
+    else:
+        raise ValueError('Configuration filepath "{}" does not have a valid extension'.format(path))
 
 
 def load_example_config(example_name):

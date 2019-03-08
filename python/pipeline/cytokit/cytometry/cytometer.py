@@ -157,7 +157,7 @@ class BorderFeatures(FeatureCalculator):
 
     def get_feature_values(self, signals, labels, graph, props, z):
         ids = self.interior_ids if self.mode == '3D' else self.interior_ids[z]
-        return [int(props[self.component].label in ids)]
+        return [int(props[self.component].label not in ids)]
 
 
 class ComponentFeatureCalculator(FeatureCalculator):

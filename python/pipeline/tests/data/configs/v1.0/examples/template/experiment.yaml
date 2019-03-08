@@ -1,0 +1,23 @@
+# Template configuration with minimal properties necessary to bootstrap an experiment
+# *Structure is for single channel, single z, single cycle 128x128 image
+name: 'Template'
+date: '2000-01-01 00:00:00'
+acquisition:
+  per_cycle_channel_names: ['CH1']
+  channel_names: ['CH1']
+  emission_wavelengths: [0]
+  axial_resolution: 1
+  lateral_resolution: 1
+  magnification: 1
+  num_cycles: 1
+  num_z_planes: 1
+  numerical_aperture: 1
+  objective_type: air
+  region_names: [Region1]
+  region_height: 1
+  region_width: 1
+  tile_height: 128
+  tile_overlap_x: 0
+  tile_overlap_y: 0
+  tile_width: 128
+  tiling_mode: grid

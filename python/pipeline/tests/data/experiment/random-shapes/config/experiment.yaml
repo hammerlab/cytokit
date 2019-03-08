@@ -1,0 +1,24 @@
+acquisition:
+  axial_resolution: 1
+  channel_names: [C1, C2, C3]
+  emission_wavelengths: [0, 0, 0]
+  lateral_resolution: 1
+  magnification: 1
+  num_cycles: 1
+  num_z_planes: 1
+  numerical_aperture: 1
+  objective_type: air
+  per_cycle_channel_names: [CH1, CH2, CH3]
+  region_height: 3
+  region_names: [Region1]
+  region_width: 3
+  tile_height: 135
+  tile_overlap_x: 0
+  tile_overlap_y: 0
+  tile_width: 180
+  tiling_mode: grid
+date: '2019-03-08 15:46:18'
+environment: {path_formats: 'get_default_path_formats("T{tile:02d}_C{channel:02d}.tif")'}
+name: Random Shapes
+processor:
+  tile_generator: {raw_file_type: grayscale}

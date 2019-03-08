@@ -19,8 +19,7 @@ def load_celegans_experiment(**kwargs):
 
 
 def get_example_config(example_name='ex1'):
-    path = osp.join(cytokit.test_data_dir, 'configs', 'v0.1', 'examples', example_name)
-    return cytokit_config.load(path)
+    return cytokit_config.load_example_config(example_name)
 
 
 def experiment_from_img(img, nch=4, ncyc=3, src_config=None, shift=(0, -5, 15)):

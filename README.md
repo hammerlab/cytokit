@@ -6,7 +6,7 @@
 Cytokit is a collection of tools for quantifying and analyzing properties of individual cells in large fluorescent microscopy
 datasets with a focus on those generated from multiplexed staining protocols.  This includes a GPU-accelerated image processing pipeline (via TensorFlow), CLI tools for batch processing of experimental replicates (often requiring conditional configuration, as things tend go wrong when capturing hundreds of thousands of microscope images over a period of hours or days), and visualization UIs (currently just "Cytokit Explorer").
 
-For more information, see: [Cytokit: A single-cell analysis toolkit for high dimensional fluorescent microscopy imaging](https://www.biorxiv.org/content/early/2018/11/04/460980)
+For more information, see: [Cytokit: A single-cell analysis toolkit for high dimensional fluorescent microscopy imaging](https://doi.org/10.1101/460980)
   
   
 ### Quick Start

@@ -55,7 +55,7 @@ RUN cd $REPO_DIR && \
 
 # Download simulation data for testing
 RUN cd $SIM_DIR && \
-    wget https://storage.googleapis.com/musc-codex/datasets/simulations/sim-exp-01.zip && \
+    wget -nv https://storage.googleapis.com/musc-codex/datasets/simulations/sim-exp-01.zip && \
     unzip -q sim-exp-01.zip
 
 # Add any source directories for development to python search path

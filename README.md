@@ -33,8 +33,6 @@ nvidia-docker run --rm -ti -p 8888:8888 -p 8787:8787 -p 8050:8050 \
 eczech/cytokit
 ```
 
-*TODO*: Move docker build to hammerlab org instead of user 
-
 This will launch JupyterLab on port 8888.  After navigating to localhost:8888 and entering the access token 
 printed on the command line following ```nvidia-docker run```, you can then run an example notebook 
 like [cellular_marker_profiling_example](python/notebooks/examples/marker_profiling_example.ipynb), which can be found 

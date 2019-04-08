@@ -145,4 +145,4 @@ processor:
     target_shape: [504, 672]
     nuclei_channel_name: nucl
     segmentation_params: {memb_min_dist: 8, membrane_sigma: 5, membrane_gamma: .25, marker_dilation: 3}
-    quantification_params: {include_nucleus_intensity: true, include_cell_graph: true}
+    quantification_params: {nucleus_intensity: true, cell_graph: true}

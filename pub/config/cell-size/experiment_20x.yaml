@@ -42,4 +42,4 @@ processor:
       memb_hole_size: 48
       memb_max_dist: null
       memb_propagation_regularization: .25
-    quantification_params: {include_nucleus_intensity: true, include_cell_graph: true}
+    quantification_params: {nucleus_intensity: true, cell_graph: true}

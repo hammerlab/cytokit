@@ -49,4 +49,4 @@ processor:
   cytometry:
     nuclei_channel_name: DAPI
     segmentation_params: {memb_min_dist: 6}
-    quantification_params: {include_nucleus_intensity: true, include_cell_graph: true}
+    quantification_params: {nucleus_intensity: true, cell_graph: true}

@@ -10,10 +10,6 @@ do
     EXP_COND=`echo $EXP | cut -d',' -f 3`
     DATA_DIR=$CYTOKIT_DATA_DIR/cytokit/mc38-spheroid/$EXP_NAME/$EXP_DIR
     BASE_CONF=$CYTOKIT_REPO_DIR/pub/config/mc38-spheroid
-    
-            
-    #echo "Clearing existing data at $DATA_DIR/output/*"
-    #rm -rf $DATA_DIR/output/*
         
     cytokit config editor --base-config-path=$BASE_CONF --output-dir=$DATA_DIR/output \
     set name "$EXP_NAME.$EXP_DIR.$EXP_COND" \

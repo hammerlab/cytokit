@@ -85,7 +85,8 @@ class SpheroidCytometer20x(cytometer.Cytometer):
         
         
         img_dt = ndi.distance_transform_edt(img_pm)
-        #img_obj = segmentation.watershed(-img_dt, img_pk, mask=img_pm).astype(np.uint16)
+        
+        # Use propogation rather than watershed as it often captures a much more accurate boundary
         img_obj = propagate.propagate(img_mz, img_pk, img_pm, .01)[0].astype(np.uint16)
         img_bnd = img_obj * segmentation.find_boundaries(img_obj, mode='inner', background=0)
         

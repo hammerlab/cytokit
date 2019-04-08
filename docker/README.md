@@ -31,3 +31,17 @@ nvidia-docker run --rm -ti -p 8888:8888 -p 6006:6006 -p 8787:8787 -p 8050:8050 \
 cytokit-dev
 
 ```
+
+DockerHub Deployment:
+
+```bash
+# Build the image and find its ID
+docker images 
+
+# Tag with release number
+docker tag 1f265be86a54 eczech/cytokit:0.1.1
+
+# Login and push
+echo $PASSWORD | docker login --username eczech --password-stdin
+docker push eczech/cytokit
+```

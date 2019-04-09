@@ -1,7 +1,7 @@
 # Docker Instructions
 
 
-Build and run the production container:
+Pull and run the production container:
 
 ```bash
 # Building a development container
@@ -35,7 +35,7 @@ cytokit-dev
 DockerHub Deployment:
 
 ```bash
-# Build the image and find its ID
+# Build the image and find its ID (alternatively, run the build with the release tag and skip next step)
 docker images 
 
 # Tag with release number

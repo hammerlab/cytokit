@@ -27,6 +27,10 @@ Once nvidia-docker is installed, the container can be launched and used as follo
 ```bash
 nvidia-docker pull eczech/cytokit:latest
 
+# Set LOCAL_IMAGE_DATA_DIR variable to a host directory for data sharing
+# and persistent storage between container runs
+export LOCAL_IMAGE_DATA_DIR=/tmp 
+
 # Run the container with an attached volume to contain raw images and results  
 nvidia-docker run --rm -ti -p 8888:8888 -p 8787:8787 -p 8050:8050 \
 -v $LOCAL_IMAGE_DATA_DIR:/lab/data \
@@ -37,6 +41,19 @@ This will launch JupyterLab on port 8888.  After navigating to localhost:8888 an
 printed on the command line following ```nvidia-docker run```, you can then run an example notebook 
 like [cellular_marker_profiling_example](python/notebooks/examples/marker_profiling_example.ipynb), which can be found 
 at ```/lab/repos/cytokit/python/notebooks/examples``` in the JupyterLab file navigator. 
+
+#### Using a Specific Release
+
+To use a release-specific container, the instructions above can be modified as such where the below 
+example shows how to launch the ```0.1.1``` container:
+
+```bash
+nvidia-docker pull eczech/cytokit:0.1.1
+export LOCAL_IMAGE_DATA_DIR=/tmp   
+nvidia-docker run --rm -ti -p 8888:8888 -p 8787:8787 -p 8050:8050 \
+-v $LOCAL_IMAGE_DATA_DIR:/lab/data \
+eczech/cytokit:0.1.1
+``` 
 
 ### Example
 

@@ -11,6 +11,10 @@ library(ggcyto)
 
 data_dir <- '/Volumes/disk1/cytokit/cellular-marker'
 
+# Flag determining whether or not cleanup gating should be applied in the analysis
+# (this is useful for determing the extent to which results improve without filtering)
+enable_cleanup_gating <- TRUE
+
 # Define experiment names and variants to run analysis for
 experiments <- c(
   '20180614_D22_RepA_Tcell_CD4-CD8-DAPI_5by5',
@@ -110,22 +114,30 @@ Apply Gating
 Before trying to isolate CD4/CD8 cells, build a workflow that also uses the DAPI intensity and some cell morphology properties to remove cells that are likely the result of illumination artifacts or poor nuclei segmentation:
 
 ``` r
-add_pop(
-  gs, alias="dapi", pop="+", parent='root', dims='niDAPI,ciDAPI', 
-  gating_method='flowClust.2d', gating_args="K=1"
-)
-add_pop(
-  gs, alias="circularity", pop="+", parent='dapi', dims='cellcircularity,nucleuscircularity', 
-  gating_method='flowClust.2d', gating_args='K=1'
-)
-add_pop(
-  gs, alias="diameter", pop="+", parent='circularity', dims='celldiameter,nucleusdiameter', 
-  gating_method='flowClust.2d', gating_args='K=1'
-)
-add_pop(
-  gs, alias="*", pop="*", parent='diameter', dims='ciCD4,ciCD8', 
-  gating_method='quadGate.tmix', gating_args="K=3"
-)
+if (enable_cleanup_gating){
+  add_pop(
+    gs, alias="dapi", pop="+", parent='root', dims='niDAPI,ciDAPI',
+    gating_method='flowClust.2d', gating_args="K=1"
+  )
+  add_pop(
+    gs, alias="circularity", pop="+", parent='dapi', dims='cellcircularity,nucleuscircularity',
+    gating_method='flowClust.2d', gating_args='K=1'
+  )
+  add_pop(
+    gs, alias="diameter", pop="+", parent='circularity', dims='celldiameter,nucleusdiameter',
+    gating_method='flowClust.2d', gating_args='K=1'
+  )
+  add_pop(
+    gs, alias="*", pop="*", parent='diameter', dims='ciCD4,ciCD8',
+    gating_method='quadGate.tmix', gating_args="K=3"
+  )
+} else {
+  add_pop(
+    gs, alias="*", pop="*", parent='root', dims='ciCD4,ciCD8',
+    gating_method='quadGate.tmix', gating_args="K=3"
+  )  
+}
+
 recompute(gs)
 plot(gs)
 ```
@@ -153,27 +165,22 @@ plot_gate <- function(node){
     scales=list(alternating=TRUE)
   )
 }
-plot_gate('dapi')
+# Skip this visualization if these gates were intentionally left out of the workflow
+if (enable_cleanup_gating){
+  print(plot_gate('dapi'))
+  print(plot_gate('circularity'))
+  print(plot_gate('diameter'))
+}
 ```
 
-![](analysis_files/figure-markdown_github/unnamed-chunk-7-1.png)
-
-``` r
-plot_gate('circularity')
-```
-
-![](analysis_files/figure-markdown_github/unnamed-chunk-7-2.png)
-
-``` r
-plot_gate('diameter')
-```
-
-![](analysis_files/figure-markdown_github/unnamed-chunk-7-3.png)
+![](analysis_files/figure-markdown_github/unnamed-chunk-7-1.png)![](analysis_files/figure-markdown_github/unnamed-chunk-7-2.png)![](analysis_files/figure-markdown_github/unnamed-chunk-7-3.png)
 
 Show quadrant gating on CD4/CD8 inferred via t mixture model:
 
 ``` r
-nodes <- getNodes(gs, path=1)[5:8]
+nodes <- getNodes(gs, path=1) %>% keep(~str_detect(., 'CD[48]'))
+stopifnot(length(nodes) == 4)
+
 p_xy <- plotGate(
   gs, nodes, 
   stats=FALSE, 
@@ -271,15 +278,28 @@ p_stat
 Show scatterplot comparison:
 
 ``` r
-p_scat <- inner_join(
-  df_stats %>% filter(source == 'cytokit') %>% select(donor, population, replicate, percent),
-  df_stats %>% filter(source == 'flow') %>% select(donor, population, percent),
-  by=c('donor', 'population'),
-  suffix=c('.cytokit', '.flow')
-) %>% 
+p_scat <- 
+  # Create frame with a row for each cell population + donor + replicate with flow and cytokit percentages side-by-side
+  inner_join(
+    df_stats %>% filter(source == 'cytokit') %>% select(donor, population, replicate, percent),
+    df_stats %>% filter(source == 'flow') %>% select(donor, population, percent),
+    by=c('donor', 'population'),
+    suffix=c('.cytokit', '.flow')
+  ) %>% 
+  # Compute correlation and p-values (per replicate)
+  group_by(replicate) %>% mutate(
+    r=cor.test(percent.cytokit, percent.flow)$estimate, 
+    p=cor.test(percent.cytokit, percent.flow)$p.value
+  ) %>% ungroup %>% mutate(
+    r=sprintf('r = %.4f', r),
+    p=ifelse(p < .0001, 'P < .0001', sprintf('P = %.4f', p))
+  ) %>%
+  # Visualize
   ggplot(aes(x=percent.cytokit, y=percent.flow, color=population, shape=donor)) + 
   geom_point(size=3) + 
   geom_abline(slope=1, linetype='dashed', alpha=.1) + 
+  geom_text(aes(x=15, y=80, label=r), color='black', size=4) +
+  geom_text(aes(x=14, y=73, label=p), color='black', size=4) +
   scale_color_brewer(palette='Set1') +
   scale_y_continuous(labels=function(x) scales::percent(x, scale=1)) +
   scale_x_continuous(labels=function(x) scales::percent(x, scale=1)) +

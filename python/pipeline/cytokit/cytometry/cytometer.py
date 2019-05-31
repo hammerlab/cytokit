@@ -718,7 +718,7 @@ class CytometerBase(object):
     NUCLEUS_BOUNDARY_CHANNEL = 3
 
     @classmethod
-    def _quantify_2d(cls, tile, img_seg, nz, feature_calculators):
+    def _quantify_2d(cls, tile, img_seg, nz, feature_calculators, **kwargs):
         feature_values = []
         for z in range(nz):
             # Calculate properties of masked+labeled cell components
@@ -732,7 +732,7 @@ class CytometerBase(object):
 
             # Compute RAG for cells if necessary
             graph = None
-            if cell_graph:
+            if kwargs.get('cell_graph'):
                 labels = img_seg[z][CytometerBase.CELL_MASK_CHANNEL]
 
                 # rag_boundary fails on all zero label matrices so default to empty graph if that is the case
@@ -755,7 +755,7 @@ class CytometerBase(object):
         return feature_values
 
     @classmethod
-    def _quantify_3d(cls, tile, img_seg, nz, feature_calculators):
+    def _quantify_3d(cls, tile, img_seg, nz, feature_calculators, **kwargs):
         feature_values = []
 
         # Calculate properties of masked+labeled cell components
@@ -847,7 +847,7 @@ class CytometerBase(object):
 
         # Apply appropriate quantification function based on mode (to either loop through z planes or use all together)
         fn = CytometerBase._quantify_2d if mode == '2D' else CytometerBase._quantify_3d
-        feature_values = fn(tile, img_seg, nz, feature_calculators)
+        feature_values = fn(tile, img_seg, nz, feature_calculators, cell_graph=cell_graph)
 
         return pd.DataFrame(feature_values, columns=feature_names)
 

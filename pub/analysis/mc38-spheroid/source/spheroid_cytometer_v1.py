@@ -246,10 +246,10 @@ class SpheroidCytometer(cytometer.Cytometer):
         assert tile.ndim == 5
         if 'channel_names' in kwargs:
             kwargs['channel_names'] = kwargs['channel_names'] + ['sobel']
-        return cytometer.Base2D.quantify(tile, segments, **kwargs)
+        return cytometer.CytometerBase.quantify(tile, segments, **kwargs)
 
     def augment(self, df):
-        df = cytometer.Base2D.augment(df, self.config.microscope_params)
+        df = cytometer.CytometerBase.augment(df, self.config.microscope_params)
         # Attempt to sum live + dead intensities if both channels are present
         for agg_fun in ['mean', 'sum']:
             cols = df.filter(regex='ci:(LIVE|DEAD):{}'.format(agg_fun)).columns.tolist()

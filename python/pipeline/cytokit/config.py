@@ -2,6 +2,7 @@ import json
 import yaml
 import os
 import cytokit
+import copy
 from cytokit import tiling
 from os import path as osp
 from collections import namedtuple
@@ -183,6 +184,9 @@ class CytokitConfigV10(Config):
 
     def to_dict(self):
         return self._conf
+
+    def copy(self):
+        return CytokitConfigV10(copy.deepcopy(self._conf))
 
     @property
     def experiment_name(self):

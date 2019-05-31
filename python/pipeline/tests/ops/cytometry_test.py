@@ -86,7 +86,7 @@ class TestCytometry(unittest.TestCase):
 
         # Quantify each tile image and concatenate results
         df = pd.concat([
-            cytometer.Base2D.quantify(
+            cytometer.CytometerBase.quantify(
                 tiles[i], create_segments(tiles[i][0, 0, 0]),
                 channel_names=config.channel_names,
                 cell_intensity=['mean', 'median', 'sum', 'var'], nucleus_intensity=False,

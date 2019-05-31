@@ -107,18 +107,17 @@ class SpheroidCytometer20x(cytometer.Cytometer):
         assert img_seg.dtype == np.uint16, 'Expecting 16bit result, got type {}'.format(img_seg.dtype)
         assert img_seg.ndim == 4, 'Expecting 4D result, got shape {}'.format(img_seg.shape)
         return img_seg
-        
-    
+
     def quantify(self, tile, segments, **kwargs):
         assert tile.ndim == 5
         # Run max-z projection across all channels and insert new axis where z dimension was
         tile = tile.max(axis=1)[:, np.newaxis]
         assert tile.ndim == 5, 'Expecting result after max-z projection to be 5D but got shape {}'.format(tile.shape)
         assert tile.shape[0] == tile.shape[1] == 1
-        return cytometer.Base2D.quantify(tile, segments, **kwargs)
+        return cytometer.CytometerBase.quantify(tile, segments, **kwargs)
 
     def augment(self, df):
-        df = cytometer.Base2D.augment(df, self.config.microscope_params)
+        df = cytometer.CytometerBase.augment(df, self.config.microscope_params)
         # Attempt to sum live + dead intensities if both channels are present
         for agg_fun in ['mean', 'sum']:
             cols = df.filter(regex='ci:(LIVE|DEAD):{}'.format(agg_fun)).columns.tolist()

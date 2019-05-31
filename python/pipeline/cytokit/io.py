@@ -278,8 +278,19 @@ def get_processor_exec_path(date):
 def _collapse_keyence_rgb(path, img):
     # Compute image sum for each channel giving 3 item vector
     ch_sum = np.squeeze(np.apply_over_axes(np.sum, img, [0, 1]))
+
+    # Check if more than one channel has non-zero values
     if np.sum(ch_sum > 0) > 1:
-        raise ValueError('Found more than one channel with information in image file "{}"'.format(path))
+        imgnz = img[..., np.argwhere(ch_sum > 0).squeeze()]
+        all_equal = True
+        # Check to see if all non-zero channels are equal to each other
+        for i in range(1, imgnz.shape[-1]):
+            if not np.all(imgnz[..., 0] == imgnz[..., i]):
+                all_equal = False
+                break
+        # If more than 1 distinct non-zero channel exists, throw an error
+        if not all_equal:
+            raise ValueError('Found more than one channel with information in image file "{}"'.format(path))
 
     # Select and return the single channel with a non-zero sum
     return img[..., np.argmax(ch_sum)]

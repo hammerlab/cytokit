@@ -17,10 +17,10 @@ OBJECT_CYCLE = 0
 
 CHANNEL_COORDINATES = {
     # Map channel names to (cycle, channel) coordinates
-    'cell_mask': (OBJECT_CYCLE, cytometer.Base2D.CELL_MASK_CHANNEL),
-    'cell_boundary': (OBJECT_CYCLE, cytometer.Base2D.CELL_BOUNDARY_CHANNEL),
-    'nucleus_mask': (OBJECT_CYCLE, cytometer.Base2D.NUCLEUS_MASK_CHANNEL),
-    'nucleus_boundary': (OBJECT_CYCLE, cytometer.Base2D.NUCLEUS_BOUNDARY_CHANNEL)
+    'cell_mask': (OBJECT_CYCLE, cytometer.CytometerBase.CELL_MASK_CHANNEL),
+    'cell_boundary': (OBJECT_CYCLE, cytometer.CytometerBase.CELL_BOUNDARY_CHANNEL),
+    'nucleus_mask': (OBJECT_CYCLE, cytometer.CytometerBase.NUCLEUS_MASK_CHANNEL),
+    'nucleus_boundary': (OBJECT_CYCLE, cytometer.CytometerBase.NUCLEUS_BOUNDARY_CHANNEL)
 }
 
 
@@ -207,6 +207,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
             img_seg = self.cropper.run(img_seg)
 
         # Run cell cytometry calculations (results given as data frame)
+        logger.debug('Running segmentation quantification')
         stats = self.cytometer.quantify(tile, img_seg, **self.quantification_params)
 
         # Add any statistics or transformations that require the experimental context

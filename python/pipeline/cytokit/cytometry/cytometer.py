@@ -942,7 +942,7 @@ class Cytometer2D(KerasCytometer2D):
                 marker_dilation=1, marker_min_size=16,
                 memb_min_dist=5, memb_max_dist=10, memb_hole_size=16,
                 memb_sigma=1, memb_gamma=None, memb_tresh_method='li', memb_propagation_regularization=.05,
-                batch_size=DEFAULT_BATCH_SIZE, return_masks=False):
+                batch_size=DEFAULT_BATCH_SIZE, return_masks=False, **kwargs):
         if not self.initialized:
             self.initialize()
 

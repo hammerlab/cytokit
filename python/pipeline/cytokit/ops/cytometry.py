@@ -165,7 +165,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
             img_memb = tile[memb_cycle, z_slice, memb_channel]
 
         # Fetch segmentation volume as ZCHW where C = 2 and C1 = cell and C2 = nucleus
-        img_seg = self.cytometer.segment(img_nuc, img_memb=img_memb, **self.segmentation_params)
+        img_seg = self.cytometer.segment(img_nuc, img_memb=img_memb, tile=tile, **self.segmentation_params)
 
         # Validate results are 4D (ZCHW)
         assert img_seg.ndim == 4, 'Expecting 4D segmentation image but shape is {}'.format(img_seg.shape)

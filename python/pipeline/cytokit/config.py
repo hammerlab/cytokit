@@ -201,20 +201,54 @@ class CytokitConfigV10(Config):
         return self._conf['acquisition']['num_cycles']
 
     @property
-    def n_z_planes(self):
-        return self._conf['acquisition']['num_z_planes']
-
-    @property
     def n_channels_per_cycle(self):
         return len(self._conf['acquisition']['per_cycle_channel_names'])
 
-    @property
-    def tile_width(self):
+    def _n_z_planes(self):
+        return self._conf['acquisition']['num_z_planes']
+
+    def _tile_height(self):
+        return self._conf['acquisition']['tile_height']
+
+    def _tile_width(self):
         return self._conf['acquisition']['tile_width']
 
     @property
+    def tile_shape(self):
+        do_crop = self._conf.get('processor', {}).get('args', {}).get('run_crop', False)
+        do_resize = self._conf.get('processor', {}).get('args', {}).get('run_resize', False)
+
+        # Get original, possibly overlapping image dimensions
+        nz, nh, nw = [self._conf['acquisition'][k] for k in ['num_z_planes', 'tile_height', 'tile_width']]
+        oh, ow = self.overlap_y, self.overlap_x
+
+        # If crop enabled, then dimensions are already correct; otherwise subtract overlap
+        if not do_crop:
+            nh, nw = nh + oh, nw + ow
+
+        # If resize enabled, calculate resized dimensions which will usually be smaller but upsampling
+        # resize factors could technically be provided
+        if do_resize:
+            factors = self._conf.get('processor', {}).get('tile_resize', {}).get('factors', [1, 1, 1])
+            if len(factors) != 3 or not all([f > 0 for f in factors]):
+                raise ValueError(
+                    'Tile resize factors (`processor.tile_resize.factors` in config) must be 3 '
+                    'number list with values > 0 (found {})'.format(factors)
+                )
+            nz, nh, nw = [int(v * f) for v, f in zip((nz, nh, nw), factors)]
+        return nz, nh, nw
+
+    @property
+    def n_z_planes(self):
+        return self.tile_shape[0]
+
+    @property
     def tile_height(self):
-        return self._conf['acquisition']['tile_height']
+        return self.tile_shape[1]
+
+    @property
+    def tile_width(self):
+        return self.tile_shape[2]
 
     @property
     def overlap_x(self):
@@ -267,6 +301,10 @@ class CytokitConfigV10(Config):
     @property
     def tile_generator_params(self):
         return self._processor_params('tile_generator')
+
+    @property
+    def tile_resize_params(self):
+        return self._processor_params('tile_resize')
 
     @property
     def drift_compensation_params(self):

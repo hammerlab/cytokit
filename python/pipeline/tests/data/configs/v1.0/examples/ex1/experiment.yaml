@@ -35,10 +35,12 @@ analysis:
 processor:
   args:
     gpus: [0,1]
+    run_resize: false
     run_cytometry: true
     run_best_focus: true
     run_drift_comp: true
     run_deconvolution: true
+  tile_resize: {factors: [.8, .8, .8], implementation: tensorflow}
   best_focus: {channel: DAPI}
   deconvolution: {n_iter: 10, scale_factor: 0.5}
   drift_compensation: {channel: DAPI}

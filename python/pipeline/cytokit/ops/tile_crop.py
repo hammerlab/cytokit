@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 def get_slice(config):
     """Get 2D slice defining crop operation appropriate for given configuration"""
-    nw, nh = config.tile_width, config.tile_height
+    nw, nh = config._tile_width(), config._tile_height()
     ow, oh = config.overlap_x, config.overlap_y
     w_start, h_start = ow // 2, oh // 2
     w_stop, h_stop = w_start + nw, h_start + nh

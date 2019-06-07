@@ -14,6 +14,10 @@ class CytokitTileResize(CytokitOp):
         self.factors = params.get('factors', [1, 1, 1])
         self.implementation = params.get('implementation', 'skimage')
 
+        zrate = config.microscope_params.res_axial_nm / config.microscope_params.res_lateral_nm
+        # Get anisotropic sampling factors (often like [.5, 1, 1] for larger z step)
+        self.rates = 1. / np.array([zrate, 1., 1.])
+
     def initialize(self):
         if self.implementation == 'skimage':
             self.resizer = SkimageResizer()
@@ -27,7 +31,7 @@ class CytokitTileResize(CytokitOp):
         return self
 
     @classmethod
-    def resize(cls, tile, factors, shape, resizer):
+    def resize(cls, tile, factors, shape, rates, resizer):
         ncyc, nch = tile.shape[0], tile.shape[2]
 
         img_cyc = []
@@ -37,13 +41,14 @@ class CytokitTileResize(CytokitOp):
                 img = tile[icyc, :, ich]
                 if img.ndim != 3:
                     raise ValueError('Expecting 3D image but got shape {}'.format(img.shape))
-                img = resizer.resize(img, factors, shape)
-                print('Image shape = ', img.shape)
+                img = resizer.resize(img, factors, shape, rates)
                 img_ch.append(img)
             # Stack from 3D to (z, ch, h, w)
             img_cyc.append(np.stack(img_ch, axis=1))
         # Stack from 4D to (cyc, z, ch, h, w)
-        return np.stack(img_cyc, axis=0)
+        res = np.stack(img_cyc, axis=0)
+        assert res.dtype == tile.dtype, 'Result type {} != expected type {}'.format(res.dtype, tile.dtype)
+        return res
 
     def _run(self, tile, **kwargs):
         # NOOP if rescaling factors imply no change
@@ -54,23 +59,27 @@ class CytokitTileResize(CytokitOp):
         # Calculate expected shape and match against resulting shape after resize
         dims = [1, 3, 4]  # Spatial dimensions (z, y, x)
         old_shape = tuple([tile.shape[i] for i in dims])
-        new_shape = tuple(np.round(np.asarray(self.factors) * np.asarray(old_shape)))
+        new_shape = tuple([max(1, round(v)) for v in np.asarray(self.factors) * np.asarray(old_shape)])
+
         logger.info(
             'Running tile resize with rescaling factors {} (old shape = {}, new shape = {})'
             .format(self.factors, old_shape, new_shape)
         )
-        tile = CytokitTileResize.resize(tile, self.factors, new_shape, self.resizer)
+        tile = CytokitTileResize.resize(tile, self.factors, new_shape, self.rates, self.resizer)
         assert tuple([tile.shape[i] for i in dims]) == new_shape
         return tile
 
 
 class SkimageResizer(object):
 
-    def resize(self, img, factors, _):
-        return transform.rescale(
-            img, factors,
-            multichannel=False, preserve_range=True, order=1,
-            anti_aliasing=True, clip=True, mode='constant'
+    def resize(self, img, factors, shape, rates):
+        # Set factors per skimage resize defaults and then scale further by z vs xy sampling
+        factors = 1. / np.asarray(factors)
+        sigmas = np.maximum(0, (factors - 1) / 2) * rates
+        return transform.resize(
+            img, shape,
+            preserve_range=True, order=1, clip=True, mode='constant',
+            anti_aliasing=True, anti_aliasing_sigma=sigmas
         ).astype(img.dtype)
 
 
@@ -120,8 +129,8 @@ class TensorflowResizer(TensorFlowOp):
         outputs = dict(result=img)
         return inputs, outputs
 
-    def resize(self, image, _, shape):
-        return super(TensorflowResizer, self).run(image=image, shape=shape)['result']
+    def resize(self, image, factors, shape, rates):
+        return super(TensorflowResizer, self).run(image=image, shape=shape)['result'].astype(image.dtype)
 
     def args(self, image, shape):
         """Get arguments for resize

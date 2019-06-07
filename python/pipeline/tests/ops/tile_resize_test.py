@@ -14,12 +14,19 @@ class TestTileResize(unittest.TestCase):
         self.assertTrue(tile.ndim == 5, 'Expecting 5D shape but got {}'.format(tile.shape))
         config = cytokit_simulation.get_example_config(example_name='ex1')
 
+        # Equate resolution to do fair comparison between anisotropic skimage resize
+        # and tensorflow isotropic resize
+        config._conf['acquisition']['axial_resolution'] = 1.
+        config._conf['acquisition']['lateral_resolution'] = 1.
+
+        # Set resizing factors and implementation to ensure the operation will run
         config._conf['processor']['tile_resize']['factors'] = [.75, .75, .75]
         config._conf['processor']['tile_resize']['implementation'] = 'skimage'
         resizer = tile_resize.CytokitTileResize(config).initialize()
         sk_res = resizer.run(tile)[0, :, 0]
         self.assertTrue(sk_res.ndim == 3, 'Expecting 3D shape but got {}'.format(sk_res.shape))
 
+        # Run again using tensorflow implementation
         config._conf['processor']['tile_resize']['implementation'] = 'tensorflow'
         resizer = tile_resize.CytokitTileResize(config).initialize()
         tf_res = resizer.run(tile)[0, :, 0]

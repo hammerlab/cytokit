@@ -235,7 +235,7 @@ class CytokitConfigV10(Config):
                     'Tile resize factors (`processor.tile_resize.factors` in config) must be 3 '
                     'number list with values > 0 (found {})'.format(factors)
                 )
-            nz, nh, nw = [int(v * f) for v, f in zip((nz, nh, nw), factors)]
+            nz, nh, nw = [round(v * float(f)) for v, f in zip((nz, nh, nw), factors)]
         return nz, nh, nw
 
     @property

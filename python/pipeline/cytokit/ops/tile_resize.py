@@ -14,9 +14,8 @@ class CytokitTileResize(CytokitOp):
         self.factors = params.get('factors', [1, 1, 1])
         self.implementation = params.get('implementation', 'skimage')
 
-        zrate = config.microscope_params.res_axial_nm / config.microscope_params.res_lateral_nm
         # Get anisotropic sampling factors (often like [.5, 1, 1] for larger z step)
-        self.rates = 1. / np.array([zrate, 1., 1.])
+        self.rates = 1. / np.array([config.axial_sampling_ratio, 1., 1.])
 
     def initialize(self):
         if self.implementation == 'skimage':
@@ -59,7 +58,7 @@ class CytokitTileResize(CytokitOp):
         # Calculate expected shape and match against resulting shape after resize
         dims = [1, 3, 4]  # Spatial dimensions (z, y, x)
         old_shape = tuple([tile.shape[i] for i in dims])
-        new_shape = tuple([max(1, round(v)) for v in np.asarray(self.factors) * np.asarray(old_shape)])
+        new_shape = tuple([int(max(1, round(v))) for v in np.asarray(self.factors) * np.asarray(old_shape)])
 
         logger.info(
             'Running tile resize with rescaling factors {} (old shape = {}, new shape = {})'

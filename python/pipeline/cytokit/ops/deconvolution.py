@@ -88,13 +88,14 @@ def _resolve_channels(channels, config):
 
 class CytokitDeconvolution(CytokitOp):
 
-    def __init__(self, config, n_iter=25, scale_factor=.5, pad_mode='none', channels=None):
+    def __init__(self, config, n_iter=25, scale_factor=.5, pad_mode='none', pad_min=None, channels=None):
         super().__init__(config)
 
         params = config.deconvolution_params
         self.n_iter = params.get('n_iter', n_iter)
         self.scale_factor = params.get('scale_factor', scale_factor)
         self.pad_mode = params.get('pad_mode', pad_mode)
+        self.pad_min = params.get('pad_min', pad_min)
         self.channels = params.get('channels', channels)
         if self.channels is not None:
             channels = _resolve_channels(self.channels, config)
@@ -105,7 +106,9 @@ class CytokitDeconvolution(CytokitOp):
         self.psfs = None
 
     def initialize(self):
-        self.algo = fd_restoration.RichardsonLucyDeconvolver(n_dims=3, pad_mode=self.pad_mode).initialize()
+        self.algo = fd_restoration.RichardsonLucyDeconvolver(
+            n_dims=3, pad_mode=self.pad_mode, pad_min=self.pad_min
+        ).initialize()
         self.psfs = generate_psfs(self.config)
         return self
 

@@ -31,7 +31,7 @@ class CytokitTileGenerator(CytokitOp):
         _validate_mode(self.mode)
 
     def _run(self, *args, **kwargs):
-        ncyc, nz, nch = self.config.n_cycles, self.config.n_z_planes, self.config.n_channels_per_cycle
+        ncyc, nz, nch = self.config.n_cycles, self.config.raw_n_z_planes, self.config.n_channels_per_cycle
 
         _validate_mode(self.mode)
 

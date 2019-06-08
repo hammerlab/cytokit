@@ -204,19 +204,37 @@ class CytokitConfigV10(Config):
     def n_channels_per_cycle(self):
         return len(self._conf['acquisition']['per_cycle_channel_names'])
 
-    def _n_z_planes(self):
+    @property
+    def raw_n_z_planes(self):
         return self._conf['acquisition']['num_z_planes']
 
-    def _tile_height(self):
+    @property
+    def raw_tile_height(self):
         return self._conf['acquisition']['tile_height']
 
-    def _tile_width(self):
+    @property
+    def raw_tile_width(self):
         return self._conf['acquisition']['tile_width']
+
+    def _get_resize_info(self):
+        resize = self._conf.get('processor', {}).get('args', {}).get('run_resize', False)
+        factors = self._conf.get('processor', {}).get('tile_resize', {}).get('factors', [1, 1, 1])
+        if len(factors) != 3 or not all([f > 0 for f in factors]):
+            raise ValueError(
+                'Tile resize factors (`processor.tile_resize.factors` in config) must be 3 '
+                'number list with values > 0 (found {})'.format(factors)
+            )
+        if factors[1] != factors[2]:
+            raise ValueError('X and Y rescaling factors must be equal ({} != {})'.format(factors[1], factors[2]))
+        return resize, factors
+
+    def _get_crop_info(self):
+        return self._conf.get('processor', {}).get('args', {}).get('run_crop', False)
 
     @property
     def tile_shape(self):
-        do_crop = self._conf.get('processor', {}).get('args', {}).get('run_crop', False)
-        do_resize = self._conf.get('processor', {}).get('args', {}).get('run_resize', False)
+        do_crop = self._get_crop_info()
+        do_resize, factors = self._get_resize_info()
 
         # Get original, possibly overlapping image dimensions
         nz, nh, nw = [self._conf['acquisition'][k] for k in ['num_z_planes', 'tile_height', 'tile_width']]
@@ -229,12 +247,6 @@ class CytokitConfigV10(Config):
         # If resize enabled, calculate resized dimensions which will usually be smaller but upsampling
         # resize factors could technically be provided
         if do_resize:
-            factors = self._conf.get('processor', {}).get('tile_resize', {}).get('factors', [1, 1, 1])
-            if len(factors) != 3 or not all([f > 0 for f in factors]):
-                raise ValueError(
-                    'Tile resize factors (`processor.tile_resize.factors` in config) must be 3 '
-                    'number list with values > 0 (found {})'.format(factors)
-                )
             nz, nh, nw = [round(v * float(f)) for v, f in zip((nz, nh, nw), factors)]
         return nz, nh, nw
 
@@ -356,11 +368,16 @@ class CytokitConfigV10(Config):
 
     @property
     def microscope_params(self):
+        ar, lr = self._conf['acquisition']['axial_resolution'], self._conf['acquisition']['lateral_resolution']
+        do_resize, factors = self._get_resize_info()
+        if do_resize:
+            # Rescale resolution by downsampling factors (e.g. if scale factors is .5, then pixel distance doubles)
+            ar, lr = ar * (1. / factors[0]), lr * (1. / factors[1])
         return MicroscopeParams(
             magnification=self._conf['acquisition']['magnification'],
             na=self._conf['acquisition']['numerical_aperture'],
-            res_axial_nm=self._conf['acquisition']['axial_resolution'],
-            res_lateral_nm=self._conf['acquisition']['lateral_resolution'],
+            res_axial_nm=ar,
+            res_lateral_nm=lr,
             objective_type=self._conf['acquisition']['objective_type'],
             em_wavelength_nm=self._conf['acquisition']['emission_wavelengths']
         )

@@ -101,7 +101,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
 
     def initialize(self):
 
-        if hasattr(self.cytometer_type, 'keys'):
+        if self.cytometer_type is not None and hasattr(self.cytometer_type, 'keys'):
             self.cytometer = cytokit_config.get_implementation_instance(
                 self.cytometer_type, 'Cytometer', config=self.config)
             self.cytometer.initialize()

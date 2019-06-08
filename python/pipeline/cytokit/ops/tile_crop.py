@@ -33,6 +33,10 @@ class CytokitTileCrop(CytokitOp):
 
     def _run(self, tile, **kwargs):
 
+        # Check to see if zero overlap configured and return immediately if so
+        if not self.config.overlap_x and not self.config.overlap_y:
+            return tile
+
         # Check to see if tile dimensions indicate that cropping is not possible and return immediately if so
         ih, iw = tile.shape[-2:]
         nw, nh = self.config.raw_tile_width, self.config.raw_tile_height

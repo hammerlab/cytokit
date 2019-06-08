@@ -122,7 +122,11 @@ class CoordinateFeatures(FeatureCalculator):
         return ['id', 'x', 'y', 'z']
 
     def get_feature_values(self, signals, labels, graph, props, z):
-        return [props.cell.label, props.cell.centroid[1], props.cell.centroid[0], z]
+        if len(props.cell.centroid) == 2:
+            assert np.isscalar(z), 'Z plane must be provided as single scalar value in 2D mode (not {})'.format(z)
+            return [props.cell.label, props.cell.centroid[1], props.cell.centroid[0], z]
+        else:
+            return [props.cell.label, props.cell.centroid[2], props.cell.centroid[1], props.cell.centroid[0]]
 
 
 class BorderFeatures(FeatureCalculator):

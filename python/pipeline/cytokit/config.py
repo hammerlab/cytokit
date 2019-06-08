@@ -229,7 +229,7 @@ class CytokitConfigV10(Config):
         return resize, factors
 
     def _get_crop_info(self):
-        return self._conf.get('processor', {}).get('args', {}).get('run_crop', False)
+        return self._conf.get('processor', {}).get('args', {}).get('run_crop', True)
 
     @property
     def tile_shape(self):

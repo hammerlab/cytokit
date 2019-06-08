@@ -46,19 +46,19 @@ class TestConfig(unittest.TestCase):
         oh, ow = conf.overlap_y, conf.overlap_x
         conf._conf['processor']['args']['run_crop'] = True
         conf._conf['processor']['args']['run_resize'] = True
-        conf._conf['processor']['tile_resize'] = dict(factors=[.5, .3, .1])
+        conf._conf['processor']['tile_resize'] = dict(factors=[.5, .3, .3])
 
         nz, nh, nw = conf.tile_shape
         self.assertEquals(nz, round(z * .5))
         self.assertEquals(nh, round(h * .3))
-        self.assertEquals(nw, round(w * .1))
+        self.assertEquals(nw, round(w * .3))
 
         conf._conf['processor']['args']['run_crop'] = False
         conf._conf['processor']['args']['run_resize'] = True
         nz, nh, nw = conf.tile_shape
         self.assertEquals(nz, round(z * .5))
         self.assertEquals(nh, round((h + oh) * .3))
-        self.assertEquals(nw, round((w + ow) * .1))
+        self.assertEquals(nw, round((w + ow) * .3))
 
         conf._conf['processor']['args']['run_crop'] = False
         conf._conf['processor']['args']['run_resize'] = False

@@ -30,12 +30,16 @@ def _load_experiment_config(data_dir, filename):
     return _load_config(data_dir, filename)
 
 
-def get_implementation_instance(object_config, name, **kwargs):
-    for k in ['module', 'class', 'args']:
+def get_implementation_class(object_config):
+    for k in ['module', 'class']:
         if k not in object_config:
-            raise ValueError('Custom {} implementations must contain key "{}"'.format(name, k))
-    args = {**kwargs, **object_config['args']}
-    return getattr(importlib.import_module(object_config['module']), object_config['class'])(**args)
+            raise ValueError('Custom component implementations must contain key "{}"'.format(name, k))
+    return getattr(importlib.import_module(object_config['module']), object_config['class'])
+
+
+def get_implementation_instance(object_config, cls, **kwargs):
+    args = {**kwargs, **object_config.get('args', {})}
+    return cls(**args)
 
 
 TileDims = namedtuple('TileDims', ['cycles', 'z', 'channels', 'height', 'width'])

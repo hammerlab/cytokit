@@ -62,8 +62,6 @@ class SpheroidCytometer20x(cytometer.Cytometer):
         img = morphology.binary_closing(img, selem=morphology.disk(8))
         img = ndi.morphology.binary_fill_holes(img)
         img = morphology.binary_opening(img, selem=morphology.disk(8))
-        # Not necessary with larger opening (min size = ~227 w/ 8 radius disk)
-        # img = morphology.remove_small_objects(img, min_size=256) 
         return img
     
     def segment(self, img, include_intermediate_results=False, **kwargs):

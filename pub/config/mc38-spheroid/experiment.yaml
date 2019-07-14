@@ -40,7 +40,6 @@ operator:
         - proc_DEAD
         - cyto_cell_boundary
         - cyto_cell_mask
-#        - cyto_gradient(0,2)
   - extract:
       name: bestz_segm
       channels:

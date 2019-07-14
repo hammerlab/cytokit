@@ -23,6 +23,8 @@ CHANNEL_COORDINATES = {
     'nucleus_boundary': (OBJECT_CYCLE, cytometer.CytometerBase.NUCLEUS_BOUNDARY_CHANNEL)
 }
 
+DEFAULT_CYTOMETER_TYPE = cytometer.Cytometer2D
+
 
 def get_channel_coordinates(channel):
     channel = channel.lower().strip()
@@ -100,15 +102,21 @@ class Cytometry2D(cytokit_op.CytokitOp):
         _validate_z_plane(self.z_plane)
 
     def initialize(self):
-
-        if self.cytometer_type is not None and hasattr(self.cytometer_type, 'keys'):
-            self.cytometer = cytokit_config.get_implementation_instance(
-                self.cytometer_type, 'Cytometer', config=self.config)
-            self.cytometer.initialize()
-            return self
-
-        if self.cytometer_type not in ['2D']:
-            raise ValueError('Cytometer type "{}" is not valid'.format(self.cytometer_type))
+        # Construct custom cytometer if a definition for one was provided
+        cytometer_class = DEFAULT_CYTOMETER_TYPE
+        if hasattr(self.cytometer_type, 'keys'):
+            cytometer_class = cytokit_config.get_implementation_class(self.cytometer_type)
+            # Skip default initialization if not an override of default implementation
+            if not issubclass(cytometer_class, DEFAULT_CYTOMETER_TYPE):
+                self.cytometer = cytokit_config.get_implementation_instance(
+                    self.cytometer_type, cytometer_class, config=self.config
+                )
+                self.cytometer.initialize()
+                return self
+        # Otherwise verify that type for default cytometer is valid (currently only 2D supported)
+        else:
+            if self.cytometer_type not in ['2D']:
+                raise ValueError('Cytometer type "{}" is not valid'.format(self.cytometer_type))
 
         # Set the Keras session to have the same TF configuration as other operations
         set_keras_session(self)
@@ -121,9 +129,10 @@ class Cytometry2D(cytokit_op.CytokitOp):
             self.input_shape, self.target_shape
         )
 
-        self.cytometer = cytometer.Cytometer2D(
-            input_shape=self.input_shape, target_shape=self.target_shape,
-            weights_path=weights_path, config=self.config)
+        self.cytometer = cytometer_class(
+                input_shape=self.input_shape, target_shape=self.target_shape,
+                weights_path=weights_path, config=self.config
+        )
         self.cytometer.initialize()
         return self
 
@@ -145,7 +154,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
         assert z_plane is not None, 'Z plane must be set'
         return z_plane
 
-    def _run(self, tile, z_plane=None, best_focus_z_plane=None):
+    def _run(self, tile, z_plane=None, best_focus_z_plane=None, tile_indices=None):
         z_plane = self._resolve_z_plane(z_plane, best_focus_z_plane)
         z_slice = slice(None) if z_plane == 'all' else slice(z_plane, z_plane + 1)
 
@@ -165,7 +174,10 @@ class Cytometry2D(cytokit_op.CytokitOp):
             img_memb = tile[memb_cycle, z_slice, memb_channel]
 
         # Fetch segmentation volume as ZCHW where C = 2 and C1 = cell and C2 = nucleus
-        img_seg = self.cytometer.segment(img_nuc, img_memb=img_memb, tile=tile, **self.segmentation_params)
+        img_seg = self.cytometer.segment(
+            img_nuc, img_memb=img_memb, z_plane=z_plane, tile=tile,
+            tile_indices=tile_indices, **self.segmentation_params
+        )
 
         # Validate results are 4D (ZCHW)
         assert img_seg.ndim == 4, 'Expecting 4D segmentation image but shape is {}'.format(img_seg.shape)
@@ -174,7 +186,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
             .format(tile.shape[1], img_seg.shape[0])
 
         # Segmentation results can have one z plane or as many as tile so depending on
-        # the z plane used to calculate segmentation, pad the result to necessary shape (if necessary)
+        # the z plane used to calculate segmentation, pad the result to required shape (if necessary)
         if img_seg.shape[0] != tile.shape[1]:
             shape = list(img_seg.shape)
             shape[0] = tile.shape[1]
@@ -208,7 +220,10 @@ class Cytometry2D(cytokit_op.CytokitOp):
 
         # Run cell cytometry calculations (results given as data frame)
         logger.debug('Running segmentation quantification')
-        stats = self.cytometer.quantify(tile, img_seg, **self.quantification_params)
+        stats = self.cytometer.quantify(
+            tile, img_seg, z_plane=z_plane,
+            tile_indices=tile_indices, **self.quantification_params
+        )
 
         # Add any statistics or transformations that require the experimental context
         stats = self.cytometer.augment(stats)
@@ -238,24 +253,4 @@ class Cytometry2D(cytokit_op.CytokitOp):
         stats_path = cytokit_io.get_cytometry_stats_path(region_index, tx, ty)
         cytokit_io.save_csv(osp.join(output_dir, stats_path), stats, index=False)
         return label_tile_path, stats_path
-
-
-# def _find_boundaries(img, as_binary=False):
-#     """Identify boundaries in labeled image volume
-#
-#     Args:
-#         img: A labeled 3D volume with shape (z, h, w)
-#         as_binary: Flag indicating whether to return binary boundary image or labeled boundaries
-#     """
-#     from skimage import segmentation
-#     assert img.ndim == 3, 'Expecting 3D volume but got image with shape {}'.format(img.shape)
-#
-#     # Find boundaries (per z-plane since find_boundaries is buggy in 3D)
-#     bg_value = img.min()
-#     res = np.stack([
-#         segmentation.find_boundaries(img[i], mode='inner', background=bg_value)
-#         for i in range(img.shape[0])
-#     ], axis=0)
-#
-#     return res if as_binary else res * img
 

@@ -79,8 +79,8 @@ acquisition:
   region_height: 9
   region_width: 7
   tile_height: 1008
-  tile_overlap_x: 576
-  tile_overlap_y: 432
+  tile_overlap_x: 0
+  tile_overlap_y: 0
   tile_width: 1344
   tiling_mode: snake
 operator:

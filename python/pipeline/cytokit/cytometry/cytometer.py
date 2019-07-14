@@ -790,7 +790,7 @@ class CytometerBase(object):
     @classmethod
     def quantify(cls, tile, img_seg, channel_names=None, cell_intensity=True, nucleus_intensity=False,
                  cell_graph=False, border_features=True, morphology_features=False,
-                 spot_count_channels=None, spot_count_params=None, mode='2D'):
+                 spot_count_channels=None, spot_count_params=None, mode='2D', **kwargs):
         _, nz, _, nh, nw = tile.shape
 
         assert img_seg.ndim == 4, \
@@ -851,7 +851,7 @@ class CytometerBase(object):
 
         # Apply appropriate quantification function based on mode (to either loop through z planes or use all together)
         fn = CytometerBase._quantify_2d if mode == '2D' else CytometerBase._quantify_3d
-        feature_values = fn(tile, img_seg, nz, feature_calculators, cell_graph=cell_graph)
+        feature_values = fn(tile, img_seg, nz, feature_calculators, cell_graph=cell_graph, **kwargs)
 
         return pd.DataFrame(feature_values, columns=feature_names)
 

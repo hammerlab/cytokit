@@ -1,5 +1,6 @@
 """Tiling scheme implementations"""
 
+
 class Tiling(object):
 
     def coordinates_from_index(self, index, w, h):

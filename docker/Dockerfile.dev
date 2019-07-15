@@ -16,6 +16,10 @@ RUN pip install --upgrade pip
 # OpenCV package dependencies and tk matplotlib backend
 RUN apt-get install -y libsm6 libxext6 libfontconfig1 libxrender1 python3-tk
 
+######################
+# Env Initialization #
+######################
+
 # Install conda and initialize primary environment
 RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.6.14-Linux-x86_64.sh -O ~/miniconda.sh && \
     /bin/bash ~/miniconda.sh -b -p /opt/conda && \
@@ -38,7 +42,8 @@ RUN pip --no-cache-dir install \
     opencv-python==3.4.3.18 \
     requests==2.20.1 \
     matplotlib==2.2.2 \
-    dask[distributed]==1.0.0 \
+    dask==1.0.0 \
+    distributed==1.28.1 \
     bokeh==1.0.1 \
     keras==2.2.4 \
     centrosome==1.1.5 \
@@ -48,18 +53,10 @@ RUN pip --no-cache-dir install \
     python-dotenv==0.10.3 \
     jupyterlab==1.0.2 \
     ipykernel==5.1.1 \
-    fcswrite \
-    tifffile \
-    fire \
-    seaborn
-
-# Install Dash and per their instructions, freezing specific versions
-# See: https://dash.plot.ly/getting-started
-RUN pip install dash==0.21.1  \
-    dash-renderer==0.13.0 \
-    dash-html-components==0.11.0 \
-    dash-core-components==0.23.0 \
-    plotly
+    fcswrite==0.4.3 \
+    tifffile==2019.7.2 \
+    fire==0.1.3 \
+    seaborn==0.9.0
 
 # Install Flowdec for deconvolution
 RUN cd $REPO_DIR && \
@@ -77,6 +74,30 @@ RUN mkdir -p $(python -m site --user-site) && \
     echo "$CYTOKIT_REPO_DIR/python/pipeline" > $(python -m site --user-site)/local.pth && \
     echo "$CYTOKIT_REPO_DIR/python/notebooks/src" >> $(python -m site --user-site)/local.pth && \
     echo "$CYTOKIT_REPO_DIR/python/applications" >> $(python -m site --user-site)/local.pth
+
+#############
+# Frontends #
+#############
+
+# Install Dash and per their instructions, freezing specific versions
+# See: https://dash.plot.ly/getting-started
+RUN pip install dash==0.21.1  \
+    dash-renderer==0.13.0 \
+    dash-html-components==0.11.0 \
+    dash-core-components==0.23.0 \
+    plotly
+# Install itkwidgets extension
+RUN mkdir $REPO_DIR/.nodeenv && \
+    cd $REPO_DIR/.nodeenv && \
+    pip install nodeenv==1.3.3 && \
+    nodeenv jupyterlab && \
+    . jupyterlab/bin/activate && \
+    pip install itkwidgets==0.17.0 && \
+    jupyter labextension install @jupyter-widgets/jupyterlab-manager itk-jupyter-widgets
+
+################
+# CellProfiler #
+################
 
 # Install CellProfiler
 RUN /bin/bash -c 'source /etc/profile.d/conda.sh && conda create -n cellprofiler python=2.7' && \
@@ -96,6 +117,11 @@ RUN cd $REPO_DIR/CellProfiler && \
 RUN /bin/bash -c 'source /etc/profile.d/conda.sh && conda activate cellprofiler && \
     pip install ipykernel==4.10.0 pyzmq==18.0.2 && \
     python -m ipykernel install --user --name cellprofiler --display-name "Python (CP)"'
+
+
+#########
+# Login #
+#########
 
 WORKDIR "/lab"
 

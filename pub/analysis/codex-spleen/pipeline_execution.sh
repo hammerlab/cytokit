@@ -7,18 +7,18 @@ do
     BASE_CONF=$CYTOKIT_REPO_DIR/pub/config/codex-spleen/experiment.yaml
     
     # Generate configurations for experiment variants
+    # v00: Process data as-is with CellProfiler quantification
+    # v01: Run with drift compensation and deconvolution (primarily for performance benchmarking)
     cytokit config editor --base-config-path=$BASE_CONF --output-dir=$DATA_DIR/output \
+    add analysis '{"cellprofiler_quantification": {"export_db": True, "export_csv": True}}' \
     save_variant v00/config reset \
     set processor.args.run_drift_comp True \
     set processor.args.run_deconvolution True \
     save_variant v01/config reset \
-    add analysis '{"cellprofiler_quantification": {"export_db":False}}' \
-    save_variant v02/config reset \
     exit
     
     # Run processing for each variant of this experiment
-    #for VARIANT in v00 v01
-    for VARIANT in v02
+    for VARIANT in v00 v01
     do
         OUTPUT_DIR=$DATA_DIR/output/$VARIANT
         CONFIG_DIR=$OUTPUT_DIR/config
@@ -39,8 +39,8 @@ do
         
         # Note here that the data dir for the processor command is equal to output dir
         echo "Running analysis"
-#         cytokit processor run_all --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR --output-dir=$OUTPUT_DIR
-#         cytokit operator run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
-#         cytokit analysis run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
+        cytokit processor run_all --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR --output-dir=$OUTPUT_DIR
+        cytokit operator run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
+        cytokit analysis run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
     done
 done

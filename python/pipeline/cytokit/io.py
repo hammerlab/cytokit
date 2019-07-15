@@ -146,7 +146,7 @@ def read_tile(file, return_metadata=False):
                 slice(None),
                 slice(None)
             ]
-            res = tif.asarray()[slices]
+            res = tif.asarray()[tuple(slices)]
 
             if return_metadata:
                 return res, _get_tif_metadata(tif, shape=res.shape)

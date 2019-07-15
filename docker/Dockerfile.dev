@@ -33,7 +33,7 @@ RUN pip install --upgrade pip
 
 RUN pip --no-cache-dir install \
     PyYAML==3.13 \
-    numpy==1.14.2 \
+    numpy==1.16.0 \
     scipy==1.0.1 \
     pandas==0.22.0 \
     tensorflow-gpu==1.8.0 \

@@ -2,7 +2,6 @@
 
 **Important:** This is intended for use in a CellProfiler-compatible python 2.7 environment
 """
-# This order is necessary
 import tifffile
 import numpy as np
 import os.path as osp
@@ -18,12 +17,12 @@ import logging
 import warnings
 logger = logging.getLogger(__name__)
 
+# The cellprofiler module maintains state related to javabridge so
+# in order to refer to it globally while managing that state locally,
+# this variable will be used as the module reference
 cp = None
 
-# Bury numpy warnings
-# np.seterr(all="ignore")
-
-
+DEFAULT_CONFIG_FILE = 'experiment.yaml'
 OBJECT_NAME_CELL = 'Cell'
 OBJECT_NAME_NUCLEUS = 'Nucleus'
 DEFAULT_CYTOMETRY_CHANNELS = {0: OBJECT_NAME_CELL, 1: OBJECT_NAME_NUCLEUS}
@@ -31,6 +30,9 @@ DEFAULT_OBJECT_NAMES = list(DEFAULT_CYTOMETRY_CHANNELS.values())
 
 
 def _load_config(path):
+    if not osp.isfile(path):
+        path = osp.join(path, DEFAULT_CONFIG_FILE)
+    logger.info('Loading experiment configuration from file "%s"', path)
     with open(path, 'r') as f:
         return yaml.load(f)
 
@@ -39,13 +41,29 @@ class QuantificationPipeline(object):
 
     def __init__(self, output_dir, channel_names,
                  object_names=DEFAULT_OBJECT_NAMES,
-                 export_spreadsheet=True, export_database=True):
+                 export_csv=True, export_db=True):
+        """Quantification pipeline model
+
+        This will construction a CP pipeline instance based on a provided number of channels (and a few other options)
+
+        Args:
+            output_dir: Directory in which results should be stored
+            channel_names: List of channel names expected to appear in image files
+            object_names: Names of cell and nuclei objects (defaults to "Cell" and "Nucleus")
+            export_csv: Export measurements as spreadsheet
+            export_db: Export measurements to SQLite DB (for CellProfiler Analyst)
+        """
         self.output_dir = output_dir
         self.channel_names = channel_names
         self.object_names = object_names
-        self.export_spreadsheet = export_spreadsheet
-        self.export_database = export_database
+        self.export_csv = export_csv
+        self.export_db = export_db
         self.module_ct = 0
+        self.pipeline = None
+
+    def reset(self):
+        self.module_ct = 0
+        self.pipeline = cp.pipeline.Pipeline()
 
     def get_images(self):
         m = cp.modules.images.Images()
@@ -54,6 +72,13 @@ class QuantificationPipeline(object):
 
     def get_metadata(self):
         m = cp.modules.metadata.Metadata()
+        m.set_enabled(True)
+        regex = u'^R(?P<Region>\\d+?)_X(?P<TileX>\\d+?)_Y(?P<TileY>\\d+?)_(?P<ImgType>\\w+?)_.*\\.tif'
+        m.extraction_methods[0].file_regexp.value = regex
+        # Set extraction method to "Extract from file/folder names"
+        m.extraction_methods[0].extraction_method.value = cp.modules.metadata.X_MANUAL_EXTRACTION
+        # Set source for choice above to "File name"
+        m.extraction_methods[0].source.value = cp.modules.metadata.XM_FILE_NAME
         return m
 
     def get_namesandtypes(self):
@@ -83,6 +108,24 @@ class QuantificationPipeline(object):
             i += 1
         return m
 
+    def get_measureobjectintensity(self):
+        m = cp.modules.measureobjectintensity.MeasureObjectIntensity()
+        for i, v in enumerate(self.object_names):
+            if i != 0:
+                m.add_object()
+            m.objects[i].name.value = v
+        for i, v in enumerate(self.channel_names):
+            if i != 0:
+                m.add_image()
+            m.images[i].name.value = v
+        return m
+
+    def get_measureobjectneighbors(self):
+        m = cp.modules.measureobjectneighbors.MeasureObjectNeighbors()
+        m.object_name.value = OBJECT_NAME_CELL
+        m.neighbors_name.value = OBJECT_NAME_CELL
+        return m
+
     def get_measureobjectsizeshape(self):
         m = cp.modules.measureobjectsizeshape.MeasureObjectSizeShape()
         m.object_groups[0].name.value = self.object_names[0]
@@ -104,34 +147,48 @@ class QuantificationPipeline(object):
 
     def get_exporttodatabase(self):
         m = cp.modules.exporttodatabase.ExportToDatabase()
+
+        # Export to SQLite
+        m.db_type.value = cp.modules.exporttodatabase.DB_SQLITE
         m.experiment_name.value = 'Exp'
-        m.table_prefix.value = 'exp_'
-        m.db_name.value = 'CPA'
-        m.save_cpa_properties.value = True
+        m.table_prefix.value = 'Exp_'
+        m.sqlite_file.value = 'CPA.db'
         m.location_object.value = OBJECT_NAME_CELL
+
+        # Set output options (custom directory in this case)
         m.directory.value = cp.preferences.ABSOLUTE_FOLDER_NAME
         m.directory.custom_path = self.output_dir
-        m.db_type.value = cp.modules.exporttodatabase.DB_SQLITE
+        m.save_cpa_properties.value = True
+
+        # Set "Overwrite without warning" to "Data and schema"
         m.allow_overwrite.value = cp.modules.exporttodatabase.OVERWRITE_ALL
+
+        # Use "One table per object type" and disable image level aggregations since multiplexed
+        # experiments have an awkwardly large number of channels, which often leads to "Too many columns"
+        # errors during the execution of this module
+        m.separate_object_tables.value = cp.modules.exporttodatabase.OT_PER_OBJECT
+        m.wants_agg_mean.value = False
+        m.wants_agg_median.value = False
         return m
 
     def add(self, m):
         self.module_ct += 1
         m.module_num = self.module_ct
-        pipeline.add_module(m)
+        self.pipeline.add_module(m)
 
     def create(self):
-        self.module_ct = 0
-        pipeline = cp.pipeline.Pipeline()
+        self.reset()
         self.add(self.get_images())
         self.add(self.get_metadata())
         self.add(self.get_namesandtypes())
         self.add(self.get_measureobjectsizeshape())
-        if self.export_spreadsheet:
+        self.add(self.get_measureobjectintensity())
+        self.add(self.get_measureobjectneighbors())
+        if self.export_csv:
             self.add(self.get_exporttospreadsheet())
-        if self.export_database:
+        if self.export_db:
             self.add(self.get_exporttodatabase())
-        return pipeline
+        return self.pipeline
 
 
 def load_image_filters(output_dir):
@@ -151,6 +208,7 @@ def load_image_filters(output_dir):
 
 
 def get_coordinates(filename):
+    # Assume coordinates present in file naming convention
     coords = re.findall('R(\d+)_X(\d+)_Y(\d+).tif', filename)
     if not coords:
         raise ValueError('Failed to extract coordinates from filename "' + filename + '"')
@@ -160,8 +218,7 @@ def get_coordinates(filename):
 
 def extract(filters, image_dir, channels=None):
     """Generate individual CP-compatible images from multidimensional tif files"""
-    #files = glob.glob(osp.join(image_dir, '*.tif'))
-    files = glob.glob(osp.join(image_dir, 'R*01_X*01_Y*01.tif'))
+    files = glob.glob(osp.join(image_dir, '*.tif'))
     if not files:
         raise ValueError('No images found in directory "{}"'.format(image_dir))
     for f in files:
@@ -202,10 +259,9 @@ def _filename(coords, typ, name):
 
 
 def run_extraction(output_dir, extraction_dir, expression_channels, cytometry_channels=DEFAULT_CYTOMETRY_CHANNELS):
-    if not osp.exists(extraction_dir):
-        os.makedirs(extraction_dir)
-
     filters = load_image_filters(output_dir)
+
+    logger.info('Extracting expression channel images')
     processor_image_dir = osp.join(output_dir, 'processor', 'tile')
     for channel_images in extract(filters, processor_image_dir, expression_channels):
         for file, channel, i, coords, img in channel_images:
@@ -214,6 +270,7 @@ def run_extraction(output_dir, extraction_dir, expression_channels, cytometry_ch
             logger.debug('Extracting expression image to: %s', path)
             tifffile.imsave(path, img)
 
+    logger.info('Extracting object images')
     cytometry_image_dir = osp.join(output_dir, 'cytometry', 'tile')
     for channel_images in extract(filters, cytometry_image_dir):
         for file, channel, i, coords, img in channel_images:
@@ -225,8 +282,14 @@ def run_extraction(output_dir, extraction_dir, expression_channels, cytometry_ch
             tifffile.imsave(path, img)
 
 
-def run_quantification(config_file, output_dir):
-    config = _load_config(config_file)
+def create_dirs(dirs):
+    for d in dirs:
+        if not osp.exists(d):
+            os.makedirs(d)
+
+
+def run_quantification(config_path, output_dir, export_db=True, export_csv=True, do_extraction=True):
+    config = _load_config(config_path)
     channels = config['acquisition']['channel_names']
     # num_regions = len(config['acquisition']['region_names'])
     # region_height = config['acquisition']['region_height']
@@ -236,14 +299,19 @@ def run_quantification(config_file, output_dir):
     cp_dir = osp.join(output_dir, 'cytometry', 'cellprofiler')
     cp_input_dir = osp.join(cp_dir, 'images')
     cp_output_dir = osp.join(cp_dir, 'results')
+    create_dirs([cp_dir, cp_input_dir, cp_output_dir])
 
     # Extract individual 2D images for each region+tile+channel combination (including cell/nuclei objects)
-    run_extraction(output_dir, cp_input_dir, channels)
+    # *This may have already been done so it can be skipped if unnecessary
+    if do_extraction:
+        run_extraction(output_dir, cp_input_dir, channels)
 
     # Define the pipeline modules
     pipeline = QuantificationPipeline(
         output_dir=cp_output_dir,
-        channel_names=channels
+        channel_names=channels,
+        export_csv=export_csv,
+        export_db=export_db
     )
     # Instantiate as CP pipeline instance
     pipeline = pipeline.create()
@@ -261,7 +329,7 @@ def run_quantification(config_file, output_dir):
 
     # Run the pipeline
     logger.info('Running CP pipeline')
-    measurements_path = osp.join(cp_output_dir, 'measurements.h5')
+    measurements_path = osp.join(cp_output_dir, 'Measurements.h5')
     pipeline.run(measurements_filename=measurements_path)
 
     logger.info('CP pipeline run complete; results at: %s', cp_output_dir)
@@ -281,9 +349,10 @@ def parse():
     )
     parser.add_option(
         "-c",
-        "--config-file",
-        dest="config_file",
-        help="Path to cytokit experiment configuration file (yaml)",
+        "--config-path",
+        dest="config_path",
+        help="Path to cytokit experiment configuration file "
+             "(if a directory, 'experiment.yaml' will be suffixed to the path)",
         default=None,
     )
     parser.add_option(
@@ -295,6 +364,31 @@ def parse():
         default=None,
     )
     parser.add_option(
+        "-d",
+        "--export-db",
+        dest="export_db",
+        choices=['true', 'false'],
+        help="Export measurements as SQLite DB",
+        default='true',
+    )
+    parser.add_option(
+        "-t",
+        "--export-csv",
+        dest="export_csv",
+        choices=['true', 'false'],
+        help="Export measurements as csv files",
+        default='true',
+    )
+    parser.add_option(
+        "-e",
+        "--do-extraction",
+        dest="do_extraction",
+        choices=['true', 'false'],
+        help="Extract individual images for CP pipeline "
+             "(this is necessary the first time, but not on repeat executions)",
+        default='true',
+    )
+    parser.add_option(
         "-l",
         "--log-level",
         dest="log_level",
@@ -304,10 +398,7 @@ def parse():
     return parser.parse_args()
 
 
-def main():
-    warnings.filterwarnings('ignore', category=FutureWarning)
-    warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered in true_divide')
-
+def start_cp():
     global cp
     import cellprofiler
     import cellprofiler.preferences
@@ -319,24 +410,41 @@ def main():
     import cellprofiler.modules
     cp = cellprofiler
 
+
+def stop_cp():
+    cp.utilities.cpjvm.cp_stop_vm()
+
+
+def main():
+    # Bury deprecation warnings (primarily related to numpy)
+    warnings.filterwarnings('ignore', category=FutureWarning)
+    # Hide division by zero warnings as they are expected for some statistics
+    warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered in true_divide')
+
     options = parse()[0]
 
-    logging.basicConfig(level=options.log_level)
+    # Convert log level from string int to int (or use as string)
+    try:
+        log_level = int(options.log_level)
+    except:
+        log_level = options.log_level
+    logging.basicConfig(level=log_level)
 
     if options.analysis.lower() not in ['quantification']:
         raise ValueError('Analysis type "{}" not valid'.format(options.analysis))
 
+    start_cp()
     try:
-        run_quantification(options.config_file, options.output_dir)
+        run_quantification(
+            options.config_path, options.output_dir,
+            export_csv=options.export_csv == 'true',
+            export_db=options.export_db == 'true',
+            do_extraction=options.do_extraction == 'true'
+        )
         return 0
-    except:
-        traceback.print_exc(file=sys.stderr)
-        return 1
     finally:
-        cellprofiler.utilities.cpjvm.cp_stop_vm()
+        stop_cp()
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
-

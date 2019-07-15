@@ -22,7 +22,7 @@ def apply_slice(img, crop_slice):
     """Apply cropping slice to trailing image dimensions"""
     if img.ndim < 2:
         raise ValueError('Expecting at least 2 dimensions in image (shape of given array = {})'.format(img.shape))
-    slices = [slice(None, None) for _ in range(img.ndim - 2)] + crop_slice
+    slices = tuple([slice(None, None) for _ in range(img.ndim - 2)] + crop_slice)
     return img[slices]
 
 

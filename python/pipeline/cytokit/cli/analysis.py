@@ -27,6 +27,11 @@ class Analysis(cli.DataCLI):
         core.aggregate_cytometry_statistics(
             self.data_dir, self.config, mode=mode, export_csv=export_csv, export_fcs=export_fcs, variant=variant)
 
+    def cellprofiler_quantification(self, mode='all', export_csv=True, export_db=False):
+        logging.info('Running CellProfiler image quantification pipeline')
+        core.aggregate_cytometry_statistics(
+            self.data_dir, self.config, mode=mode, export_csv=export_csv, export_fcs=export_fcs, variant=variant)
+
 
 if __name__ == '__main__':
     fire.Fire(Analysis)

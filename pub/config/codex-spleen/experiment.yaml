@@ -2,7 +2,7 @@ name: '20180101_codex_mouse_spleen_balbc_slide1'
 date: '2018-01-01 00:00:00'
 environment:
   path_formats:
-    proc_image: 'processor/tile/BALBc-1_X{x:02d}_Y{y:02d}.tif'
+    proc_image: 'processor/tile/R{region:02d}_X{x:02d}_Y{y:02d}.tif'
 acquisition:
   # Imaging was performed in Keyence BZ-X710 fluorescent microscope configured with 3 fluorescent channels
   # (FITC, Cy3, Cy5) and equipped with Nikon PlanFluor 40x NA 1.3 oil immersion lens

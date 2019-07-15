@@ -12,20 +12,26 @@ do
     set processor.args.run_drift_comp True \
     set processor.args.run_deconvolution True \
     save_variant v01/config reset \
+    add analysis '{"cellprofiler_quantification": {"export_db":False}}' \
+    save_variant v02/config reset \
     exit
     
     # Run processing for each variant of this experiment
-    for VARIANT in v00 v01
+    #for VARIANT in v00 v01
+    for VARIANT in v02
     do
         OUTPUT_DIR=$DATA_DIR/output/$VARIANT
         CONFIG_DIR=$OUTPUT_DIR/config
         echo "Processing experiment $EXPERIMENT (variant = $VARIANT, config = $CONFIG_DIR)"
         
-        # Symlink to downloaded tile images
+        # Symlink to downloaded tile images; Typically tiles would not already have been
+        # assembled from individual channel images but as this was already done in the data
+        # shared for the CODEX publication, the resulting images can be used as-is
         echo "Creating symlinks from raw data to $OUTPUT_DIR/processor/tile"
         mkdir -p $OUTPUT_DIR/processor/tile
         for f in `ls $DATA_DIR/raw/*.tif`; do
-            LINK_PATH=$OUTPUT_DIR/processor/tile/$(basename $f)
+            FILENAME=`basename $f | sed 's/BALBc-1/R01/g'`
+            LINK_PATH=$OUTPUT_DIR/processor/tile/$FILENAME
             if [ ! -e "$LINK_PATH" ]; then
                 ln -s $f $LINK_PATH
             fi
@@ -33,8 +39,8 @@ do
         
         # Note here that the data dir for the processor command is equal to output dir
         echo "Running analysis"
-        cytokit processor run_all --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR --output-dir=$OUTPUT_DIR
-        cytokit operator run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
-        cytokit analysis run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
+#         cytokit processor run_all --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR --output-dir=$OUTPUT_DIR
+#         cytokit operator run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
+#         cytokit analysis run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
     done
 done

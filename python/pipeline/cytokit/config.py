@@ -33,7 +33,7 @@ def _load_experiment_config(data_dir, filename):
 def get_implementation_class(object_config):
     for k in ['module', 'class']:
         if k not in object_config:
-            raise ValueError('Custom component implementations must contain key "{}"'.format(name, k))
+            raise ValueError('Custom component implementations must contain key "{}"'.format(k))
     return getattr(importlib.import_module(object_config['module']), object_config['class'])
 
 

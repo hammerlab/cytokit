@@ -37,7 +37,7 @@ RUN pip --no-cache-dir install \
     scipy==1.0.1 \
     pandas==0.22.0 \
     tensorflow-gpu==1.8.0 \
-    scikit-image==0.14.0 \
+    scikit-image==0.14.2 \
     scikit-learn==0.20.1 \
     opencv-python==3.4.3.18 \
     requests==2.20.1 \
@@ -112,7 +112,7 @@ RUN cd $REPO_DIR && \
 # and the numpy>=1.17.x drops support for python 2 (causing errors in the CP install if not set to <1.17 first)
 RUN cd $REPO_DIR/CellProfiler && \
     /bin/bash -c 'source /etc/profile.d/conda.sh && conda activate cellprofiler && \
-    pip install numpy==1.16.4 && pip install -e .'
+    pip install numpy==1.16.4 PyYAML==3.13 tifffile==2019.7.2 && pip install -e .'
 # Install CP kernel for jupyter (the pinned versions are necessary to avoid pyzmq errors for new kernel)
 RUN /bin/bash -c 'source /etc/profile.d/conda.sh && conda activate cellprofiler && \
     pip install ipykernel==4.10.0 pyzmq==18.0.2 && \

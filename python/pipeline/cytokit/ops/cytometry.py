@@ -234,23 +234,28 @@ class Cytometry2D(cytokit_op.CytokitOp):
 
         return tile, (img_seg, stats)
 
-    def save(self, tile_indices, output_dir, data):
+    def save(self, tile_indices, output_dir, data, compression=6):
         region_index, tile_index, tx, ty = tile_indices
         img_label, stats = data
 
-        # Save label volumes if present
+        # Save label volumes if present (use compression as these are often highly redundant)
         label_tile_path = None
         if img_label is not None:
             label_tile_path = cytokit_io.get_cytometry_image_path(region_index, tx, ty)
-            cytokit_io.save_tile(osp.join(output_dir, label_tile_path), img_label, config=self.config)
+            cytokit_io.save_tile(osp.join(output_dir, label_tile_path), img_label,
+                                 config=self.config, compress=compression)
 
-        # Append useful metadata to cytometry stats (align these names to those used in config.TileDims)
-        # and export as csv
-        stats.insert(0, 'tile_y', ty)
-        stats.insert(0, 'tile_x', tx)
-        stats.insert(0, 'tile_index', tile_index)
-        stats.insert(0, 'region_index', region_index)
-        stats_path = cytokit_io.get_cytometry_stats_path(region_index, tx, ty)
-        cytokit_io.save_csv(osp.join(output_dir, stats_path), stats, index=False)
+        # Save statistics if present
+        stats_path = None
+        if stats is not None:
+            # Append useful metadata to cytometry stats (align these names to those used in config.TileDims)
+            # and export as csv
+            stats.insert(0, 'tile_y', ty)
+            stats.insert(0, 'tile_x', tx)
+            stats.insert(0, 'tile_index', tile_index)
+            stats.insert(0, 'region_index', region_index)
+            stats_path = cytokit_io.get_cytometry_stats_path(region_index, tx, ty)
+            cytokit_io.save_csv(osp.join(output_dir, stats_path), stats, index=False)
+
         return label_tile_path, stats_path
 

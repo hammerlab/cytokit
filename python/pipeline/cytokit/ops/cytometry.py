@@ -146,7 +146,10 @@ class Cytometry2D(cytokit_op.CytokitOp):
         _validate_z_plane(z_plane)
 
         if z_plane == 'best' and best_focus_z_plane is None:
-            raise ValueError('Best focus plane must be specified when running cytometry for best z planes')
+            raise ValueError(
+                'Best focus plane must be specified when running cytometry for best z planes '
+                '(set `run_best_focus: true` in processor.args of config)'
+            )
 
         if z_plane == 'best':
             z_plane = best_focus_z_plane

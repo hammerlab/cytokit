@@ -59,7 +59,7 @@ def crop_around_center(img, shape):
 
     crop_offset = (imgs - ts) // 2
     assert np.all(crop_offset >= 0)
-    return img[[slice(start, start + length) for start, length in list(zip(crop_offset, shape))]]
+    return img[tuple([slice(start, start + length) for start, length in list(zip(crop_offset, shape))])]
 
 
 def resize_image_with_crop_or_pad(img, shape, **kwargs):

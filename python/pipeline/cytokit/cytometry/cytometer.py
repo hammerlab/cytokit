@@ -481,6 +481,7 @@ class SpotFeatures(FeatureCalculator):
                 continue
 
             # Create a binary nucleus image within the cell image bounding box
+            # pylint: disable=E1137
             nuc_image = np.zeros_like(props.cell.image, dtype=bool)
             nuc_image[props.nucleus.coords[:, 0] - min_row, props.nucleus.coords[:, 1] - min_col] = True
 
@@ -488,6 +489,7 @@ class SpotFeatures(FeatureCalculator):
             metrics = []
             for p in ps:
                 area, perimeter = p.area, p.perimeter
+                # pylint: disable=E1126
                 nuc_area = nuc_image[p.coords[:, 0], p.coords[:, 1]].sum()
                 circularity = cytokit_math.circularity(area, perimeter)
                 coverage = np.clip(area / props.cell.area, 0, 1)
@@ -495,16 +497,6 @@ class SpotFeatures(FeatureCalculator):
 
             for i in range(len(self.METRICS)):
                 res.append(','.join([str(m[i]) for m in metrics]))
-
-            # Debugging single cell images
-            # from skimage import io as skio
-            # label = props.cell.label
-            # print('Cell {}: {}'.format(label, metrics))
-            # skio.imsave('/lab/data/cellimages/{:05d}_extract.png'.format(label), image.astype(signals.dtype))
-            # skio.imsave('/lab/data/cellimages/{:05d}_cell_binary.png'.format(label), props.cell.image.astype(np.uint8) * 255)
-            # skio.imsave('/lab/data/cellimages/{:05d}_nucleus_binary.png'.format(label), nuc_image.astype(np.uint8) * 255)
-            # skio.imsave('/lab/data/cellimages/{:05d}_threshold_ct{}.png'.format(label, len(ps)), thresh_image.astype(np.uint8) * 255)
-
         return res
 
 

@@ -7,10 +7,10 @@ do
     BASE_CONF=$CYTOKIT_REPO_DIR/pub/config/codex-spleen/experiment.yaml
     
     # Generate configurations for experiment variants
-    # v00: Process data as-is with CellProfiler quantification
+    # v00: Process data as-is with CellProfiler quantification (and DB export for CPA)
     # v01: Run with drift compensation and deconvolution (primarily for performance benchmarking)
     cytokit config editor --base-config-path=$BASE_CONF --output-dir=$DATA_DIR/output \
-    add analysis '{"cellprofiler_quantification": {"export_db": True, "export_csv": True}}' \
+    add analysis '{"cellprofiler_quantification": {"export_db": True, "export_csv": True, "export_db_objects_separately": True}}' \
     save_variant v00/config reset \
     set processor.args.run_drift_comp True \
     set processor.args.run_deconvolution True \

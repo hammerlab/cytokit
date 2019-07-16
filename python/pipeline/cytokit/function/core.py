@@ -34,14 +34,18 @@ def aggregate_cytometry_statistics(output_dir, config, mode='all', export_csv=Tr
         import fcswrite
         nonalnum = '[^0-9a-zA-Z]+'
 
-        # For FCS exports, save only integer and floating point values and replace any non-alphanumeric
-        # column name characters with underscores
-        res_fcs = res.select_dtypes(['int', 'float']).rename(columns=lambda c: re.sub(nonalnum, '_', c))
         fcs_path = osp.join(output_dir, cytokit_io.get_cytometry_agg_path(ext('fcs')))
-        if not osp.exists(osp.dirname(fcs_path)):
-            os.makedirs(osp.dirname(fcs_path), exist_ok=True)
-        fcswrite.write_fcs(filename=fcs_path, chn_names=res_fcs.columns.tolist(), data=res_fcs.values)
-        logger.info('Saved cytometry aggregation results to fcs at "{}"'.format(fcs_path))
+        if len(res) > 0:
+            # For FCS exports, save only integer and floating point values and replace any non-alphanumeric
+            # column name characters with underscores
+            res_fcs = res.select_dtypes(['int', 'float']).rename(columns=lambda c: re.sub(nonalnum, '_', c))
+            if not osp.exists(osp.dirname(fcs_path)):
+                os.makedirs(osp.dirname(fcs_path), exist_ok=True)
+            fcswrite.write_fcs(filename=fcs_path, chn_names=res_fcs.columns.tolist(), data=res_fcs.values)
+            logger.info('Saved cytometry aggregation results to fcs at "{}"'.format(fcs_path))
+        else:
+            # fcswrite fails on writing empty datasets so log a warning instead
+            logger.warning('Skipping FCS export because no objects were detected')
     return csv_path, fcs_path
 
 
@@ -64,7 +68,7 @@ def run_nb(nb_name, nb_output_path, nb_params):
 # Montage Functions #
 #####################
 
-def create_montage(output_dir, config, extract, name, region_indexes, prep_fn=None):
+def create_montage(output_dir, config, extract, name, region_indexes, prep_fn=None, compress=6):
     from cytokit.utils import ij_utils
 
     # Loop through regions and generate a montage for each, skipping any (with a warning) that
@@ -90,7 +94,10 @@ def create_montage(output_dir, config, extract, name, region_indexes, prep_fn=No
         path = osp.join(output_dir, cytokit_io.get_montage_image_path(ireg, name))
         logger.info('Saving montage to file "%s"', path)
         tags = [] if labels is None else ij_utils.get_slice_label_tags(labels)
-        cytokit_io.save_tile(path, reg_img_montage, config=config, infer_labels=False, extratags=tags)
+        cytokit_io.save_tile(
+            path, reg_img_montage, config=config,
+            infer_labels=False, extratags=tags, compress=compress
+        )
     logger.info('Montage generation complete; results saved to "%s"', None if path is None else osp.dirname(path))
 
 

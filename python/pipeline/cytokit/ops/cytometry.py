@@ -237,7 +237,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
 
         return tile, (img_seg, stats)
 
-    def save(self, tile_indices, output_dir, data, compression=6):
+    def save(self, tile_indices, output_dir, data, compress=6):
         region_index, tile_index, tx, ty = tile_indices
         img_label, stats = data
 
@@ -246,7 +246,7 @@ class Cytometry2D(cytokit_op.CytokitOp):
         if img_label is not None:
             label_tile_path = cytokit_io.get_cytometry_image_path(region_index, tx, ty)
             cytokit_io.save_tile(osp.join(output_dir, label_tile_path), img_label,
-                                 config=self.config, compress=compression)
+                                 config=self.config, compress=compress)
 
         # Save statistics if present
         stats_path = None

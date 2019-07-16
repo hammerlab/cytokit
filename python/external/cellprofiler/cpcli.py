@@ -41,7 +41,7 @@ class QuantificationPipeline(object):
 
     def __init__(self, output_dir, channel_names,
                  object_names=DEFAULT_OBJECT_NAMES,
-                 export_csv=True, export_db=True):
+                 export_csv=True, export_db=True, export_db_objects_separately=False):
         """Quantification pipeline model
 
         This will construction a CP pipeline instance based on a provided number of channels (and a few other options)
@@ -52,12 +52,19 @@ class QuantificationPipeline(object):
             object_names: Names of cell and nuclei objects (defaults to "Cell" and "Nucleus")
             export_csv: Export measurements as spreadsheet
             export_db: Export measurements to SQLite DB (for CellProfiler Analyst)
+            export_db_objects_separately: Determines whether or not a single object table is created or if
+                multiple tables are created for each object type (i.e. Cells and Nuclei); False is generally
+                better for CPA analysis as more data is available but with large multiplexed experiments,
+                this means that only half as many channels can be supported before hitting CP "max cols exceeded"
+                errors -- essentially this should be left false until that error is hit in which case it can
+                be set to true with the knowledge that CPA will only have the context of one object at a time
         """
         self.output_dir = output_dir
         self.channel_names = channel_names
         self.object_names = object_names
         self.export_csv = export_csv
         self.export_db = export_db
+        self.export_db_objects_separately = export_db_objects_separately
         self.module_ct = 0
         self.pipeline = None
 
@@ -72,7 +79,7 @@ class QuantificationPipeline(object):
 
     def get_metadata(self):
         m = cp.modules.metadata.Metadata()
-        m.set_enabled(True)
+        m.wants_metadata.value = True
         regex = u'^R(?P<Region>\\d+?)_X(?P<TileX>\\d+?)_Y(?P<TileY>\\d+?)_(?P<ImgType>\\w+?)_.*\\.tif'
         m.extraction_methods[0].file_regexp.value = regex
         # Set extraction method to "Extract from file/folder names"
@@ -163,10 +170,13 @@ class QuantificationPipeline(object):
         # Set "Overwrite without warning" to "Data and schema"
         m.allow_overwrite.value = cp.modules.exporttodatabase.OVERWRITE_ALL
 
-        # Use "One table per object type" and disable image level aggregations since multiplexed
-        # experiments have an awkwardly large number of channels, which often leads to "Too many columns"
-        # errors during the execution of this module
-        m.separate_object_tables.value = cp.modules.exporttodatabase.OT_PER_OBJECT
+        # Use "One table per object type" or "Single object table" and disable image level aggregations
+        # since multiplexed experiments have an awkwardly large number of channels, which often leads
+        # to "Too many columns" errors during the execution of this module
+        if self.export_db_objects_separately:
+            m.separate_object_tables.value = cp.modules.exporttodatabase.OT_PER_OBJECT
+        else:
+            m.separate_object_tables.value = cp.modules.exporttodatabase.OT_COMBINE
         m.wants_agg_mean.value = False
         m.wants_agg_median.value = False
         return m
@@ -191,6 +201,12 @@ class QuantificationPipeline(object):
         return self.pipeline
 
 
+def _get_filter(r):
+    def fn(img):
+        return img[:, (r['best_z'],)]
+    return fn
+
+
 def load_image_filters(output_dir):
     """Build per-tile dimension filters for extraction (currently based on focal plane selection)"""
     path = osp.join(output_dir, 'processor', 'data.json')
@@ -202,7 +218,7 @@ def load_image_filters(output_dir):
             '`run_best_focus: True` as this is necessary to provide 2D image inputs to CellProfiler')
     return {
         # Return 5D tile image filter for each tile
-        (r['region_index'], r['tile_x'], r['tile_y']): lambda img: img[:, (r['best_z'],)]
+        (r['region_index'], r['tile_x'], r['tile_y']): _get_filter(r)
         for r in pd['focal_plane_selector']
     }
 
@@ -216,17 +232,41 @@ def get_coordinates(filename):
     return tuple([int(c) - 1 for c in coords[0]])
 
 
+def read_tile(file):
+    """Read 5D tif that may have been with squeezed dimensions"""
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            'ignore', category=UserWarning,
+            message='unpack: string size must be a multiple of element size'
+        )
+        warnings.filterwarnings(
+            'ignore', category=RuntimeWarning,
+            message='py_decodelzw encountered unexpected end of stream'
+        )
+        with tifffile.TiffFile(file) as tif:
+            tags = dict(tif.imagej_metadata)
+            if 'axes' not in tags:
+                raise ValueError('ImageJ tags do not contain "axes" property (file = {}, tags = {})'.format(file, tags))
+            slices = [
+                slice(None) if 'frames' in tags else None,
+                slice(None) if 'slices' in tags else None,
+                slice(None) if 'channels' in tags else None,
+                slice(None),
+                slice(None)
+            ]
+            return tif.asarray()[tuple(slices)]
+
+
 def extract(filters, image_dir, channels=None):
     """Generate individual CP-compatible images from multidimensional tif files"""
     files = glob.glob(osp.join(image_dir, '*.tif'))
     if not files:
         raise ValueError('No images found in directory "{}"'.format(image_dir))
     for f in files:
-
         # Read image as (cycles, z, channels, y, x) and extract region/tile coordinates
-        img = tifffile.imread(f)
+        img = read_tile(f)
         if img.ndim != 5:
-            raise ValueError('Expecting 5D tile image, got shape {}'.format(img.shape))
+            raise ValueError('Expecting 5D tile image, got shape {} (path = {})'.format(img.shape, f))
         coords = get_coordinates(osp.basename(f))
 
         # Extract 2D images from 5D tile
@@ -288,7 +328,9 @@ def create_dirs(dirs):
             os.makedirs(d)
 
 
-def run_quantification(config_path, output_dir, export_db=True, export_csv=True, do_extraction=True):
+def run_quantification(config_path, output_dir,
+                       export_db=True, export_db_objects_separately=False,
+                       export_csv=True, do_extraction=True):
     config = _load_config(config_path)
     channels = config['acquisition']['channel_names']
     # num_regions = len(config['acquisition']['region_names'])
@@ -311,7 +353,8 @@ def run_quantification(config_path, output_dir, export_db=True, export_csv=True,
         output_dir=cp_output_dir,
         channel_names=channels,
         export_csv=export_csv,
-        export_db=export_db
+        export_db=export_db,
+        export_db_objects_separately=export_db_objects_separately
     )
     # Instantiate as CP pipeline instance
     pipeline = pipeline.create()
@@ -370,6 +413,15 @@ def parse():
         choices=['true', 'false'],
         help="Export measurements as SQLite DB",
         default='true',
+    )
+    parser.add_option(
+        "-s",
+        "--export-db-objects-separately",
+        dest="export_db_objects_separately",
+        choices=['true', 'false'],
+        help="Create a separate DB table for each object type (Cell and Nucleus) or one single table with both "
+             "(false is better here unless max col errors occur, in which case true is necessary)",
+        default='false',
     )
     parser.add_option(
         "-t",
@@ -439,7 +491,8 @@ def main():
             options.config_path, options.output_dir,
             export_csv=options.export_csv == 'true',
             export_db=options.export_db == 'true',
-            do_extraction=options.do_extraction == 'true'
+            do_extraction=options.do_extraction == 'true',
+            export_db_objects_separately=options.export_db_objects_separately == 'true'
         )
         return 0
     finally:

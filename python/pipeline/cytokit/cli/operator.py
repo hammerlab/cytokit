@@ -206,7 +206,7 @@ class Operator(cli.DataCLI):
 
         logging.info('Extraction complete (results saved to %s)', osp.dirname(extract_path) if extract_path else None)
 
-    def montage(self, name, extract_name, region_indexes=None, crop=None, scale=None):
+    def montage(self, name, extract_name, region_indexes=None, crop=None, scale=None, compress=0):
         """Create a montage of extracted tiles
 
         Args:
@@ -224,6 +224,7 @@ class Operator(cli.DataCLI):
                 for generating more reasonably sized montage subsets over large datasets)
             scale: Either None (default) or a float in (0, 1] used to define scale factor for XY dimensions (note
                 that if this is supplied in addition to cropping, it is applied afterwards)
+            compress: Compression level (default 0 (disabled), higher means more compression, must be between 0 and 9)
         """
         logging.info('Creating montage "%s" from extraction "%s"', name, extract_name)
         region_indexes = cli.resolve_index_list_arg(region_indexes, zero_based=True)
@@ -241,7 +242,10 @@ class Operator(cli.DataCLI):
                     ), (2, 3, 4, 0, 1)
                 ).astype(tile.dtype)
             return tile
-        core.create_montage(self.data_dir, self.config, extract_name, name, region_indexes, prep_fn=prep_fn)
+        core.create_montage(
+            self.data_dir, self.config, extract_name, name,
+            region_indexes, prep_fn=prep_fn, compress=compress
+        )
 
 
 if __name__ == '__main__':

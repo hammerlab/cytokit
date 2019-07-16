@@ -39,7 +39,9 @@ def aggregate(config, output_dir):
         tile_coord = r['tile_x'], r['tile_y']
         tile_point = r['x'], r['y']
         return config.get_region_point_coordinates(tile_coord, tile_point)
-    reg_coords = df[['tile_x', 'tile_y', 'x', 'y']].apply(get_region_point_coords, axis=1)
+    reg_coords = []
+    if len(df) > 0:
+        reg_coords = df[['tile_x', 'tile_y', 'x', 'y']].apply(get_region_point_coords, axis=1)
 
     # Add region / global coordinates as separate fields
     df.insert(id_idx, 'ry', [c[1] for c in reg_coords])

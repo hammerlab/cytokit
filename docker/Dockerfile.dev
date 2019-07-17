@@ -3,6 +3,7 @@ ARG FLOWDEC_REPO_URL="https://github.com/hammerlab/flowdec.git"
 ARG SIM_DIR=/lab/sim
 ARG REPO_DIR=/lab/repos
 ARG DATA_DIR=/lab/data
+ARG APPS_DIR=/lab/apps
 ARG CYTOKIT_REPO_DIR=$REPO_DIR/cytokit
 
 ENV LC_ALL=C.UTF-8
@@ -119,6 +120,17 @@ RUN /bin/bash -c 'source /etc/profile.d/conda.sh && conda activate cellprofiler 
     python -m ipykernel install --user --name cellprofiler --display-name "Python (CP)"'
 
 
+###########
+# Ilastik #
+###########
+
+# Install Ilastik
+RUN mkdir $APPS_DIR && \
+    cd $APPS_DIR && \
+    wget -nv http://files.ilastik.org/ilastik-1.3.2-Linux.tar.bz2 && \
+    tar xjf ilastik-1.3.2-Linux.tar.bz2 && \
+    ln -s ilastik-1.3.2-Linux ilastik
+
 #########
 # Login #
 #########
@@ -127,9 +139,15 @@ WORKDIR "/lab"
 
 ENV CYTOKIT_SIM_DIR $SIM_DIR
 ENV CYTOKIT_DATA_DIR $DATA_DIR
+ENV CYTOKIT_APPS_DIR $APPS_DIR
 ENV CYTOKIT_REPO_DIR $CYTOKIT_REPO_DIR
+ENV ILASTIK_HOME $APPS_DIR/ilastik
 ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64/jre
 ENV SHELL /bin/bash
+
+# Set this to ensure that offline scripts run with the same MPL backend as notebooks, as this
+# seems to be the only one that does not require installing extra packages
+ENV MPLBACKEND nbAgg
 
 # Eliminate these warnings globally: FutureWarning: Conversion of the second argument of issubdtype from
 # `float` to `np.floating` is deprecated. In future, it will be treated as `np.float64 == np.dtype(float).type`

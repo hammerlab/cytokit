@@ -123,8 +123,11 @@ def read_tile(file, return_metadata=False):
     """
     # The "imagej_metadata" attribute looks like this for a 5D image with no unit-length dimensions
     # and original shape cycles=2, z=25, channels=2:
-    # {'ImageJ': '1.11a', 'axes': 'TZCYX', 'channels': 2, 'frames': 2, 'hyperstack': True,
-    # 'images': 100, 'mode': 'grayscale', 'slices': 25}
+    # {
+    #   'ImageJ': '1.11a', 'axes': 'TZCYX', 'channels': 2, 'frames': 2,
+    #   'hyperstack': True, 'images': 100,
+    #   'mode': 'grayscale', 'slices': 25
+    # }
     # However, if a unit-length dimension was dropped it simply does not show up in this dict
     with warnings.catch_warnings():
         _set_tiff_warning_filters()
@@ -147,6 +150,12 @@ def read_tile(file, return_metadata=False):
                 slice(None)
             ]
             res = tif.asarray()[tuple(slices)]
+
+            if res.ndim != 5:
+                raise ValueError(
+                    'Expected 5 dimensions in image at "{}" but found {} (shape = {})'
+                    .format(file, res.ndim, res.shape)
+                )
 
             if return_metadata:
                 return res, _get_tif_metadata(tif, shape=res.shape)

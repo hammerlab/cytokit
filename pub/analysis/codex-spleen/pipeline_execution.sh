@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # bash -e /lab/repos/cytokit/pub/analysis/codex-spleen/pipeline_execution.sh
 
+# Ignore warnings relating to how the CODEX tif files were originally saved
+export PYTHONWARNINGS='ignore::FutureWarning:h5py,ignore:ImageJ tags do not contain "axes" property:UserWarning:__main__'
+
 for EXPERIMENT in "20180101_codex_mouse_spleen_balbc_slide1"
 do
     DATA_DIR=$CYTOKIT_DATA_DIR/20180101_codex_spleen/$EXPERIMENT
@@ -18,7 +21,8 @@ do
     exit
     
     # Run processing for each variant of this experiment
-    for VARIANT in v00 v01
+    #for VARIANT in v00 v01
+    for VARIANT in v00
     do
         OUTPUT_DIR=$DATA_DIR/output/$VARIANT
         CONFIG_DIR=$OUTPUT_DIR/config
@@ -39,8 +43,8 @@ do
         
         # Note here that the data dir for the processor command is equal to output dir
         echo "Running analysis"
-        cytokit processor run_all --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR --output-dir=$OUTPUT_DIR
-        cytokit operator run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
+#         cytokit processor run_all --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR --output-dir=$OUTPUT_DIR
+#         cytokit operator run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
         cytokit analysis run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
     done
 done

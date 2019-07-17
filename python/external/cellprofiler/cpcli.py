@@ -233,7 +233,7 @@ def get_coordinates(filename):
 
 
 def read_tile(file):
-    """Read 5D tif that may have been with squeezed dimensions"""
+    """Read 5D tif that may have been saved with squeezed dimensions"""
     with warnings.catch_warnings():
         warnings.filterwarnings(
             'ignore', category=UserWarning,
@@ -246,7 +246,14 @@ def read_tile(file):
         with tifffile.TiffFile(file) as tif:
             tags = dict(tif.imagej_metadata)
             if 'axes' not in tags:
-                raise ValueError('ImageJ tags do not contain "axes" property (file = {}, tags = {})'.format(file, tags))
+                warnings.warn('ImageJ tags do not contain "axes" property (file = {}, tags = {})'.format(file, tags))
+            else:
+                if tags['axes'] != 'TZCYX':
+                    warnings.warn(
+                        'Image has tags indicating that it was not saved in TZCYX format.  '
+                        'The file should have been saved with this property explicitly set and further '
+                        'processing of it may be unsafe (file = {})'.format(file)
+                    )
             slices = [
                 slice(None) if 'frames' in tags else None,
                 slice(None) if 'slices' in tags else None,
@@ -254,7 +261,14 @@ def read_tile(file):
                 slice(None),
                 slice(None)
             ]
-            return tif.asarray()[tuple(slices)]
+            res = tif.asarray()[tuple(slices)]
+
+            if res.ndim != 5:
+                raise ValueError(
+                    'Expected 5 dimensions in image at "{}" but found {} (shape = {})'
+                    .format(file, res.ndim, res.shape)
+                )
+            return res
 
 
 def extract(filters, image_dir, channels=None):

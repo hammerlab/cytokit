@@ -126,6 +126,8 @@ operator:
   - montage: {name: cy5, extract_name: cy5}
 analysis:
   - aggregate_cytometry_statistics: {mode: best_z_plane}
+  # Uncomment to produce CP exports by default
+  # - cellprofiler_quantification: {export_csv: true, export_db: true, export_db_objects_separately: true}
 processor:
   args:
     gpus: [0,1]

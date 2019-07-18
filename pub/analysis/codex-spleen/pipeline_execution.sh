@@ -21,8 +21,7 @@ do
     exit
     
     # Run processing for each variant of this experiment
-    #for VARIANT in v00 v01
-    for VARIANT in v00
+    for VARIANT in v00 v01
     do
         OUTPUT_DIR=$DATA_DIR/output/$VARIANT
         CONFIG_DIR=$OUTPUT_DIR/config
@@ -43,8 +42,8 @@ do
         
         # Note here that the data dir for the processor command is equal to output dir
         echo "Running analysis"
-#         cytokit processor run_all --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR --output-dir=$OUTPUT_DIR
-#         cytokit operator run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
+        cytokit processor run_all --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR --output-dir=$OUTPUT_DIR
+        cytokit operator run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
         cytokit analysis run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
     done
 done

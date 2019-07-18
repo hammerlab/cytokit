@@ -30,6 +30,7 @@ DEFAULT_OBJECT_NAMES = list(DEFAULT_CYTOMETRY_CHANNELS.values())
 
 
 def _load_config(path):
+    """Load Cytokit experiment configuration"""
     if not osp.isfile(path):
         path = osp.join(path, DEFAULT_CONFIG_FILE)
     logger.info('Loading experiment configuration from file "%s"', path)

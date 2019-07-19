@@ -11,7 +11,7 @@ and visualization UIs (either Cytokit Explorer or CellProfiler Analyst).
 
 Cytokit runs in a Python 3 environment but also comes (via Docker) with CellProfiler (Python 2) and Ilastik installations.
 
-For more information, see: [Cytokit: A single-cell analysis toolkit for high dimensional fluorescent microscopy imaging](https://www.biorxiv.org/content/early/2018/11/04/460980)
+For more information, see: [Cytokit: A single-cell analysis toolkit for high dimensional fluorescent microscopy imaging](https://www.biorxiv.org/content/10.1101/460980v3)
   
   
 ### Quick Start

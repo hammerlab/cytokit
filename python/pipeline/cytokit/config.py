@@ -50,10 +50,10 @@ MicroscopeParams = namedtuple(
 
 class Config(object):
 
-    def register_environment(self):
+    def register_environment(self, force=False):
         # Delegate this registration to the main cytokit module as it is the only
         # one that should ever set environment variables
-        cytokit.register_environment(self.get_environment())
+        cytokit.register_environment(self.get_environment(), force=force)
 
     @property
     def n_tiles_per_region(self):

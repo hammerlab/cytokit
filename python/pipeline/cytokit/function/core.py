@@ -134,3 +134,39 @@ def montage(tiles, config):
         idx = [slice(None) for _ in shape_ex] + [slice(ty * th, (ty + 1) * th), slice(tx * tw, (tx + 1) * tw)]
         img_montage[tuple(idx)] = tile
     return img_montage
+
+
+def unmontage(montage, config, strict=True):
+    """Unroll a montage into constituent images
+
+    Args:
+        montage: image with last 2 dimensions equal to (rows, cols) and any number of preceding dimensions
+        config: Experiment configuration
+        strict: Raise if inferred size of tile images does not match expected size implied by configuration
+    Returns:
+        Generator of (img, tile_index) tuples where tile_index contains tile coordinate info and img is
+    """
+    mh, mw = montage.shape[-2:]
+
+    th, tw = int(mh / config.region_height), int(mw / config.region_width)
+
+    if strict:
+        if config.tile_height != th:
+            raise ValueError(
+                'Montage with shape {} gives inferred tile height {} which does not equal expected tile height {}'
+                .format(montage.shape, th, config.tile_height)
+            )
+        if config.tile_width != tw:
+            raise ValueError(
+                'Montage with shape {} gives inferred tile width {} which does not equal expected tile width {}'
+                .format(montage.shape, tw, config.tile_width)
+            )
+
+    for ti in config.get_tile_indices():
+        tx, ty = config.get_tile_coordinates(ti.tile_index)
+        assert ti.tile_x == tx, 'Tile x coords not equal ({} != {})'.format(ti.tile_x, tx)
+        assert ti.tile_y == ty, 'Tile y coords not equal ({} != {})'.format(ti.tile_y, ty)
+        ys, ye = ty * th, (ty + 1) * th
+        xs, xe = tx * tw, (tx + 1) * tw
+        img = montage[..., ys:ye, xs:xe]
+        yield img, ti

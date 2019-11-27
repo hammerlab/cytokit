@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 def get_slice(config):
     """Get 2D slice defining crop operation appropriate for given configuration"""
-    nw, nh = config.tile_width, config.tile_height
+    nw, nh = config.raw_tile_width, config.raw_tile_height
     ow, oh = config.overlap_x, config.overlap_y
     w_start, h_start = ow // 2, oh // 2
     w_stop, h_stop = w_start + nw, h_start + nh
@@ -22,7 +22,7 @@ def apply_slice(img, crop_slice):
     """Apply cropping slice to trailing image dimensions"""
     if img.ndim < 2:
         raise ValueError('Expecting at least 2 dimensions in image (shape of given array = {})'.format(img.shape))
-    slices = [slice(None, None) for _ in range(img.ndim - 2)] + crop_slice
+    slices = tuple([slice(None, None) for _ in range(img.ndim - 2)] + crop_slice)
     return img[slices]
 
 
@@ -33,9 +33,13 @@ class CytokitTileCrop(CytokitOp):
 
     def _run(self, tile, **kwargs):
 
+        # Check to see if zero overlap configured and return immediately if so
+        if not self.config.overlap_x and not self.config.overlap_y:
+            return tile
+
         # Check to see if tile dimensions indicate that cropping is not possible and return immediately if so
         ih, iw = tile.shape[-2:]
-        nh, nw = self.config.tile_height, self.config.tile_width
+        nw, nh = self.config.raw_tile_width, self.config.raw_tile_height
         if iw <= nw or ih <= nh:
             logger.warning(
                 'Tile cropping is attempting to run on a tile of shape {} but the configured '

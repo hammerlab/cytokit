@@ -28,7 +28,7 @@ analysis:
   - aggregate_cytometry_statistics: {mode: best_z_plane}
 processor:
   args:
-    gpus: [0,1]
+    gpus: [0]
     run_deconvolution: false
     run_illumination_correction: false
     run_cytometry: true
@@ -53,4 +53,4 @@ processor:
       memb_min_dist: 3
       memb_max_dist: null
       memb_propagation_regularization: .25
-    quantification_params: {include_nucleus_intensity: true, include_cell_graph: true}
+    quantification_params: {nucleus_intensity: true, cell_graph: true}

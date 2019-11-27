@@ -40,7 +40,6 @@ operator:
         - proc_DEAD
         - cyto_cell_boundary
         - cyto_cell_mask
-#        - cyto_gradient(0,2)
   - extract:
       name: bestz_segm
       channels:
@@ -68,15 +67,9 @@ processor:
     z_plane: all
     type:
       module: spheroid_cytometer
-      class: SpheroidCytometer
+      class: SpheroidCytometer20x
       args: {}
     nuclei_channel_name: BF
-    segmentation_params:
-      rescaling: .5
-      sigmas: [1, 3, 2]
-      min_peak_dist: 75
-      max_peaks: 75
-      basin_type: dist
     quantification_params:
       nucleus_intensity: false
       cell_intensity: [mean, sum, var]

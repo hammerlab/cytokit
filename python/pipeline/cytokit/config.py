@@ -2,6 +2,7 @@ import json
 import yaml
 import os
 import cytokit
+import copy
 from cytokit import tiling
 from os import path as osp
 from collections import namedtuple
@@ -29,12 +30,16 @@ def _load_experiment_config(data_dir, filename):
     return _load_config(data_dir, filename)
 
 
-def get_implementation_instance(object_config, name, **kwargs):
-    for k in ['module', 'class', 'args']:
+def get_implementation_class(object_config):
+    for k in ['module', 'class']:
         if k not in object_config:
-            raise ValueError('Custom {} implementations must contain key "{}"'.format(name, k))
-    args = {**kwargs, **object_config['args']}
-    return getattr(importlib.import_module(object_config['module']), object_config['class'])(**args)
+            raise ValueError('Custom component implementations must contain key "{}"'.format(k))
+    return getattr(importlib.import_module(object_config['module']), object_config['class'])
+
+
+def get_implementation_instance(object_config, cls, **kwargs):
+    args = {**kwargs, **object_config.get('args', {})}
+    return cls(**args)
 
 
 TileDims = namedtuple('TileDims', ['cycles', 'z', 'channels', 'height', 'width'])
@@ -45,10 +50,10 @@ MicroscopeParams = namedtuple(
 
 class Config(object):
 
-    def register_environment(self):
+    def register_environment(self, force=False):
         # Delegate this registration to the main cytokit module as it is the only
         # one that should ever set environment variables
-        cytokit.register_environment(self.get_environment())
+        cytokit.register_environment(self.get_environment(), force=force)
 
     @property
     def n_tiles_per_region(self):
@@ -184,6 +189,9 @@ class CytokitConfigV10(Config):
     def to_dict(self):
         return self._conf
 
+    def copy(self):
+        return CytokitConfigV10(copy.deepcopy(self._conf))
+
     @property
     def experiment_name(self):
         return self._conf['name']
@@ -197,20 +205,66 @@ class CytokitConfigV10(Config):
         return self._conf['acquisition']['num_cycles']
 
     @property
-    def n_z_planes(self):
-        return self._conf['acquisition']['num_z_planes']
-
-    @property
     def n_channels_per_cycle(self):
         return len(self._conf['acquisition']['per_cycle_channel_names'])
 
     @property
-    def tile_width(self):
+    def raw_n_z_planes(self):
+        return self._conf['acquisition']['num_z_planes']
+
+    @property
+    def raw_tile_height(self):
+        return self._conf['acquisition']['tile_height']
+
+    @property
+    def raw_tile_width(self):
         return self._conf['acquisition']['tile_width']
+
+    def _get_resize_info(self):
+        resize = self._conf.get('processor', {}).get('args', {}).get('run_resize', False)
+        factors = self._conf.get('processor', {}).get('tile_resize', {}).get('factors', [1, 1, 1])
+        if len(factors) != 3 or not all([f > 0 for f in factors]):
+            raise ValueError(
+                'Tile resize factors (`processor.tile_resize.factors` in config) must be 3 '
+                'number list with values > 0 (found {})'.format(factors)
+            )
+        if factors[1] != factors[2]:
+            raise ValueError('X and Y rescaling factors must be equal ({} != {})'.format(factors[1], factors[2]))
+        return resize, factors
+
+    def _get_crop_info(self):
+        return self._conf.get('processor', {}).get('args', {}).get('run_crop', True)
+
+    @property
+    def tile_shape(self):
+        do_crop = self._get_crop_info()
+        do_resize, factors = self._get_resize_info()
+
+        # Get original, possibly overlapping image dimensions
+        nz, nh, nw = [self._conf['acquisition'][k] for k in ['num_z_planes', 'tile_height', 'tile_width']]
+        oh, ow = self.overlap_y, self.overlap_x
+
+        # If crop enabled, then dimensions are already correct; otherwise subtract overlap
+        if not do_crop:
+            nh, nw = nh + oh, nw + ow
+
+        # If resize enabled, calculate resized dimensions which will usually be smaller but upsampling
+        # resize factors could technically be provided
+        if do_resize:
+            nz, nh, nw = [round(v * float(f)) for v, f in zip((nz, nh, nw), factors)]
+        return nz, nh, nw
+
+    @property
+    def n_z_planes(self):
+        return self.tile_shape[0]
 
     @property
     def tile_height(self):
-        return self._conf['acquisition']['tile_height']
+        return self.tile_shape[1]
+
+    @property
+    def tile_width(self):
+        return self.tile_shape[2]
 
     @property
     def overlap_x(self):
@@ -265,6 +319,10 @@ class CytokitConfigV10(Config):
         return self._processor_params('tile_generator')
 
     @property
+    def tile_resize_params(self):
+        return self._processor_params('tile_resize')
+
+    @property
     def drift_compensation_params(self):
         return self._processor_params('drift_compensation')
 
@@ -314,11 +372,16 @@ class CytokitConfigV10(Config):
 
     @property
     def microscope_params(self):
+        ar, lr = self._conf['acquisition']['axial_resolution'], self._conf['acquisition']['lateral_resolution']
+        do_resize, factors = self._get_resize_info()
+        if do_resize:
+            # Rescale resolution by downsampling factors (e.g. if scale factors is .5, then pixel distance doubles)
+            ar, lr = ar * (1. / factors[0]), lr * (1. / factors[1])
         return MicroscopeParams(
             magnification=self._conf['acquisition']['magnification'],
             na=self._conf['acquisition']['numerical_aperture'],
-            res_axial_nm=self._conf['acquisition']['axial_resolution'],
-            res_lateral_nm=self._conf['acquisition']['lateral_resolution'],
+            res_axial_nm=ar,
+            res_lateral_nm=lr,
             objective_type=self._conf['acquisition']['objective_type'],
             em_wavelength_nm=self._conf['acquisition']['emission_wavelengths']
         )

@@ -19,8 +19,44 @@ export APP_EXP_CONFIG_PATH=/lab/data/20180101_codex_spleen/output/v01/config
 
 See [config.py](https://github.com/hammerlab/cytokit/blob/54d56880413f1a89000056a1f2b9af1c590cf43e/python/applications/cytokit_app/explorer/config.py) for some other properties
 
-\*TODO: Move configs to yaml and document properties
+## Running the Application
 
+To run the application, a common pattern is to source an environment variable file before invoking the app through the CLI, e.g.:
+
+```bash
+source $MY_ANALYSIS_REPO_DIR/my-experiment/explorer_config.sh
+cytokit application run_explorer
+```
+
+An example environment variable configuration file can be found at [pub/analysis/codex-spleen/explorer_config.sh](../../../../pub/analysis/codex-spleen/explorer_config.sh) which demonstrates the Explorer app properties relevant to analyzing a CODEX sample.
+
+## Adding Custom Metrics
+
+To add custom metrics for visualization in Explorer, a snippet like this may be used in the top-level bash script:
+
+```bash
+DATA_DIR=/path/to/raw/data
+OUTPUT_DIR=/path/to/output
+CONFIG_DIR=/path/to/config
+
+# Run pipeline to produce csv and image data used by Explorer
+cytokit processor run_all --config-path=$CONFIG_DIR --data-dir=$DATA_DIR --output-dir=$OUTPUT_DIR
+cytokit operator run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
+cytokit analysis run_all  --config-path=$CONFIG_DIR --data-dir=$OUTPUT_DIR 
+
+# Add custom fields to csv
+cat <<-EOF | python
+import pandas as pd
+df = pd.read_csv('$OUTPUT_DIR/cytometry/data.csv')
+# Add field containing ratio of cell diameter to nucleus diameter
+df['cm:diameter_ratio'] = df['cm:diameter'] / df['nm:diameter']
+df.to_csv('$OUTPUT_DIR/cytometry/data.csv')
+EOF
+
+# Launch the application, which will now make the new diameter ratio metric available
+source /path/to/explorer/config; cytokit application run_explorer
+```
+    
 ### Examples
 
 #### Example 1: GFP Positive Jurkat Cells

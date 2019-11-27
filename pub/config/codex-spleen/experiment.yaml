@@ -2,7 +2,7 @@ name: '20180101_codex_mouse_spleen_balbc_slide1'
 date: '2018-01-01 00:00:00'
 environment:
   path_formats:
-    proc_image: 'processor/tile/BALBc-1_X{x:02d}_Y{y:02d}.tif'
+    proc_image: 'processor/tile/R{region:02d}_X{x:02d}_Y{y:02d}.tif'
 acquisition:
   # Imaging was performed in Keyence BZ-X710 fluorescent microscope configured with 3 fluorescent channels
   # (FITC, Cy3, Cy5) and equipped with Nikon PlanFluor 40x NA 1.3 oil immersion lens
@@ -79,8 +79,8 @@ acquisition:
   region_height: 9
   region_width: 7
   tile_height: 1008
-  tile_overlap_x: 576
-  tile_overlap_y: 432
+  tile_overlap_x: 0
+  tile_overlap_y: 0
   tile_width: 1344
   tiling_mode: snake
 operator:
@@ -126,6 +126,8 @@ operator:
   - montage: {name: cy5, extract_name: cy5}
 analysis:
   - aggregate_cytometry_statistics: {mode: best_z_plane}
+  # Uncomment to produce CP exports by default
+  # - cellprofiler_quantification: {export_csv: true, export_db: true, export_db_objects_separately: true}
 processor:
   args:
     gpus: [0,1]
@@ -141,8 +143,8 @@ processor:
   deconvolution: {n_iter: 25, scale_factor: .5}
   tile_generator: {raw_file_type: keyence_rgb}
   cytometry:
-    # Downsample by half to get segmentation near 20x
+    # Downsample by half to get segmentation at 20x
     target_shape: [504, 672]
     nuclei_channel_name: nucl
-    segmentation_params: {memb_min_dist: 8, membrane_sigma: 5, membrane_gamma: .25, marker_dilation: 3}
-    quantification_params: {include_nucleus_intensity: true, include_cell_graph: true}
+    segmentation_params: {memb_min_dist: 8, memb_sigma: 5, memb_gamma: .25, marker_dilation: 3}
+    quantification_params: {nucleus_intensity: true, cell_graph: true}

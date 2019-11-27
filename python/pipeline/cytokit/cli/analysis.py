@@ -27,6 +27,21 @@ class Analysis(cli.DataCLI):
         core.aggregate_cytometry_statistics(
             self.data_dir, self.config, mode=mode, export_csv=export_csv, export_fcs=export_fcs, variant=variant)
 
+    def cellprofiler_quantification(self, export_csv=True, export_db=True,
+                                    export_db_objects_separately=False, do_extraction=True):
+        logging.info('Running CellProfiler image quantification pipeline')
+        from cytokit.exec import cellprofiler
+        cellprofiler.run_quantification(
+            output_dir=self.data_dir,
+            config_path=self.config_path,
+            export_csv=str(export_csv).lower(),
+            export_db=str(export_db).lower(),
+            export_db_objects_separately=str(export_db_objects_separately).lower(),
+            do_extraction=str(do_extraction).lower(),
+            log_level=self.py_log_level
+        )
+        logging.info('CellProfiler image quantification pipeline complete')
+
 
 if __name__ == '__main__':
     fire.Fire(Analysis)

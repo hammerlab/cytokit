@@ -122,7 +122,11 @@ class CoordinateFeatures(FeatureCalculator):
         return ['id', 'x', 'y', 'z']
 
     def get_feature_values(self, signals, labels, graph, props, z):
-        return [props.cell.label, props.cell.centroid[1], props.cell.centroid[0], z]
+        if len(props.cell.centroid) == 2:
+            assert np.isscalar(z), 'Z plane must be provided as single scalar value in 2D mode (not {})'.format(z)
+            return [props.cell.label, props.cell.centroid[1], props.cell.centroid[0], z]
+        else:
+            return [props.cell.label, props.cell.centroid[2], props.cell.centroid[1], props.cell.centroid[0]]
 
 
 class BorderFeatures(FeatureCalculator):
@@ -139,7 +143,6 @@ class BorderFeatures(FeatureCalculator):
         """
         self.component = component
         assert labels.ndim == 4, 'Expecting 4D labels, got shape {}'.format(labels.shape)
-        assert mode in ['2D', '3D'], 'Mode "{}" not valid'.format(mode)
 
         def get_interior_ids(im):
             # Clear border objects and collect remaining interior object ids
@@ -197,9 +200,17 @@ class ComponentFeatureCalculator(FeatureCalculator):
         for k in self.keys:
             c, n, f = k
             p = props[c]
-            min_row, min_col, max_row, max_col = p.bbox
-            # Extract channel-specific individual cell image if a channel is given, otherwise return None
-            im = signals[z, min_row:max_row, min_col:max_col, self.channels.index(n)] if n else None
+
+            # Extract channel-specific individual cell image if a channel is given
+            im = None
+            if n is not None:
+                if np.isscalar(z):
+                    min_row, min_col, max_row, max_col = p.bbox
+                    im = signals[z, min_row:max_row, min_col:max_col, self.channels.index(n)]
+                else:
+                    min_z, min_row, min_col, max_z, max_row, max_col = p.bbox
+                    im = signals[min_z:max_z, min_row:max_row, min_col:max_col, self.channels.index(n)]
+
             # Call start/stop when component + channel combination changes
             if last is None or last != (c, n):
                 self._stop(c, n)
@@ -275,9 +286,17 @@ class ChannelMorphologyFeatures(ComponentFeatureCalculator):
             if feature == 'size':
                 return prop.area
             if feature == 'diameter':
-                return cytokit_math.area_to_diameter(prop.area)
+                fn = cytokit_math.area_to_diameter if prop.image.ndim == 2 else cytokit_math.volume_to_diameter
+                return fn(prop.area)
             if feature == 'circularity':
-                return cytokit_math.circularity(prop.area, prop.perimeter)
+                if prop.image.ndim == 2:
+                    return cytokit_math.circularity(prop.area, prop.perimeter)
+                else:
+                    # TODO: implement 3D diameter calculation
+                    return 0.0
+            if feature == 'perimeter' and prop.image.ndim == 3:
+                # Perimeter is not implemented for 3D objects in regionprops
+                return 0.0
             return getattr(prop, feature)
         # EXPERIMENTAL: include texture features (note that the prop label is returned
         # as verification that the feature is for the correct object)
@@ -356,8 +375,10 @@ def _quantify_intensities(image, prop, func):
     # this region and then apply given function (by name) across n_pixels
     # dimension to give result of length n_channels
     func = getattr(np, func)
-    image = image[prop.coords[:, 0], prop.coords[:, 1]]
-    assert image.ndim == 2, 'Expecting 2D intensity image to aggregate but got shape {}'.format(image.shape)
+    # Coords is n pixels by n spatial dimensions 2D array
+    idx = tuple([prop.coords[:, i] for i in range(prop.coords.shape[1])])
+    image = image[idx]
+    assert image.ndim == 2, 'Expecting 2D (n pixel, n channel) intensity image to aggregate but got shape {}'.format(image.shape)
     intensities = np.apply_along_axis(func, 0, image)
     assert intensities.ndim == 1, 'Expecting 1D resulting intensities but got shape {}'.format(intensities.shape)
     return list(intensities)
@@ -460,6 +481,7 @@ class SpotFeatures(FeatureCalculator):
                 continue
 
             # Create a binary nucleus image within the cell image bounding box
+            # pylint: disable=E1137
             nuc_image = np.zeros_like(props.cell.image, dtype=bool)
             nuc_image[props.nucleus.coords[:, 0] - min_row, props.nucleus.coords[:, 1] - min_col] = True
 
@@ -467,6 +489,7 @@ class SpotFeatures(FeatureCalculator):
             metrics = []
             for p in ps:
                 area, perimeter = p.area, p.perimeter
+                # pylint: disable=E1126
                 nuc_area = nuc_image[p.coords[:, 0], p.coords[:, 1]].sum()
                 circularity = cytokit_math.circularity(area, perimeter)
                 coverage = np.clip(area / props.cell.area, 0, 1)
@@ -474,16 +497,6 @@ class SpotFeatures(FeatureCalculator):
 
             for i in range(len(self.METRICS)):
                 res.append(','.join([str(m[i]) for m in metrics]))
-
-            # Debugging single cell images
-            # from skimage import io as skio
-            # label = props.cell.label
-            # print('Cell {}: {}'.format(label, metrics))
-            # skio.imsave('/lab/data/cellimages/{:05d}_extract.png'.format(label), image.astype(signals.dtype))
-            # skio.imsave('/lab/data/cellimages/{:05d}_cell_binary.png'.format(label), props.cell.image.astype(np.uint8) * 255)
-            # skio.imsave('/lab/data/cellimages/{:05d}_nucleus_binary.png'.format(label), nuc_image.astype(np.uint8) * 255)
-            # skio.imsave('/lab/data/cellimages/{:05d}_threshold_ct{}.png'.format(label, len(ps)), thresh_image.astype(np.uint8) * 255)
-
         return res
 
 
@@ -692,8 +705,8 @@ def _to_uint8(img, name):
     return img
 
 
-class Base2D(object):
-    """ Base Cytometer implementations for quantification + augmentation (but not segmentation) """
+class CytometerBase(object):
+    """ Base cytometer implementations for quantification + augmentation (but not segmentation) """
 
     CELL_MASK_CHANNEL = 0
     NUCLEUS_MASK_CHANNEL = 1
@@ -701,9 +714,75 @@ class Base2D(object):
     NUCLEUS_BOUNDARY_CHANNEL = 3
 
     @classmethod
+    def _quantify_2d(cls, tile, img_seg, nz, feature_calculators, **kwargs):
+        feature_values = []
+        for z in range(nz):
+            # Calculate properties of masked+labeled cell components
+            cell_props = measure.regionprops(img_seg[z][CytometerBase.CELL_MASK_CHANNEL], cache=False)
+            nucleus_props = measure.regionprops(img_seg[z][CytometerBase.NUCLEUS_MASK_CHANNEL], cache=False)
+            if len(cell_props) != len(nucleus_props):
+                raise ValueError(
+                    'Expecting cell and nucleus properties to have same length (nucleus props = {}, cell props = {})'
+                    .format(len(nucleus_props), len(cell_props))
+                )
+
+            # Compute RAG for cells if necessary
+            graph = None
+            if kwargs.get('cell_graph'):
+                labels = img_seg[z][CytometerBase.CELL_MASK_CHANNEL]
+
+                # rag_boundary fails on all zero label matrices so default to empty graph if that is the case
+                # see: https://github.com/scikit-image/scikit-image/blob/master/skimage/future/graph/rag.py#L386
+                if np.count_nonzero(labels) > 0:
+                    graph = label_graph.rag_boundary(labels, np.ones(labels.shape))
+                else:
+                    graph = label_graph.RAG()
+
+            # Loop through each detected cell and compute features
+            for i in range(len(cell_props)):
+                props = ObjectProperties(cell=cell_props[i], nucleus=nucleus_props[i])
+
+                # Run each feature calculator and add results in order
+                feature_values.append([
+                    v for fc in feature_calculators
+                    for v in fc.get_feature_values(tile, img_seg, graph, props, z)
+                ])
+
+        return feature_values
+
+    @classmethod
+    def _quantify_3d(cls, tile, img_seg, nz, feature_calculators, **kwargs):
+        feature_values = []
+
+        # Calculate properties of masked+labeled cell components
+        cell_props = measure.regionprops(img_seg[:, CytometerBase.CELL_MASK_CHANNEL], cache=False)
+        nucleus_props = measure.regionprops(img_seg[:, CytometerBase.NUCLEUS_MASK_CHANNEL], cache=False)
+        if len(cell_props) != len(nucleus_props):
+            raise ValueError(
+                'Expecting cell and nucleus properties to have same length (nucleus props = {}, cell props = {})'
+                .format(len(nucleus_props), len(cell_props))
+            )
+
+        # RAG not applicable in 3D yet
+        graph = None
+        z = np.arange(nz)
+
+        # Loop through each detected cell and compute features
+        for i in range(len(cell_props)):
+            props = ObjectProperties(cell=cell_props[i], nucleus=nucleus_props[i])
+
+            # Run each feature calculator and add results in order
+            feature_values.append([
+                v for fc in feature_calculators
+                for v in fc.get_feature_values(tile, img_seg, graph, props, z)
+            ])
+
+        return feature_values
+
+    @classmethod
     def quantify(cls, tile, img_seg, channel_names=None, cell_intensity=True, nucleus_intensity=False,
                  cell_graph=False, border_features=True, morphology_features=False,
-                 spot_count_channels=None, spot_count_params=None):
+                 spot_count_channels=None, spot_count_params=None, mode='2D', **kwargs):
         _, nz, _, nh, nw = tile.shape
 
         assert img_seg.ndim == 4, \
@@ -713,6 +792,7 @@ class Base2D(object):
         assert img_seg.shape[-2:] == (nh, nw), \
             'HW dimensions of segmentation volume ({}) do not match tile ({})'\
             .format(img_seg.shape[-2:], (nh, nw))
+        assert mode in ['2D', '3D'], 'Mode "{}" not valid'.format(mode)
 
         # Move cycles and channels to last axes (in that order) leaving tile in (z, height, width, cyc, ch) order
         tile = np.moveaxis(tile, 0, -1)
@@ -736,10 +816,18 @@ class Base2D(object):
         # Configure features to be calculated based on provided flags
         feature_calculators = [_get_default_feature_calculators()]
         if cell_graph:
+            if mode != '2D':
+                raise ValueError('Only 2D mode is supported for cell graph features')
             feature_calculators.append(GraphFeatures())
+        if spot_count_channels is not None:
+            if mode != '2D':
+                raise ValueError('Only 2D mode is supported for spot counting')
+            indexes = [channel_names.index(c) for c in spot_count_channels]
+            params = spot_count_params or {}
+            feature_calculators.append(SpotFeatures(indexes, spot_count_channels, **params))
         if border_features:
-            feature_calculators.append(BorderFeatures(COMP_CELL, Base2D.CELL_MASK_CHANNEL, img_seg, mode='2D'))
-            feature_calculators.append(BorderFeatures(COMP_NUCLEUS, Base2D.NUCLEUS_MASK_CHANNEL, img_seg, mode='2D'))
+            feature_calculators.append(BorderFeatures(COMP_CELL, CytometerBase.CELL_MASK_CHANNEL, img_seg, mode))
+            feature_calculators.append(BorderFeatures(COMP_NUCLEUS, CytometerBase.NUCLEUS_MASK_CHANNEL, img_seg, mode))
         if cell_intensity:
             funcs = _get_agg_funcs(cell_intensity)
             feature_calculators.append(IntensityFeatures(channel_names, COMP_CELL, funcs=funcs))
@@ -749,64 +837,42 @@ class Base2D(object):
         if morphology_features:
             keys = _get_feature_keys(morphology_features, channel_names, TEXTURE_MORPHOLOGY_FEATURES)
             feature_calculators.append(ChannelMorphologyFeatures(keys, channel_names))
-        if spot_count_channels is not None:
-            indexes = [channel_names.index(c) for c in spot_count_channels]
-            params = spot_count_params or {}
-            feature_calculators.append(SpotFeatures(indexes, spot_count_channels, **params))
 
         # Compute list of resulting feature names (values will be added in this order)
         feature_names = [v for fc in feature_calculators for v in fc.get_feature_names()]
 
-        feature_values = []
-        for z in range(nz):
-            # Calculate properties of masked+labeled cell components
-            cell_props = measure.regionprops(img_seg[z][Base2D.CELL_MASK_CHANNEL], cache=False)
-            nucleus_props = measure.regionprops(img_seg[z][Base2D.NUCLEUS_MASK_CHANNEL], cache=False)
-            if len(cell_props) != len(nucleus_props):
-                raise ValueError(
-                    'Expecting cell and nucleus properties to have same length (nucleus props = {}, cell props = {})'
-                    .format(len(nucleus_props), len(cell_props))
-                )
-
-            # Compute RAG for cells if necessary
-            graph = None
-            if cell_graph:
-                labels = img_seg[z][Base2D.CELL_MASK_CHANNEL]
-
-                # rag_boundary fails on all zero label matrices so default to empty graph if that is the case
-                # see: https://github.com/scikit-image/scikit-image/blob/master/skimage/future/graph/rag.py#L386
-                if np.count_nonzero(labels) > 0:
-                    graph = label_graph.rag_boundary(labels, np.ones(labels.shape))
-                else:
-                    graph = label_graph.RAG()
-
-            # Loop through each detected cell and compute features
-            for i in range(len(cell_props)):
-                props = ObjectProperties(cell=cell_props[i], nucleus=nucleus_props[i])
-
-                # Run each feature calculator and add results in order
-                feature_values.append([
-                    v for fc in feature_calculators
-                    for v in fc.get_feature_values(tile, img_seg, graph, props, z)
-                ])
+        # Apply appropriate quantification function based on mode (to either loop through z planes or use all together)
+        fn = CytometerBase._quantify_2d if mode == '2D' else CytometerBase._quantify_3d
+        feature_values = fn(tile, img_seg, nz, feature_calculators, cell_graph=cell_graph, **kwargs)
 
         return pd.DataFrame(feature_values, columns=feature_names)
 
     @classmethod
-    def augment(cls, df, microscope_params):
+    def augment(cls, df, microscope_params, mode='2D'):
         # Convert size measurements to more meaningful scales
-        resolution_um = microscope_params.res_lateral_nm / 1000.
+        assert mode in ['2D', '3D'], 'Mode "{}" not valid'.format(mode)
+        res_lateral_um, res_axial_um = microscope_params.res_lateral_nm / 1000., microscope_params.res_axial_nm / 1000.
         for c in [DEFAULT_CELL_MORPHOLOGY_PREFIX, DEFAULT_NUCL_MORPHOLOGY_PREFIX]:
-            col = c + DCHR + 'size'
-            if col in df:
+            size_col = c + DCHR + 'size'
+            if size_col in df:
                 # Preserve area/volume (depending on 2 or 3D segmentation) as separate field adjacent to original
-                df.insert(loc=df.columns.tolist().index(col)+1, column=col + '_vx', value=df[col])
-                df[col] = cytokit_math.pixel_area_to_squared_um(df[col].values, resolution_um)
-            col = c + DCHR + 'diameter'
-            if col in df:
-                # Preserve diameter as separate field adjacent to original
-                df.insert(loc=df.columns.tolist().index(col)+1, column=col + '_vx', value=df[col])
-                df[col] = df[col] * resolution_um
+                df.insert(loc=df.columns.tolist().index(size_col)+1, column=size_col + '_vx', value=df[size_col])
+                if mode == '2D':
+                    df[size_col] = cytokit_math.pixel_area_to_squared_um(
+                        df[size_col].values, res_lateral_um)
+                else:
+                    df[size_col] = cytokit_math.pixel_volume_to_cubed_um(
+                        df[size_col].values, res_lateral_um, res_axial_um)
+
+                # Add diameter calculation based on size calculation with units (i.e. true area or volume)
+                diam_col = c + DCHR + 'diameter'
+                if diam_col in df:
+                    # Preserve diameter as separate field adjacent to original
+                    df.insert(loc=df.columns.tolist().index(diam_col)+1, column=diam_col + '_vx', value=df[diam_col])
+                    if mode == '2D':
+                        df[diam_col] = cytokit_math.area_to_diameter(df[size_col])
+                    else:
+                        df[diam_col] = cytokit_math.volume_to_diameter(df[size_col])
         return df
 
 
@@ -872,7 +938,7 @@ class Cytometer2D(KerasCytometer2D):
                 marker_dilation=1, marker_min_size=16,
                 memb_min_dist=5, memb_max_dist=10, memb_hole_size=16,
                 memb_sigma=1, memb_gamma=None, memb_tresh_method='li', memb_propagation_regularization=.05,
-                batch_size=DEFAULT_BATCH_SIZE, return_masks=False):
+                batch_size=DEFAULT_BATCH_SIZE, return_masks=False, **kwargs):
         if not self.initialized:
             self.initialize()
 
@@ -954,7 +1020,7 @@ class Cytometer2D(KerasCytometer2D):
             assert img_cell_seg.dtype == img_nuc_seg.dtype, \
                 'Cell segmentation dtype {} != nucleus segmentation dtype {}'\
                 .format(img_cell_seg.dtype, img_nuc_seg.dtype)
-            # This ordering must align with constants Base2D.(CELL|NUCLEUS)_(MASK|BOUNDARY)_CHANNEL
+            # This ordering must align with constants CytometerBase.(CELL|NUCLEUS)_(MASK|BOUNDARY)_CHANNEL
             img_seg_stack = np.stack([
                 img_cell_seg, img_nuc_seg,
                 Cytometer2D.get_boundary(img_cell_seg),
@@ -983,7 +1049,7 @@ class Cytometer2D(KerasCytometer2D):
             return img_seg
 
     def quantify(self, tile, segments, **kwargs):
-        return Base2D.quantify(tile, segments, **kwargs)
+        return CytometerBase.quantify(tile, segments, **kwargs)
 
     def augment(self, df, **kwargs):
-        return Base2D.augment(df, self.config.microscope_params)
+        return CytometerBase.augment(df, self.config.microscope_params)

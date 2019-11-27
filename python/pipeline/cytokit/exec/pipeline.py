@@ -17,6 +17,7 @@ from cytokit.ops import op
 from cytokit.ops import tile_generator
 from cytokit.ops import cytometry
 from cytokit.ops import tile_crop
+from cytokit.ops import tile_resize
 from cytokit.ops import drift_compensation
 from cytokit.ops import best_focus
 from cytokit.ops import deconvolution
@@ -34,10 +35,11 @@ class OpFlags(object):
 
     def __init__(self,
             run_best_focus=True, run_drift_comp=True, run_summary=True,
-            run_tile_generator=True, run_crop=True, run_deconvolution=True,
+            run_tile_generator=True, run_crop=True, run_resize=True, run_deconvolution=True,
             run_cytometry=True, run_illumination_correction=True, run_spectral_unmixing=True):
         self.run_tile_generator = run_tile_generator
         self.run_crop = run_crop
+        self.run_resize = run_resize
         self.run_deconvolution = run_deconvolution
         self.run_drift_comp = run_drift_comp
         self.run_best_focus = run_best_focus
@@ -53,6 +55,7 @@ class OpFlags(object):
     def preprocessing_enabled(self):
         return self.run_tile_generator or \
             self.run_crop or \
+            self.run_resize or \
             self.run_deconvolution or \
             self.run_drift_comp or \
             self.run_best_focus or \
@@ -202,6 +205,13 @@ def preprocess_tile(tile, tile_indices, ops, log_fn, task_config):
     else:
         log_fn('Skipping tile crop', debug=True)
 
+    # Resample images for improved downstream speed
+    if ops.resize_op:
+        tile = ops.resize_op.run(tile)
+        log_fn('Tile resize complete', tile)
+    else:
+        log_fn('Skipping tile resize', debug=True)
+
     # Best Focal Plane Selection
     best_focus_data = None
     if ops.focus_op:
@@ -222,7 +232,7 @@ def preprocess_tile(tile, tile_indices, ops, log_fn, task_config):
     # Cytometry (segmentation + quantification)
     if ops.cytometry_op:
         best_focus_z_plane = best_focus_data[1] if best_focus_data else None
-        tile, cyto_data = ops.cytometry_op.run(tile, best_focus_z_plane=best_focus_z_plane)
+        tile, cyto_data = ops.cytometry_op.run(tile, best_focus_z_plane=best_focus_z_plane, tile_indices=tile_indices)
         paths = ops.cytometry_op.save(tile_indices, output_dir, cyto_data)
         log_fn('Tile cytometry complete; Statistics saved to "{}"'.format(paths[-1]), cyto_data[0])
     else:
@@ -308,6 +318,7 @@ def get_preprocess_op_set(task_config):
         decon_op=deconvolution.CytokitDeconvolution(exp_config) if task_config.op_flags.run_deconvolution else None,
         summary_op=tile_summary.CytokitTileSummary(exp_config) if task_config.op_flags.run_summary else None,
         crop_op=tile_crop.CytokitTileCrop(exp_config) if task_config.op_flags.run_crop else None,
+        resize_op=tile_resize.CytokitTileResize(exp_config) if task_config.op_flags.run_resize else None,
         cytometry_op=cytometry.get_op(exp_config) if task_config.op_flags.run_cytometry else None
     )
 

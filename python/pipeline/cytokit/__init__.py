@@ -23,10 +23,10 @@ def get_env_vars():
     return {k: v for k, v in os.environ.items() if k.startswith('CYTOKIT_')}
 
 
-def register_environment(env):
+def register_environment(env, force=False):
     """Register environment variables if not already set"""
     for k, v in env.items():
-        if k not in os.environ:
+        if force or k not in os.environ:
             os.environ[k] = v
 
 
@@ -132,3 +132,4 @@ pkg_dir = osp.abspath(osp.dirname(__file__))
 test_data_dir = osp.normpath(osp.join(pkg_dir, '..', 'tests', 'data'))
 conf_dir = osp.normpath(osp.join(pkg_dir, '..', 'tests', 'data', 'configs'))
 nb_dir = osp.normpath(osp.join(pkg_dir, '..', '..', 'notebooks'))
+ext_dir = osp.normpath(osp.join(pkg_dir, '..', '..', 'external'))

@@ -27,6 +27,7 @@ class Processor(cli.DataCLI):
             # Processing flags
             run_tile_generator=True,
             run_crop=True,
+            run_resize=False,
             run_deconvolution=False,
             run_best_focus=False,
             run_drift_comp=False,
@@ -77,6 +78,9 @@ class Processor(cli.DataCLI):
                 should generally only apply to raw images but will have no effect if images already appear to be
                 cropped (though an annoying warning will be printed in that case so this should be set to False
                 if not running on raw images with overlap)
+            run_resize: Flag indicating whether or not 3D images should be resized for all further processing;
+                if `run_crop` is True then this will operate on cropped volumes.  This can be useful for downsampling
+                images to accelerate later steps like deconvolution
             run_deconvolution: Flag indicating whether or not to run deconvolution
             run_best_focus: Flag indicating that best focal plan selection operations should be executed
             run_drift_comp: Flag indicating that drift compensation should be executed
@@ -109,6 +113,7 @@ class Processor(cli.DataCLI):
         # Configure and run pipeline
         op_flags = pipeline.OpFlags(
             run_crop=run_crop,
+            run_resize=run_resize,
             run_deconvolution=run_deconvolution,
             run_best_focus=run_best_focus,
             run_drift_comp=run_drift_comp,

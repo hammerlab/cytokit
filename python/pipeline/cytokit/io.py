@@ -123,8 +123,11 @@ def read_tile(file, return_metadata=False):
     """
     # The "imagej_metadata" attribute looks like this for a 5D image with no unit-length dimensions
     # and original shape cycles=2, z=25, channels=2:
-    # {'ImageJ': '1.11a', 'axes': 'TZCYX', 'channels': 2, 'frames': 2, 'hyperstack': True,
-    # 'images': 100, 'mode': 'grayscale', 'slices': 25}
+    # {
+    #   'ImageJ': '1.11a', 'axes': 'TZCYX', 'channels': 2, 'frames': 2,
+    #   'hyperstack': True, 'images': 100,
+    #   'mode': 'grayscale', 'slices': 25
+    # }
     # However, if a unit-length dimension was dropped it simply does not show up in this dict
     with warnings.catch_warnings():
         _set_tiff_warning_filters()
@@ -146,7 +149,13 @@ def read_tile(file, return_metadata=False):
                 slice(None),
                 slice(None)
             ]
-            res = tif.asarray()[slices]
+            res = tif.asarray()[tuple(slices)]
+
+            if res.ndim != 5:
+                raise ValueError(
+                    'Expected 5 dimensions in image at "{}" but found {} (shape = {})'
+                    .format(file, res.ndim, res.shape)
+                )
 
             if return_metadata:
                 return res, _get_tif_metadata(tif, shape=res.shape)
@@ -278,8 +287,19 @@ def get_processor_exec_path(date):
 def _collapse_keyence_rgb(path, img):
     # Compute image sum for each channel giving 3 item vector
     ch_sum = np.squeeze(np.apply_over_axes(np.sum, img, [0, 1]))
+
+    # Check if more than one channel has non-zero values
     if np.sum(ch_sum > 0) > 1:
-        raise ValueError('Found more than one channel with information in image file "{}"'.format(path))
+        imgnz = img[..., np.argwhere(ch_sum > 0).squeeze()]
+        all_equal = True
+        # Check to see if all non-zero channels are equal to each other
+        for i in range(1, imgnz.shape[-1]):
+            if not np.all(imgnz[..., 0] == imgnz[..., i]):
+                all_equal = False
+                break
+        # If more than 1 distinct non-zero channel exists, throw an error
+        if not all_equal:
+            raise ValueError('Found more than one channel with information in image file "{}"'.format(path))
 
     # Select and return the single channel with a non-zero sum
     return img[..., np.argmax(ch_sum)]

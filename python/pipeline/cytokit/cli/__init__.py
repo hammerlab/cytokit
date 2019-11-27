@@ -115,6 +115,7 @@ class CLI(object):
                 as short messages (false by default)
         """
         # Get and run logging initializer
+        self.py_log_level = py_log_level
         self._logging_init_fn = get_logging_init_fn(py_log_level, tf_py_log_level, tf_cpp_log_level, warning_traceback)
         self._logging_init_fn()
 
@@ -144,7 +145,8 @@ class DataCLI(CLI):
                 as short messages (false by default)
         """
         super(DataCLI, self).__init__(py_log_level, tf_py_log_level, tf_cpp_log_level, warning_traceback)
-        self.config = get_config(config_path or data_dir)
+        self.config_path = config_path or data_dir
+        self.config = get_config(self.config_path)
         self.data_dir = data_dir
 
     def run_all(self, **kwargs):

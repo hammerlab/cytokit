@@ -30,7 +30,7 @@ analysis:
   - aggregate_cytometry_statistics: {mode: best_z_plane}
 processor:
   args:
-    gpus: [0,1]
+    gpus: [0]
     run_deconvolution: false
     run_illumination_correction: false
     run_cytometry: true
@@ -49,4 +49,4 @@ processor:
   cytometry:
     nuclei_channel_name: DAPI
     segmentation_params: {memb_min_dist: 6}
-    quantification_params: {include_nucleus_intensity: true, include_cell_graph: true}
+    quantification_params: {nucleus_intensity: true, cell_graph: true}

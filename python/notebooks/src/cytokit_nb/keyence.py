@@ -13,7 +13,8 @@ def get_zpitch_cmd(bcf_path):
     return cmd
 
 
-def analyze_keyence_dataset(path):
+def analyze_keyence_dataset(path, pattern='_([0-9]{5})_Z([0-9]{3})_CH([0-9]{1}).tif',
+                            fields=['tile', 'z', 'ch', 'file']):
     bcf_files = []
     df = []
     for f in os.listdir(path):
@@ -22,11 +23,11 @@ def analyze_keyence_dataset(path):
         if not f.endswith('.tif'):
             continue
 
-        parts = re.findall('_([0-9]{5})_Z([0-9]{3})_CH([0-9]{1}).tif', f)
+        parts = re.findall(pattern, f)
         if not parts:
             continue
         df.append(parts[0] + (f,))
-    df = pd.DataFrame(df, columns=['tile', 'z', 'ch', 'file'])
+    df = pd.DataFrame(df, columns=fields)
 
     df['z_pitch'] = None
     if len(bcf_files) != 1:

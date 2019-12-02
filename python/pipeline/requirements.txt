@@ -3,6 +3,7 @@ scipy==1.0.1
 pandas==0.22.0
 requests==2.20.1
 scikit-image==0.14.2
+networkx==2.0
 scikit-learn==0.20.1
 opencv-python==3.4.3.18
 matplotlib==2.2.2

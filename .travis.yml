@@ -35,7 +35,7 @@ install:
   - echo "$(pwd)/python/applications" >> $(python -m site --user-site)/local.pth
   - cd python/pipeline
   # Install numpy before anything else to avoid "numpy.ufunc has the wrong size, try recompiling" errors
-  - pip install numpy==1.14.2 scikit-image==0.14.2
+  - pip install numpy==1.14.2
   - pip install --progress-bar off .[tf]
   - pip install coveralls pylint
 script:

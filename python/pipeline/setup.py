@@ -23,8 +23,8 @@ if __name__ == '__main__':
         ],
         install_requires=requires,
         extras_require={
-            "tf": ["tensorflow>=1.7.0"],
-            "tf_gpu": ["tensorflow-gpu>=1.7.0"],
+            "tf": ["tensorflow>=1.7.0,<=1.15.0"],
+            "tf_gpu": ["tensorflow-gpu>=1.7.0,<=1.15.0"],
         },
         packages=find_packages(exclude=('tests',)),
         package_data={},

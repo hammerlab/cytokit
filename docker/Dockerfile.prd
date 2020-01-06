@@ -60,7 +60,7 @@ RUN pip --no-cache-dir install \
     seaborn==0.9.0
 
 # Install Flowdec for deconvolution
-RUN pip --no-cache-dir install flowdec
+RUN pip --no-cache-dir install flowdec==1.0.7
 
 # Download simulation data for testing
 RUN cd $SIM_DIR && \

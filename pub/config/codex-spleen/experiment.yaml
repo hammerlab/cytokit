@@ -133,6 +133,9 @@ processor:
     gpus: [0,1]
     # Tiles are already assembled
     run_crop: false
+    # *** Change run_tile_generator to true if you've copied this config and are applying it to real data ***
+    # --> This is only necessary with CODEX because the publication did not share raw data, only an intermediate
+    #     form that is compatible with an intermediate form Cytokit uses, allowing this flag to bypass reading raw images
     run_tile_generator: false
     run_drift_comp: false
     run_cytometry: true
